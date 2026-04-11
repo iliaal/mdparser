@@ -55,6 +55,32 @@ final readonly class Options
         bool $autolink = true,
         bool $tagfilter = true,
     ) {}
+
+    /**
+     * Maximum-safety preset: the standard defaults plus autolink off,
+     * so bare URLs in untrusted input do not get wrapped in live <a>
+     * tags. Use for forum comments, email rendering, or any rendering
+     * path where the source is untrusted and link creation should be
+     * explicit.
+     */
+    public static function strict(): Options {}
+
+    /**
+     * GitHub-flavored preset: standard defaults plus footnotes on, to
+     * match the feature set github.com renders for README files and
+     * issue comments. Everything else (tables, strikethrough,
+     * tasklist, autolink, tagfilter) is already on in the default
+     * constructor.
+     */
+    public static function github(): Options {}
+
+    /**
+     * Trusted-input preset: raw HTML passthrough (unsafe: true),
+     * tagfilter disabled, and liberal HTML tag parsing. Use only when
+     * the markdown source is authored by you or comes from a trusted
+     * pipeline; this preset explicitly disables the XSS safety net.
+     */
+    public static function permissive(): Options {}
 }
 
 final class Parser

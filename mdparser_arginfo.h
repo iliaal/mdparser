@@ -1,5 +1,5 @@
 /* This is a generated file, edit mdparser.stub.php instead.
- * Stub hash: 7877b6cb46d19cf792f3c7b12d95cd9d3ddb9077 */
+ * Stub hash: a41000b1112eac6a5762bc2f78699eaa20d47364 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sourcepos, _IS_BOOL, 0, "false")
@@ -21,6 +21,13 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, tagfilter, _IS_BOOL, 0, "true")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_MdParser_Options_strict, 0, 0, MdParser\\Options, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_MdParser_Options_github arginfo_class_MdParser_Options_strict
+
+#define arginfo_class_MdParser_Options_permissive arginfo_class_MdParser_Options_strict
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Parser___construct, 0, 0, 0)
 	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, options, MdParser\\Options, 1, "null")
 ZEND_END_ARG_INFO()
@@ -36,6 +43,9 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_MdParser_Parser_toAst, 0, 
 ZEND_END_ARG_INFO()
 
 ZEND_METHOD(MdParser_Options, __construct);
+ZEND_METHOD(MdParser_Options, strict);
+ZEND_METHOD(MdParser_Options, github);
+ZEND_METHOD(MdParser_Options, permissive);
 ZEND_METHOD(MdParser_Parser, __construct);
 ZEND_METHOD(MdParser_Parser, toHtml);
 ZEND_METHOD(MdParser_Parser, toXml);
@@ -43,6 +53,9 @@ ZEND_METHOD(MdParser_Parser, toAst);
 
 static const zend_function_entry class_MdParser_Options_methods[] = {
 	ZEND_ME(MdParser_Options, __construct, arginfo_class_MdParser_Options___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(MdParser_Options, strict, arginfo_class_MdParser_Options_strict, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(MdParser_Options, github, arginfo_class_MdParser_Options_github, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(MdParser_Options, permissive, arginfo_class_MdParser_Options_permissive, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_FE_END
 };
 

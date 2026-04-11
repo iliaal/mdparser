@@ -38,6 +38,30 @@ int mdparser_default_extension_mask = 0;
  * lie about whether tagfilter is actually enabled. The MINIT init
  * step caches the result of walking this table once, so runtime cost
  * is zero. */
+/* Field indices, used by the preset factories and by __construct to
+ * address individual entries in the field table without hard-coding
+ * positions. MUST stay in sync with mdparser_options_fields[] below. */
+enum {
+    MDOPT_SOURCEPOS = 0,
+    MDOPT_HARDBREAKS,
+    MDOPT_NOBREAKS,
+    MDOPT_SMART,
+    MDOPT_UNSAFE,
+    MDOPT_VALIDATE_UTF8,
+    MDOPT_GITHUB_PRE_LANG,
+    MDOPT_LIBERAL_HTML_TAG,
+    MDOPT_FOOTNOTES,
+    MDOPT_STRIKETHROUGH_DOUBLE_TILDE,
+    MDOPT_TABLE_PREFER_STYLE_ATTRIBUTES,
+    MDOPT_FULL_INFO_STRING,
+    MDOPT_TABLES,
+    MDOPT_STRIKETHROUGH,
+    MDOPT_TASKLIST,
+    MDOPT_AUTOLINK,
+    MDOPT_TAGFILTER,
+    MDOPT_COUNT_
+};
+
 typedef struct {
     const char *name;
     size_t name_len;
@@ -101,6 +125,31 @@ void mdparser_options_default_masks(int *cmark_options, int *extension_mask)
     *extension_mask = mdparser_default_extension_mask;
 }
 
+/* Write a 17-bool value vector into a freshly-allocated Options
+ * object's properties. Used by __construct and by the static preset
+ * factories. Safe to call only on an object whose properties are
+ * still in their post-object_init_ex (IS_UNDEF) state, because
+ * readonly enforcement allows first-writes within the declaring
+ * class scope but rejects any subsequent assignment. */
+static void mdparser_options_populate_object(zend_object *this_obj,
+    const bool values[MDPARSER_OPTIONS_FIELD_COUNT])
+{
+    for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
+        const mdparser_options_field *f = &mdparser_options_fields[i];
+        zval tmp;
+        ZVAL_BOOL(&tmp, values[i]);
+        zend_update_property(mdparser_options_ce, this_obj,
+            f->name, f->name_len, &tmp);
+    }
+}
+
+static void mdparser_options_seed_defaults(bool values[MDPARSER_OPTIONS_FIELD_COUNT])
+{
+    for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
+        values[i] = mdparser_options_fields[i].default_value;
+    }
+}
+
 void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask)
 {
     int c = 0;
@@ -139,39 +188,77 @@ PHP_METHOD(MdParser_Options, __construct)
 {
     bool values[MDPARSER_OPTIONS_FIELD_COUNT];
 
-    /* Populate defaults so ZPP doesn't overwrite unspecified fields. */
-    for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
-        values[i] = mdparser_options_fields[i].default_value;
-    }
+    /* Seed with stub defaults; ZPP only overwrites args that were
+     * actually provided by the caller (Z_PARAM_BOOL is a no-op for
+     * missing optional args), so unspecified fields keep their
+     * table-driven default. */
+    mdparser_options_seed_defaults(values);
 
     ZEND_PARSE_PARAMETERS_START(0, MDPARSER_OPTIONS_FIELD_COUNT)
         Z_PARAM_OPTIONAL
-        Z_PARAM_BOOL(values[0])  /* sourcepos */
-        Z_PARAM_BOOL(values[1])  /* hardbreaks */
-        Z_PARAM_BOOL(values[2])  /* nobreaks */
-        Z_PARAM_BOOL(values[3])  /* smart */
-        Z_PARAM_BOOL(values[4])  /* unsafe */
-        Z_PARAM_BOOL(values[5])  /* validateUtf8 */
-        Z_PARAM_BOOL(values[6])  /* githubPreLang */
-        Z_PARAM_BOOL(values[7])  /* liberalHtmlTag */
-        Z_PARAM_BOOL(values[8])  /* footnotes */
-        Z_PARAM_BOOL(values[9])  /* strikethroughDoubleTilde */
-        Z_PARAM_BOOL(values[10]) /* tablePreferStyleAttributes */
-        Z_PARAM_BOOL(values[11]) /* fullInfoString */
-        Z_PARAM_BOOL(values[12]) /* tables */
-        Z_PARAM_BOOL(values[13]) /* strikethrough */
-        Z_PARAM_BOOL(values[14]) /* tasklist */
-        Z_PARAM_BOOL(values[15]) /* autolink */
-        Z_PARAM_BOOL(values[16]) /* tagfilter */
+        Z_PARAM_BOOL(values[MDOPT_SOURCEPOS])
+        Z_PARAM_BOOL(values[MDOPT_HARDBREAKS])
+        Z_PARAM_BOOL(values[MDOPT_NOBREAKS])
+        Z_PARAM_BOOL(values[MDOPT_SMART])
+        Z_PARAM_BOOL(values[MDOPT_UNSAFE])
+        Z_PARAM_BOOL(values[MDOPT_VALIDATE_UTF8])
+        Z_PARAM_BOOL(values[MDOPT_GITHUB_PRE_LANG])
+        Z_PARAM_BOOL(values[MDOPT_LIBERAL_HTML_TAG])
+        Z_PARAM_BOOL(values[MDOPT_FOOTNOTES])
+        Z_PARAM_BOOL(values[MDOPT_STRIKETHROUGH_DOUBLE_TILDE])
+        Z_PARAM_BOOL(values[MDOPT_TABLE_PREFER_STYLE_ATTRIBUTES])
+        Z_PARAM_BOOL(values[MDOPT_FULL_INFO_STRING])
+        Z_PARAM_BOOL(values[MDOPT_TABLES])
+        Z_PARAM_BOOL(values[MDOPT_STRIKETHROUGH])
+        Z_PARAM_BOOL(values[MDOPT_TASKLIST])
+        Z_PARAM_BOOL(values[MDOPT_AUTOLINK])
+        Z_PARAM_BOOL(values[MDOPT_TAGFILTER])
     ZEND_PARSE_PARAMETERS_END();
 
-    zend_object *this_obj = Z_OBJ_P(ZEND_THIS);
+    mdparser_options_populate_object(Z_OBJ_P(ZEND_THIS), values);
+}
 
-    for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
-        const mdparser_options_field *f = &mdparser_options_fields[i];
-        zval tmp;
-        ZVAL_BOOL(&tmp, values[i]);
-        zend_update_property(mdparser_options_ce, this_obj,
-            f->name, f->name_len, &tmp);
-    }
+PHP_METHOD(MdParser_Options, strict)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+
+    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
+    mdparser_options_seed_defaults(v);
+    /* Bare URLs stay inert text instead of becoming live <a> tags. */
+    v[MDOPT_AUTOLINK] = false;
+
+    object_init_ex(return_value, mdparser_options_ce);
+    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
+}
+
+PHP_METHOD(MdParser_Options, github)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+
+    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
+    mdparser_options_seed_defaults(v);
+    /* github.com's renderer supports [^ref] / [^ref]: syntax; the
+     * rest of the default set (tables/strike/tasklist/autolink/
+     * tagfilter/githubPreLang) already matches github. */
+    v[MDOPT_FOOTNOTES] = true;
+
+    object_init_ex(return_value, mdparser_options_ce);
+    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
+}
+
+PHP_METHOD(MdParser_Options, permissive)
+{
+    ZEND_PARSE_PARAMETERS_NONE();
+
+    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
+    mdparser_options_seed_defaults(v);
+    /* Trusted-input mode: raw HTML passes through, tagfilter is off,
+     * liberal tag parsing is on. Explicitly disables the XSS safety
+     * net -- only for markdown the caller authored themselves. */
+    v[MDOPT_UNSAFE] = true;
+    v[MDOPT_TAGFILTER] = false;
+    v[MDOPT_LIBERAL_HTML_TAG] = true;
+
+    object_init_ex(return_value, mdparser_options_ce);
+    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
 }
