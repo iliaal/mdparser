@@ -13,7 +13,11 @@ echo
 
 echo "---- 1. System build tools ----"
 apt-get update -qq >/dev/null
-# PIE 1.4 requires bison and libtoolize even though phpize itself might not.
+# PIE 1.4 on a bare php:8.x-cli image needs four extras beyond what
+# phpize expects: git (PIE clones source via git clone, not a tarball),
+# bison and libtoolize (PIE's build-tools check insists on both even
+# though phpize itself doesn't), and ca-certificates (for the HTTPS
+# clone from github).
 apt-get install -y -qq git ca-certificates bison libtool-bin >/dev/null
 git --version
 bison --version | head -1
