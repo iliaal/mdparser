@@ -109,11 +109,4 @@ void mdparser_options_init_defaults(void);
 void mdparser_options_default_masks(int *cmark_options, int *extension_mask);
 void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask);
 
-/* PHP method declarations */
-PHP_METHOD(MdParser_Parser, __construct);
-PHP_METHOD(MdParser_Parser, toHtml);
-PHP_METHOD(MdParser_Parser, toXml);
-PHP_METHOD(MdParser_Parser, toAst);
-PHP_METHOD(MdParser_Options, __construct);
-
 #endif /* PHP_MDPARSER_H */
