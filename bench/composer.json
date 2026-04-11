@@ -1,0 +1,17 @@
+{
+    "name": "iliaal/mdparser-bench",
+    "description": "Benchmark harness comparing mdparser to pure-PHP markdown libraries",
+    "type": "project",
+    "require": {
+        "php": "^8.2",
+        "erusev/parsedown": "^1.7",
+        "league/commonmark": "^2.5",
+        "cebe/markdown": "^1.2",
+        "michelf/php-markdown": "^2.0",
+        "symfony/polyfill-mbstring": "^1.31",
+        "symfony/polyfill-iconv": "^1.31"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
