@@ -44,6 +44,30 @@ root (which declares `type: "php-ext"` and the `configure-options`
 schema). It handles the configure + build + install cycle and writes
 the INI fragment automatically.
 
+### PIE 1.4 Packagist requirement
+
+PIE 1.4.0 only resolves packages via Packagist.org — there is no
+CLI flag or composer-config escape hatch for local paths or private
+git URLs. If you're testing `pie install` against a development
+clone of mdparser that isn't yet published to Packagist, PIE will
+report "Unable to find an installable package iliaal/mdparser".
+
+For that case, bypass PIE and build directly:
+
+```bash
+git clone https://github.com/iliaal/mdparser.git
+cd mdparser
+phpize && ./configure --enable-mdparser
+make -j$(nproc)
+sudo make install
+echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
+```
+
+`scripts/pie-smoke.sh` runs the full build + install + smoke test in
+a clean `php:8.4-cli` Docker container and is what I use to verify
+the install path end-to-end. Needs `bison` and `libtool-bin` on the
+container (the script installs both).
+
 ## From source
 
 ```bash
