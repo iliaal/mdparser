@@ -3,7 +3,7 @@
     "description": "Benchmark harness comparing mdparser to pure-PHP markdown libraries",
     "type": "project",
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "erusev/parsedown": "^1.7",
         "league/commonmark": "^2.5",
         "cebe/markdown": "^1.2",

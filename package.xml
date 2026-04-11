@@ -17,11 +17,11 @@ external runtime dependencies; the parser ships entirely inside the
 extension .so.
 
 Features:
-- CommonMark 0.29 spec coverage
+- 100% CommonMark 0.31 spec conformance (652/652)
 - GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter
 - Three output formats per parse: HTML, XML, AST (nested PHP arrays)
 - Sourcepos support for every AST node
-- Modern PHP 8.2+ OO API with a final readonly Options class
+- Modern PHP 8.3+ OO API with a final readonly Options class
 
 Typical usage:
 
@@ -395,7 +395,7 @@ Initial release.
   <dependencies>
     <required>
       <php>
-        <min>8.2.0</min>
+        <min>8.3.0</min>
       </php>
       <pearinstaller>
         <min>1.10.0</min>

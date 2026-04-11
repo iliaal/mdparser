@@ -1,0 +1,16 @@
+# Force LF on all text files regardless of host OS. Windows runners
+# otherwise autocrlf-convert fixture files during checkout, which
+# breaks exact byte compares in the CommonMark spec test and the
+# parity corpora.
+* text=auto eol=lf
+
+# Fixture files where exact byte semantics matter are marked binary
+# so git never touches the content under any autocrlf mode.
+tests/fixtures/commonmark-spec.txt binary
+tests/parity/parsedown/fixtures/*.md    binary
+tests/parity/parsedown/fixtures/*.html  binary
+tests/parity/cebe/fixtures/*.md         binary
+tests/parity/cebe/fixtures/*.html       binary
+tests/parity/michelf/fixtures/*.text    binary
+tests/parity/michelf/fixtures/*.html    binary
+tests/parity/michelf/fixtures/*.xhtml   binary

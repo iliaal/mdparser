@@ -9,8 +9,8 @@ PHP_ARG_ENABLE(mdparser-dev, whether to enable developer build flags,
 if test "$PHP_MDPARSER" != "no"; then
 
   PHP_VERSION_ID=$($PHP_CONFIG --vernum)
-  if test "$PHP_VERSION_ID" -lt "80200"; then
-    AC_MSG_ERROR([mdparser requires PHP 8.2.0 or later (found $PHP_VERSION_ID)])
+  if test "$PHP_VERSION_ID" -lt "80300"; then
+    AC_MSG_ERROR([mdparser requires PHP 8.3.0 or later (found $PHP_VERSION_ID)])
   fi
 
   CMARK_SRC_DIR=vendor/cmark/src

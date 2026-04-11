@@ -14,7 +14,7 @@ Status: **0.1.0 in development.** Not yet released.
 - 10-50x faster than pure-PHP parsers (Parsedown, league/commonmark,
   michelf, cebe, Ciconia) on realistic corpora.
 - HTML, XML, and AST (nested PHP arrays) output.
-- OO API, `final` classes, `readonly` options. PHP 8.2 minimum.
+- OO API, `final` classes, `readonly` options. PHP 8.3 minimum.
 
 ## Performance
 

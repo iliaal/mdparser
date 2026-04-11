@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-04-11
 
-First release. Native C CommonMark + GFM parser for PHP 8.2+.
+First release. Native C CommonMark + GFM parser for PHP 8.3+.
 
 ### Added
 
@@ -40,7 +40,7 @@ First release. Native C CommonMark + GFM parser for PHP 8.2+.
   hierarchy, CommonMark 0.31 spec conformance (652/652, 100%), AST
   walker, parity against Parsedown / cebe-markdown / michelf-markdown,
   XSS/security regression, and footnotes.
-- GitHub Actions CI: Linux matrix (PHP 8.2-8.5), macOS (8.3-8.4), ASAN
+- GitHub Actions CI: Linux matrix (PHP 8.3-8.5), macOS (8.3-8.4), ASAN
   job on 8.4, Windows build matrix via php/php-windows-builder.
 - PECL `package.xml` and PIE `pie.json` manifests.
 - Full reference documentation under `docs/` (installation, parser,
