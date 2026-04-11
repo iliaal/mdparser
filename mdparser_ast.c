@@ -25,6 +25,79 @@
 #include "cmark-gfm-core-extensions.h"
 #include "cmark-gfm-extension_api.h"
 
+/* AST key strings are lazy-initialized on the first toAst() call so
+ * users who only need toHtml/toXml don't pay the ~4 µs setup at module
+ * load. zend_string_init_interned after startup creates request-scoped
+ * interned strings which would dangle across requests, so we use
+ * persistent non-interned zend_strings instead; the hash is cached on
+ * first use inside zend_hash_add_new. Released in MSHUTDOWN. */
+static zend_string *md_str_type;
+static zend_string *md_str_children;
+static zend_string *md_str_literal;
+static zend_string *md_str_info;
+static zend_string *md_str_url;
+static zend_string *md_str_title;
+static zend_string *md_str_level;
+static zend_string *md_str_list_type;
+static zend_string *md_str_list_start;
+static zend_string *md_str_list_tight;
+static zend_string *md_str_list_delim;
+static zend_string *md_str_alignments;
+static zend_string *md_str_is_header;
+static zend_string *md_str_checked;
+static zend_string *md_str_start_line;
+static zend_string *md_str_start_column;
+static zend_string *md_str_end_line;
+static zend_string *md_str_end_column;
+
+static void mdparser_init_ast_strings(void)
+{
+    md_str_type         = zend_string_init("type",         sizeof("type") - 1,         1);
+    md_str_children     = zend_string_init("children",     sizeof("children") - 1,     1);
+    md_str_literal      = zend_string_init("literal",      sizeof("literal") - 1,      1);
+    md_str_info         = zend_string_init("info",         sizeof("info") - 1,         1);
+    md_str_url          = zend_string_init("url",          sizeof("url") - 1,          1);
+    md_str_title        = zend_string_init("title",        sizeof("title") - 1,        1);
+    md_str_level        = zend_string_init("level",        sizeof("level") - 1,        1);
+    md_str_list_type    = zend_string_init("list_type",    sizeof("list_type") - 1,    1);
+    md_str_list_start   = zend_string_init("list_start",   sizeof("list_start") - 1,   1);
+    md_str_list_tight   = zend_string_init("list_tight",   sizeof("list_tight") - 1,   1);
+    md_str_list_delim   = zend_string_init("list_delim",   sizeof("list_delim") - 1,   1);
+    md_str_alignments   = zend_string_init("alignments",   sizeof("alignments") - 1,   1);
+    md_str_is_header    = zend_string_init("is_header",    sizeof("is_header") - 1,    1);
+    md_str_checked      = zend_string_init("checked",      sizeof("checked") - 1,      1);
+    md_str_start_line   = zend_string_init("start_line",   sizeof("start_line") - 1,   1);
+    md_str_start_column = zend_string_init("start_column", sizeof("start_column") - 1, 1);
+    md_str_end_line     = zend_string_init("end_line",     sizeof("end_line") - 1,     1);
+    md_str_end_column   = zend_string_init("end_column",   sizeof("end_column") - 1,   1);
+}
+
+void mdparser_release_ast_strings(void)
+{
+    if (!md_str_type) {
+        return;
+    }
+    zend_string_release(md_str_type);
+    zend_string_release(md_str_children);
+    zend_string_release(md_str_literal);
+    zend_string_release(md_str_info);
+    zend_string_release(md_str_url);
+    zend_string_release(md_str_title);
+    zend_string_release(md_str_level);
+    zend_string_release(md_str_list_type);
+    zend_string_release(md_str_list_start);
+    zend_string_release(md_str_list_tight);
+    zend_string_release(md_str_list_delim);
+    zend_string_release(md_str_alignments);
+    zend_string_release(md_str_is_header);
+    zend_string_release(md_str_checked);
+    zend_string_release(md_str_start_line);
+    zend_string_release(md_str_start_column);
+    zend_string_release(md_str_end_line);
+    zend_string_release(md_str_end_column);
+    md_str_type = NULL;
+}
+
 static void mdparser_node_to_array(cmark_node *node, int cmark_options, int depth, zval *out);
 static void mdparser_add_children(cmark_node *parent, int cmark_options, int depth, zval *parent_arr);
 
@@ -60,10 +133,10 @@ static inline void md_add_zval(zval *arr, zend_string *key, zval *value)
 
 static void mdparser_add_sourcepos(cmark_node *node, zval *target)
 {
-    md_add_long(target, mdparser_str_start_line,   cmark_node_get_start_line(node));
-    md_add_long(target, mdparser_str_start_column, cmark_node_get_start_column(node));
-    md_add_long(target, mdparser_str_end_line,     cmark_node_get_end_line(node));
-    md_add_long(target, mdparser_str_end_column,   cmark_node_get_end_column(node));
+    md_add_long(target, md_str_start_line,   cmark_node_get_start_line(node));
+    md_add_long(target, md_str_start_column, cmark_node_get_start_column(node));
+    md_add_long(target, md_str_end_line,     cmark_node_get_end_line(node));
+    md_add_long(target, md_str_end_column,   cmark_node_get_end_column(node));
 }
 
 static void mdparser_add_children(cmark_node *parent, int cmark_options, int depth, zval *parent_arr)
@@ -84,7 +157,7 @@ static void mdparser_add_children(cmark_node *parent, int cmark_options, int dep
         add_next_index_zval(&children, &child_arr);
     }
 
-    md_add_zval(parent_arr, mdparser_str_children, &children);
+    md_add_zval(parent_arr, md_str_children, &children);
 }
 
 static const char *mdparser_list_type_string(cmark_list_type t)
@@ -132,7 +205,7 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
     array_init_size(out, 8);
 
     const char *type_string = cmark_node_get_type_string(node);
-    md_add_string(out, mdparser_str_type, type_string);
+    md_add_string(out, md_str_type, type_string);
 
     if (cmark_options & CMARK_OPT_SOURCEPOS) {
         mdparser_add_sourcepos(node, out);
@@ -153,12 +226,12 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
                 add_next_index_string(&alignments_arr,
                     mdparser_table_align_string(alignments ? alignments[i] : 0));
             }
-            md_add_zval(out, mdparser_str_alignments, &alignments_arr);
+            md_add_zval(out, md_str_alignments, &alignments_arr);
         } else if (strcmp(type_string, "table_row") == 0) {
-            md_add_bool(out, mdparser_str_is_header,
+            md_add_bool(out, md_str_is_header,
                 cmark_gfm_extensions_get_table_row_is_header(node) ? 1 : 0);
         } else if (strcmp(type_string, "tasklist") == 0) {
-            md_add_bool(out, mdparser_str_checked,
+            md_add_bool(out, md_str_checked,
                 cmark_gfm_extensions_get_tasklist_item_checked(node) ? 1 : 0);
         }
 
@@ -168,36 +241,36 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
 
     switch (cmark_node_get_type(node)) {
         case CMARK_NODE_HEADING:
-            md_add_long(out, mdparser_str_level, cmark_node_get_heading_level(node));
+            md_add_long(out, md_str_level, cmark_node_get_heading_level(node));
             mdparser_add_children(node, cmark_options, depth, out);
             break;
 
         case CMARK_NODE_CODE_BLOCK:
-            md_add_string(out, mdparser_str_info,    cmark_node_get_fence_info(node));
-            md_add_string(out, mdparser_str_literal, cmark_node_get_literal(node));
+            md_add_string(out, md_str_info,    cmark_node_get_fence_info(node));
+            md_add_string(out, md_str_literal, cmark_node_get_literal(node));
             break;
 
         case CMARK_NODE_HTML_BLOCK:
         case CMARK_NODE_HTML_INLINE:
         case CMARK_NODE_TEXT:
         case CMARK_NODE_CODE:
-            md_add_string(out, mdparser_str_literal, cmark_node_get_literal(node));
+            md_add_string(out, md_str_literal, cmark_node_get_literal(node));
             break;
 
         case CMARK_NODE_LIST:
-            md_add_string(out, mdparser_str_list_type,
+            md_add_string(out, md_str_list_type,
                 mdparser_list_type_string(cmark_node_get_list_type(node)));
-            md_add_long(out, mdparser_str_list_start, cmark_node_get_list_start(node));
-            md_add_bool(out, mdparser_str_list_tight, cmark_node_get_list_tight(node));
-            md_add_string(out, mdparser_str_list_delim,
+            md_add_long(out, md_str_list_start, cmark_node_get_list_start(node));
+            md_add_bool(out, md_str_list_tight, cmark_node_get_list_tight(node));
+            md_add_string(out, md_str_list_delim,
                 mdparser_list_delim_string(cmark_node_get_list_delim(node)));
             mdparser_add_children(node, cmark_options, depth, out);
             break;
 
         case CMARK_NODE_LINK:
         case CMARK_NODE_IMAGE:
-            md_add_string(out, mdparser_str_url,   cmark_node_get_url(node));
-            md_add_string(out, mdparser_str_title, cmark_node_get_title(node));
+            md_add_string(out, md_str_url,   cmark_node_get_url(node));
+            md_add_string(out, md_str_title, cmark_node_get_title(node));
             mdparser_add_children(node, cmark_options, depth, out);
             break;
 
@@ -217,5 +290,8 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
 
 void mdparser_render_ast(cmark_node *document, int cmark_options, zval *return_value)
 {
+    if (UNEXPECTED(!md_str_type)) {
+        mdparser_init_ast_strings();
+    }
     mdparser_node_to_array(document, cmark_options, 0, return_value);
 }

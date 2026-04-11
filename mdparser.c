@@ -26,26 +26,9 @@
 #include "cmark-gfm-core-extensions.h"
 #include "registry.h"
 
-mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
+#include "mdparser_ast.h"
 
-zend_string *mdparser_str_type;
-zend_string *mdparser_str_children;
-zend_string *mdparser_str_literal;
-zend_string *mdparser_str_info;
-zend_string *mdparser_str_url;
-zend_string *mdparser_str_title;
-zend_string *mdparser_str_level;
-zend_string *mdparser_str_list_type;
-zend_string *mdparser_str_list_start;
-zend_string *mdparser_str_list_tight;
-zend_string *mdparser_str_list_delim;
-zend_string *mdparser_str_alignments;
-zend_string *mdparser_str_is_header;
-zend_string *mdparser_str_checked;
-zend_string *mdparser_str_start_line;
-zend_string *mdparser_str_start_column;
-zend_string *mdparser_str_end_line;
-zend_string *mdparser_str_end_column;
+mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
 
 static int mdparser_resolve_extensions(void)
 {
@@ -74,28 +57,6 @@ static int mdparser_resolve_extensions(void)
     return SUCCESS;
 }
 
-static void mdparser_init_interned_strings(void)
-{
-    mdparser_str_type         = zend_string_init_interned("type",         sizeof("type") - 1,         1);
-    mdparser_str_children     = zend_string_init_interned("children",     sizeof("children") - 1,     1);
-    mdparser_str_literal      = zend_string_init_interned("literal",      sizeof("literal") - 1,      1);
-    mdparser_str_info         = zend_string_init_interned("info",         sizeof("info") - 1,         1);
-    mdparser_str_url          = zend_string_init_interned("url",          sizeof("url") - 1,          1);
-    mdparser_str_title        = zend_string_init_interned("title",        sizeof("title") - 1,        1);
-    mdparser_str_level        = zend_string_init_interned("level",        sizeof("level") - 1,        1);
-    mdparser_str_list_type    = zend_string_init_interned("list_type",    sizeof("list_type") - 1,    1);
-    mdparser_str_list_start   = zend_string_init_interned("list_start",   sizeof("list_start") - 1,   1);
-    mdparser_str_list_tight   = zend_string_init_interned("list_tight",   sizeof("list_tight") - 1,   1);
-    mdparser_str_list_delim   = zend_string_init_interned("list_delim",   sizeof("list_delim") - 1,   1);
-    mdparser_str_alignments   = zend_string_init_interned("alignments",   sizeof("alignments") - 1,   1);
-    mdparser_str_is_header    = zend_string_init_interned("is_header",    sizeof("is_header") - 1,    1);
-    mdparser_str_checked      = zend_string_init_interned("checked",      sizeof("checked") - 1,      1);
-    mdparser_str_start_line   = zend_string_init_interned("start_line",   sizeof("start_line") - 1,   1);
-    mdparser_str_start_column = zend_string_init_interned("start_column", sizeof("start_column") - 1, 1);
-    mdparser_str_end_line     = zend_string_init_interned("end_line",     sizeof("end_line") - 1,     1);
-    mdparser_str_end_column   = zend_string_init_interned("end_column",   sizeof("end_column") - 1,   1);
-}
-
 PHP_MINIT_FUNCTION(mdparser)
 {
     cmark_gfm_core_extensions_ensure_registered();
@@ -105,7 +66,6 @@ PHP_MINIT_FUNCTION(mdparser)
     }
 
     mdparser_options_init_defaults();
-    mdparser_init_interned_strings();
 
     mdparser_exception_register_class();
     mdparser_options_register_class();
@@ -115,6 +75,7 @@ PHP_MINIT_FUNCTION(mdparser)
 
 PHP_MSHUTDOWN_FUNCTION(mdparser)
 {
+    mdparser_release_ast_strings();
     cmark_release_plugins();
     return SUCCESS;
 }

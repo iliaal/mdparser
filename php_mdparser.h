@@ -99,28 +99,6 @@ extern mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
 extern int mdparser_default_cmark_options;
 extern int mdparser_default_extension_mask;
 
-/* Interned AST key strings, populated at MINIT so the walker can use
- * zend_hash_add_new with precomputed hashes instead of re-hashing the
- * same key literal on every node. */
-extern zend_string *mdparser_str_type;
-extern zend_string *mdparser_str_children;
-extern zend_string *mdparser_str_literal;
-extern zend_string *mdparser_str_info;
-extern zend_string *mdparser_str_url;
-extern zend_string *mdparser_str_title;
-extern zend_string *mdparser_str_level;
-extern zend_string *mdparser_str_list_type;
-extern zend_string *mdparser_str_list_start;
-extern zend_string *mdparser_str_list_tight;
-extern zend_string *mdparser_str_list_delim;
-extern zend_string *mdparser_str_alignments;
-extern zend_string *mdparser_str_is_header;
-extern zend_string *mdparser_str_checked;
-extern zend_string *mdparser_str_start_line;
-extern zend_string *mdparser_str_start_column;
-extern zend_string *mdparser_str_end_line;
-extern zend_string *mdparser_str_end_column;
-
 /* Registration entry points (defined in the respective .c files) */
 void mdparser_parser_register_class(void);
 void mdparser_options_register_class(void);
