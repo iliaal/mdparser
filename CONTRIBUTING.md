@@ -113,6 +113,31 @@ to touch cmark sources, follow the existing cherry-pick pattern:
 4. Add a comment at the change site in the vendor file naming the
    upstream commit, so the next refresh can find it.
 
+## Release workflow
+
+For maintainers cutting a new version:
+
+1. Bump `PHP_MDPARSER_VERSION` in `php_mdparser.h` to the new
+   semver, update `<release>` in `package.xml` and the top section
+   of `CHANGELOG.md`, and run `php scripts/validate_package.php` to
+   confirm all three are consistent.
+2. Commit + push to master.
+3. `git tag -a X.Y.Z -m "mdparser X.Y.Z"` with a release-note body,
+   then `git push origin X.Y.Z`.
+4. The `windows.yml` workflow picks up the tag, runs the full
+   build matrix (PHP 8.3-8.5 x TS/NTS x x86/x64), and uses
+   `php-windows-builder/release@v1` to create the GitHub release
+   and attach the 12 DLL zips.
+5. Packagist's GitHub webhook (configured on the repo) fires on
+   the tag push and re-scans versions. `pie install iliaal/mdparser`
+   resolves to the new tag within a minute or two. If Packagist
+   hasn't indexed the tag yet, users can fall back to `pie install
+   iliaal/mdparser:@dev` or click "Force Update" on
+   https://packagist.org/packages/iliaal/mdparser.
+6. PECL (optional, slower cycle): `pecl package package.xml` to
+   build the tarball, then `pecl upload mdparser-X.Y.Z.tgz` once
+   the new-package slot has been approved by the PECL group.
+
 ### License
 
 By submitting a patch you agree to license your contribution under
