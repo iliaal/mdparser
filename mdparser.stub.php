@@ -8,6 +8,14 @@ final class Exception extends \RuntimeException
 {
 }
 
+/**
+ * IMPORTANT: default values below MUST agree with the `default_value`
+ * column in `mdparser_options_fields[]` inside `mdparser_options.c`.
+ * ZPP does not auto-apply arginfo defaults to internal methods, so
+ * the C constructor seeds values[] from the C table and this stub is
+ * only used for reflection / IDE signatures. If you change a default,
+ * change it in both places.
+ */
 final readonly class Options
 {
     public bool $sourcepos;

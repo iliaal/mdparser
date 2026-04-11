@@ -4,7 +4,7 @@ PHP_ARG_ENABLE(mdparser, whether to enable mdparser support,
 [  --enable-mdparser       Enable mdparser (CommonMark + GFM) support])
 
 PHP_ARG_ENABLE(mdparser-dev, whether to enable developer build flags,
-[  --enable-mdparser-dev   Enable -Wall -Wextra for wrapper code], no, no)
+[  --enable-mdparser-dev   Upgrade wrapper warnings to -Werror plus strict checks], no, no)
 
 if test "$PHP_MDPARSER" != "no"; then
 
@@ -56,10 +56,19 @@ if test "$PHP_MDPARSER" != "no"; then
 
   WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_ast.c"
 
-  MDPARSER_CFLAGS="-DCMARK_GFM_STATIC_DEFINE -DCMARK_GFM_EXTENSIONS_STATIC_DEFINE"
+  dnl -Wall -Wextra are on by default so wrapper regressions get caught
+  dnl in every local build; --enable-mdparser-dev upgrades warnings to
+  dnl -Werror plus extra strictness. -Wno-unused-parameter silences
+  dnl noise from cmark's own callback-style APIs that share the same
+  dnl translation-unit flags with our wrapper.
+  MDPARSER_CFLAGS="-DCMARK_GFM_STATIC_DEFINE -DCMARK_GFM_EXTENSIONS_STATIC_DEFINE \
+    -Wall -Wextra -Wno-unused-parameter -Wno-unused-function"
 
+  dnl -Wshadow is intentionally NOT enabled; PHP's own headers
+  dnl (php_streams.h on 8.5) declare struct members named `zval`
+  dnl which shadow the zval typedef, and we can't fix that upstream.
   if test "$PHP_MDPARSER_DEV" = "yes"; then
-    MDPARSER_CFLAGS="$MDPARSER_CFLAGS -Wall -Wextra -Wno-unused-parameter -Wno-unused-function"
+    MDPARSER_CFLAGS="$MDPARSER_CFLAGS -Werror -Wstrict-prototypes"
   fi
 
   PHP_NEW_EXTENSION(mdparser,

@@ -26,6 +26,7 @@ extern zend_module_entry mdparser_module_entry;
 #endif
 
 #include "php.h"
+#include "cmark-gfm.h"
 
 /* PHP 8.3 compat shim for zend_register_internal_class_with_flags
  * (added in 8.4). gen_stub.php emits the 8.4+ variant when it sees
@@ -73,12 +74,60 @@ static inline mdparser_parser_obj *mdparser_parser_from_obj(zend_object *obj) {
     MDPARSER_EXT_AUTOLINK | \
     MDPARSER_EXT_TAGFILTER)
 
+#define MDPARSER_EXT_COUNT 5
+
+/* Hard cap on input size. 256 MB is far above any realistic document
+ * and well below cmark's internal bufsize_t (int32) overflow edge. */
+#define MDPARSER_MAX_INPUT_SIZE ((size_t)(256UL * 1024UL * 1024UL))
+
+/* Hard cap on AST walker recursion depth. cmark's own parser is
+ * iterative and happily produces trees thousands of levels deep from
+ * one-byte-per-level input like `>` × N. Walking such a tree with
+ * a recursive PHP-array builder would smash the C stack. */
+#define MDPARSER_MAX_AST_DEPTH 1000
+
+/* Extension pointers resolved once at MINIT so per-parse attachment
+ * is a bitmask loop instead of 5 registry walks with strcmp. */
+typedef struct {
+    int bit;
+    cmark_syntax_extension *ptr;
+} mdparser_cached_extension;
+
+extern mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
+
+/* Default masks, computed once from mdparser_options_fields at MINIT. */
+extern int mdparser_default_cmark_options;
+extern int mdparser_default_extension_mask;
+
+/* Interned AST key strings, populated at MINIT so the walker can use
+ * zend_hash_add_new with precomputed hashes instead of re-hashing the
+ * same key literal on every node. */
+extern zend_string *mdparser_str_type;
+extern zend_string *mdparser_str_children;
+extern zend_string *mdparser_str_literal;
+extern zend_string *mdparser_str_info;
+extern zend_string *mdparser_str_url;
+extern zend_string *mdparser_str_title;
+extern zend_string *mdparser_str_level;
+extern zend_string *mdparser_str_list_type;
+extern zend_string *mdparser_str_list_start;
+extern zend_string *mdparser_str_list_tight;
+extern zend_string *mdparser_str_list_delim;
+extern zend_string *mdparser_str_alignments;
+extern zend_string *mdparser_str_is_header;
+extern zend_string *mdparser_str_checked;
+extern zend_string *mdparser_str_start_line;
+extern zend_string *mdparser_str_start_column;
+extern zend_string *mdparser_str_end_line;
+extern zend_string *mdparser_str_end_column;
+
 /* Registration entry points (defined in the respective .c files) */
 void mdparser_parser_register_class(void);
 void mdparser_options_register_class(void);
 void mdparser_exception_register_class(void);
 
 /* Default-options helpers (defined in mdparser_options.c) */
+void mdparser_options_init_defaults(void);
 void mdparser_options_default_masks(int *cmark_options, int *extension_mask);
 void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask);
 
@@ -86,6 +135,7 @@ void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *exte
 PHP_METHOD(MdParser_Parser, __construct);
 PHP_METHOD(MdParser_Parser, toHtml);
 PHP_METHOD(MdParser_Parser, toXml);
+PHP_METHOD(MdParser_Parser, toAst);
 PHP_METHOD(MdParser_Options, __construct);
 
 #endif /* PHP_MDPARSER_H */

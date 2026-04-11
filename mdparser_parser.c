@@ -39,7 +39,8 @@ static zend_object *mdparser_parser_create(zend_class_entry *ce)
     object_properties_init(&obj->std, ce);
     obj->std.handlers = &mdparser_parser_handlers;
 
-    mdparser_options_default_masks(&obj->cmark_options, &obj->extension_mask);
+    obj->cmark_options = mdparser_default_cmark_options;
+    obj->extension_mask = mdparser_default_extension_mask;
 
     return &obj->std;
 }
@@ -55,6 +56,11 @@ void mdparser_parser_register_class(void)
     mdparser_parser_ce = register_class_MdParser_Parser();
     mdparser_parser_ce->create_object = mdparser_parser_create;
     mdparser_parser_ce->default_object_handlers = &mdparser_parser_handlers;
+    /* Parser caches a mask/extension_mask pair that default serialization
+     * never captures, so unserialize() would silently yield a parser
+     * running on defaults regardless of the constructed Options. Block
+     * serialize entirely; clone is already blocked below. */
+    mdparser_parser_ce->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
 
     memcpy(&mdparser_parser_handlers, &std_object_handlers, sizeof(zend_object_handlers));
     mdparser_parser_handlers.offset = XtOffsetOf(mdparser_parser_obj, std);
@@ -70,20 +76,9 @@ static cmark_parser *mdparser_build_cmark_parser(mdparser_parser_obj *obj)
         return NULL;
     }
 
-    struct { int bit; const char *name; } extension_names[] = {
-        { MDPARSER_EXT_TABLES,        "table" },
-        { MDPARSER_EXT_STRIKETHROUGH, "strikethrough" },
-        { MDPARSER_EXT_TASKLIST,      "tasklist" },
-        { MDPARSER_EXT_AUTOLINK,      "autolink" },
-        { MDPARSER_EXT_TAGFILTER,     "tagfilter" },
-    };
-
-    for (size_t i = 0; i < sizeof(extension_names) / sizeof(extension_names[0]); i++) {
-        if (obj->extension_mask & extension_names[i].bit) {
-            cmark_syntax_extension *ext = cmark_find_syntax_extension(extension_names[i].name);
-            if (ext) {
-                cmark_parser_attach_syntax_extension(parser, ext);
-            }
+    for (int i = 0; i < MDPARSER_EXT_COUNT; i++) {
+        if (obj->extension_mask & mdparser_cached_extensions[i].bit) {
+            cmark_parser_attach_syntax_extension(parser, mdparser_cached_extensions[i].ptr);
         }
     }
 
@@ -108,7 +103,9 @@ PHP_METHOD(MdParser_Parser, __construct)
         mdparser_options_read_masks(options_zv, &obj->cmark_options, &obj->extension_mask);
         zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
     } else {
-        /* Build a default Options and stash it so $parser->options is never null. */
+        /* Build a default Options and stash it so $parser->options is
+         * never null. mdparser_parser_create already seeded the cached
+         * default masks on obj; nothing else to compute here. */
         zval default_options;
         object_init_ex(&default_options, mdparser_options_ce);
         zend_call_known_instance_method_with_0_params(
@@ -117,7 +114,6 @@ PHP_METHOD(MdParser_Parser, __construct)
             zval_ptr_dtor(&default_options);
             RETURN_THROWS();
         }
-        mdparser_options_default_masks(&obj->cmark_options, &obj->extension_mask);
         zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, &default_options);
         zval_ptr_dtor(&default_options);
     }
@@ -131,10 +127,20 @@ static char *mdparser_render_xml_adapter(cmark_node *root, int options, cmark_ll
     return cmark_render_xml_with_mem(root, options, mem);
 }
 
+static bool mdparser_check_input_size(size_t source_len)
+{
+    if (source_len > MDPARSER_MAX_INPUT_SIZE) {
+        zend_throw_exception_ex(mdparser_exception_ce, 0,
+            "mdparser: input size %zu exceeds maximum %zu bytes",
+            source_len, MDPARSER_MAX_INPUT_SIZE);
+        return false;
+    }
+    return true;
+}
+
 static void mdparser_render_string(INTERNAL_FUNCTION_PARAMETERS, mdparser_renderer_fn renderer)
 {
-    char *source;
-    size_t source_len;
+    zend_string *source;
     mdparser_parser_obj *obj;
     cmark_parser *parser = NULL;
     cmark_node *document = NULL;
@@ -142,8 +148,12 @@ static void mdparser_render_string(INTERNAL_FUNCTION_PARAMETERS, mdparser_render
     char *rendered = NULL;
 
     ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STRING(source, source_len)
+        Z_PARAM_STR(source)
     ZEND_PARSE_PARAMETERS_END();
+
+    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
+        RETURN_THROWS();
+    }
 
     obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
     mem = cmark_get_default_mem_allocator();
@@ -155,13 +165,14 @@ static void mdparser_render_string(INTERNAL_FUNCTION_PARAMETERS, mdparser_render
         RETURN_THROWS();
     }
 
-    cmark_parser_feed(parser, source, source_len);
+    cmark_parser_feed(parser, ZSTR_VAL(source), ZSTR_LEN(source));
     document = cmark_parser_finish(parser);
 
     if (!document) {
         cmark_parser_free(parser);
-        zend_throw_exception(mdparser_exception_ce,
-            "mdparser: cmark parser returned null document", 0);
+        zend_throw_exception_ex(mdparser_exception_ce, 0,
+            "mdparser: cmark_parser_finish returned null (source length %zu)",
+            ZSTR_LEN(source));
         RETURN_THROWS();
     }
 
@@ -171,8 +182,9 @@ static void mdparser_render_string(INTERNAL_FUNCTION_PARAMETERS, mdparser_render
     if (!rendered) {
         cmark_node_free(document);
         cmark_parser_free(parser);
-        zend_throw_exception(mdparser_exception_ce,
-            "mdparser: cmark renderer returned null", 0);
+        zend_throw_exception_ex(mdparser_exception_ce, 0,
+            "mdparser: cmark renderer returned null (source length %zu)",
+            ZSTR_LEN(source));
         RETURN_THROWS();
     }
 
@@ -195,15 +207,18 @@ PHP_METHOD(MdParser_Parser, toXml)
 
 PHP_METHOD(MdParser_Parser, toAst)
 {
-    char *source;
-    size_t source_len;
+    zend_string *source;
     mdparser_parser_obj *obj;
     cmark_parser *parser = NULL;
     cmark_node *document = NULL;
 
     ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STRING(source, source_len)
+        Z_PARAM_STR(source)
     ZEND_PARSE_PARAMETERS_END();
+
+    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
+        RETURN_THROWS();
+    }
 
     obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
 
@@ -214,18 +229,28 @@ PHP_METHOD(MdParser_Parser, toAst)
         RETURN_THROWS();
     }
 
-    cmark_parser_feed(parser, source, source_len);
+    cmark_parser_feed(parser, ZSTR_VAL(source), ZSTR_LEN(source));
     document = cmark_parser_finish(parser);
 
     if (!document) {
         cmark_parser_free(parser);
-        zend_throw_exception(mdparser_exception_ce,
-            "mdparser: cmark parser returned null document", 0);
+        zend_throw_exception_ex(mdparser_exception_ce, 0,
+            "mdparser: cmark_parser_finish returned null (source length %zu)",
+            ZSTR_LEN(source));
         RETURN_THROWS();
     }
 
+    /* The walker can throw MdParser\Exception when AST nesting exceeds
+     * MDPARSER_MAX_AST_DEPTH. Free the cmark side regardless and let
+     * the VM reclaim any partial return_value as part of its own
+     * exception cleanup -- calling zval_ptr_dtor on return_value here
+     * would race the VM's own dtor and double-free. */
     mdparser_render_ast(document, obj->cmark_options, return_value);
 
     cmark_node_free(document);
     cmark_parser_free(parser);
+
+    if (EG(exception)) {
+        RETURN_THROWS();
+    }
 }

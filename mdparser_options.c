@@ -25,19 +25,29 @@
 
 zend_class_entry *mdparser_options_ce;
 
-/* Each Options property corresponds to either a CMARK_OPT_* flag or a GFM
- * extension toggle. Defaults match the stub.php declaration. */
+int mdparser_default_cmark_options = 0;
+int mdparser_default_extension_mask = 0;
+
+/* Each Options property corresponds to either a CMARK_OPT_* flag or a
+ * GFM extension toggle.
+ *
+ * IMPORTANT: default_value MUST match the constructor default in
+ * mdparser.stub.php. ZPP does not auto-apply arginfo defaults to
+ * internal methods, so the C-side __construct seeds values[] from this
+ * table before ZPP runs. If the two drift, `$opts->tagfilter` will
+ * lie about whether tagfilter is actually enabled. The MINIT init
+ * step caches the result of walking this table once, so runtime cost
+ * is zero. */
 typedef struct {
     const char *name;
     size_t name_len;
     int cmark_bit;          /* 0 if this maps to an extension instead */
     int extension_bit;      /* 0 if this maps to a cmark option instead */
     bool default_value;
-    bool invert;            /* true => setting false *sets* the bit */
 } mdparser_options_field;
 
 #define F(name_, cmark_, ext_, def_) \
-    { name_, sizeof(name_) - 1, cmark_, ext_, def_, false }
+    { name_, sizeof(name_) - 1, cmark_, ext_, def_ }
 
 static const mdparser_options_field mdparser_options_fields[] = {
     F("sourcepos",                  CMARK_OPT_SOURCEPOS,                   0, false),
@@ -64,7 +74,7 @@ static const mdparser_options_field mdparser_options_fields[] = {
 #define MDPARSER_OPTIONS_FIELD_COUNT \
     (sizeof(mdparser_options_fields) / sizeof(mdparser_options_fields[0]))
 
-void mdparser_options_default_masks(int *cmark_options, int *extension_mask)
+void mdparser_options_init_defaults(void)
 {
     int c = 0;
     int e = 0;
@@ -81,8 +91,14 @@ void mdparser_options_default_masks(int *cmark_options, int *extension_mask)
         }
     }
 
-    *cmark_options = c;
-    *extension_mask = e;
+    mdparser_default_cmark_options = c;
+    mdparser_default_extension_mask = e;
+}
+
+void mdparser_options_default_masks(int *cmark_options, int *extension_mask)
+{
+    *cmark_options = mdparser_default_cmark_options;
+    *extension_mask = mdparser_default_extension_mask;
 }
 
 void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask)
