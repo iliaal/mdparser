@@ -1,0 +1,24 @@
+ARG_ENABLE("mdparser", "Enable mdparser (CommonMark + GFM) support", "no");
+
+if (PHP_MDPARSER != "no") {
+    var cmark_src_dir = "vendor/cmark/src";
+    var cmark_ext_dir = "vendor/cmark/extensions";
+
+    ADD_FLAG("CFLAGS_MDPARSER", "/DCMARK_GFM_STATIC_DEFINE /DCMARK_GFM_EXTENSIONS_STATIC_DEFINE /I" + configure_module_dirname + "\\" + cmark_src_dir + " /I" + configure_module_dirname + "\\" + cmark_ext_dir);
+
+    var cmark_sources = "cmark.c blocks.c inlines.c scanners.c utf8.c buffer.c " +
+        "references.c render.c node.c iterator.c commonmark.c plaintext.c " +
+        "html.c xml.c latex.c man.c houdini_href_e.c houdini_html_e.c " +
+        "houdini_html_u.c cmark_ctype.c arena.c linked_list.c map.c " +
+        "plugin.c registry.c syntax_extension.c footnotes.c";
+
+    var cmark_ext_sources = "core-extensions.c table.c strikethrough.c " +
+        "tasklist.c autolink.c tagfilter.c ext_scanners.c";
+
+    var wrapper_sources = "mdparser.c mdparser_parser.c mdparser_options.c " +
+        "mdparser_exception.c mdparser_ast.c";
+
+    EXTENSION("mdparser", wrapper_sources, null, "/DCMARK_GFM_STATIC_DEFINE /DCMARK_GFM_EXTENSIONS_STATIC_DEFINE");
+    ADD_SOURCES(configure_module_dirname + "\\" + cmark_src_dir, cmark_sources, "mdparser");
+    ADD_SOURCES(configure_module_dirname + "\\" + cmark_ext_dir, cmark_ext_sources, "mdparser");
+}
