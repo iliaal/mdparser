@@ -1,0 +1,28 @@
+{
+    "name": "iliaal/mdparser",
+    "type": "php-ext",
+    "description": "Native CommonMark + GFM markdown parser for PHP",
+    "keywords": ["markdown", "commonmark", "gfm", "parser", "cmark"],
+    "license": "PHP-3.01",
+    "authors": [
+        {
+            "name": "Ilia Alshanetsky",
+            "email": "ilia@ilia.ws"
+        }
+    ],
+    "require": {
+        "php": "^8.2"
+    },
+    "extra": {
+        "php-ext": {
+            "extension-name": "mdparser",
+            "priority": 80,
+            "configure-options": [
+                {
+                    "name": "enable-mdparser-dev",
+                    "description": "Enable -Wall -Wextra for wrapper code"
+                }
+            ]
+        }
+    }
+}

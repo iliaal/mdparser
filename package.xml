@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package packagerversion="1.10.13" version="2.0"
+         xmlns="http://pear.php.net/dtd/package-2.0"
+         xmlns:tasks="http://pear.php.net/dtd/tasks-1.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pear.php.net/dtd/tasks-1.0
+                             http://pear.php.net/dtd/tasks-1.0.xsd
+                             http://pear.php.net/dtd/package-2.0
+                             http://pear.php.net/dtd/package-2.0.xsd">
+  <name>mdparser</name>
+  <channel>pecl.php.net</channel>
+  <summary>Native CommonMark + GitHub Flavored Markdown parser for PHP</summary>
+  <description>
+mdparser is a native PHP extension that parses CommonMark and
+GitHub-Flavored Markdown in C using an embedded copy of cmark-gfm. No
+external runtime dependencies; the parser ships entirely inside the
+extension .so.
+
+Features:
+- CommonMark 0.29 spec coverage
+- GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter
+- Three output formats per parse: HTML, XML, AST (nested PHP arrays)
+- Sourcepos support for every AST node
+- Modern PHP 8.2+ OO API with a final readonly Options class
+
+Typical usage:
+
+    $parser = new MdParser\Parser();
+    echo $parser->toHtml('# Hello');
+
+    $parser = new MdParser\Parser(new MdParser\Options(
+        smart: true,
+        sourcepos: true,
+        unsafe: false,
+    ));
+  </description>
+  <lead>
+    <name>Ilia Alshanetsky</name>
+    <user>iliaa</user>
+    <email>ilia@ilia.ws</email>
+    <active>yes</active>
+  </lead>
+  <date>2026-04-11</date>
+  <version>
+    <release>0.1.0</release>
+    <api>0.1.0</api>
+  </version>
+  <stability>
+    <release>alpha</release>
+    <api>alpha</api>
+  </stability>
+  <license uri="http://www.php.net/license/3_01.txt">PHP</license>
+  <notes>
+Initial release.
+- MdParser\Parser with toHtml, toXml, toAst entry points
+- MdParser\Options (readonly) covering 17 cmark/GFM toggles
+- MdParser\Exception thrown on allocation or parser failure
+- Embedded cmark-gfm 0.29.0.gfm.13; no external runtime dependencies
+  </notes>
+<contents>
+  <dir name="/">
+    <file name="CHANGELOG.md" role="doc" />
+    <file name="CLAUDE.md" role="doc" />
+    <file name="LICENSE" role="doc" />
+    <file name="README.md" role="doc" />
+    <file name="config.m4" role="src" />
+    <file name="config.w32" role="src" />
+    <file name="mdparser.c" role="src" />
+    <file name="mdparser.stub.php" role="src" />
+    <file name="mdparser_ast.c" role="src" />
+    <file name="mdparser_ast.h" role="src" />
+    <file name="mdparser_exception.c" role="src" />
+    <file name="mdparser_options.c" role="src" />
+    <file name="mdparser_parser.c" role="src" />
+    <file name="package.xml" role="src" />
+    <file name="php_mdparser.h" role="src" />
+    <file name="pie.json" role="src" />
+    <dir name="tests">
+      <file name="000_smoke.phpt" role="test" />
+      <file name="001_options.phpt" role="test" />
+      <file name="002_option_effects.phpt" role="test" />
+      <file name="003_xml.phpt" role="test" />
+      <file name="004_exception.phpt" role="test" />
+      <file name="005_commonmark_spec.phpt" role="test" />
+      <file name="006_ast.phpt" role="test" />
+      <file name="010_parity_parsedown.phpt" role="test" />
+      <file name="011_parity_cebe.phpt" role="test" />
+      <file name="012_parity_michelf.phpt" role="test" />
+      <file name="020_security.phpt" role="test" />
+      <file name="021_footnotes.phpt" role="test" />
+      <dir name="fixtures">
+        <file name="commonmark-spec.txt" role="test" />
+      </dir>
+      <dir name="parity">
+        <file name="NOTICE.md" role="test" />
+        <dir name="cebe">
+          <dir name="fixtures">
+            <file name="code_in_lists.html" role="test" />
+            <file name="code_in_lists.md" role="test" />
+            <file name="del.html" role="test" />
+            <file name="del.md" role="test" />
+            <file name="dense-block-markers.html" role="test" />
+            <file name="dense-block-markers.md" role="test" />
+            <file name="dense-block-markers2.html" role="test" />
+            <file name="dense-block-markers2.md" role="test" />
+            <file name="github-basics.html" role="test" />
+            <file name="github-basics.md" role="test" />
+            <file name="github-code-in-numbered-list.html" role="test" />
+            <file name="github-code-in-numbered-list.md" role="test" />
+            <file name="github-sample.html" role="test" />
+            <file name="github-sample.md" role="test" />
+            <file name="issue-33.html" role="test" />
+            <file name="issue-33.md" role="test" />
+            <file name="issue-38.html" role="test" />
+            <file name="issue-38.md" role="test" />
+            <file name="issue-50.html" role="test" />
+            <file name="issue-50.md" role="test" />
+            <file name="lists.html" role="test" />
+            <file name="lists.md" role="test" />
+            <file name="non-tables.html" role="test" />
+            <file name="non-tables.md" role="test" />
+            <file name="tables.html" role="test" />
+            <file name="tables.md" role="test" />
+            <file name="test_precedence.html" role="test" />
+            <file name="test_precedence.md" role="test" />
+            <file name="url.html" role="test" />
+            <file name="url.md" role="test" />
+          </dir>
+        </dir>
+        <dir name="michelf">
+          <dir name="fixtures">
+            <file name="Amps and angle encoding.text" role="test" />
+            <file name="Amps and angle encoding.xhtml" role="test" />
+            <file name="Auto links.text" role="test" />
+            <file name="Auto links.xhtml" role="test" />
+            <file name="Backslash escapes.text" role="test" />
+            <file name="Backslash escapes.xhtml" role="test" />
+            <file name="Blockquotes with code blocks.text" role="test" />
+            <file name="Blockquotes with code blocks.xhtml" role="test" />
+            <file name="Code Blocks.text" role="test" />
+            <file name="Code Blocks.xhtml" role="test" />
+            <file name="Code Spans.text" role="test" />
+            <file name="Code Spans.xhtml" role="test" />
+            <file name="Hard-wrapped paragraphs with list-like lines.text" role="test" />
+            <file name="Hard-wrapped paragraphs with list-like lines.xhtml" role="test" />
+            <file name="Horizontal rules.text" role="test" />
+            <file name="Horizontal rules.xhtml" role="test" />
+            <file name="Images.text" role="test" />
+            <file name="Images.xhtml" role="test" />
+            <file name="Inline HTML (Advanced).text" role="test" />
+            <file name="Inline HTML (Advanced).xhtml" role="test" />
+            <file name="Inline HTML (Simple).html" role="test" />
+            <file name="Inline HTML (Simple).text" role="test" />
+            <file name="Inline HTML comments.html" role="test" />
+            <file name="Inline HTML comments.text" role="test" />
+            <file name="Links, inline style.text" role="test" />
+            <file name="Links, inline style.xhtml" role="test" />
+            <file name="Links, reference style.text" role="test" />
+            <file name="Links, reference style.xhtml" role="test" />
+            <file name="Links, shortcut references.text" role="test" />
+            <file name="Links, shortcut references.xhtml" role="test" />
+            <file name="Literal quotes in titles.text" role="test" />
+            <file name="Literal quotes in titles.xhtml" role="test" />
+            <file name="Markdown Documentation - Basics.text" role="test" />
+            <file name="Markdown Documentation - Basics.xhtml" role="test" />
+            <file name="Markdown Documentation - Syntax.text" role="test" />
+            <file name="Markdown Documentation - Syntax.xhtml" role="test" />
+            <file name="Nested blockquotes.text" role="test" />
+            <file name="Nested blockquotes.xhtml" role="test" />
+            <file name="Ordered and unordered lists.text" role="test" />
+            <file name="Ordered and unordered lists.xhtml" role="test" />
+            <file name="Strong and em together.text" role="test" />
+            <file name="Strong and em together.xhtml" role="test" />
+            <file name="Tabs.text" role="test" />
+            <file name="Tabs.xhtml" role="test" />
+            <file name="Tidyness.text" role="test" />
+            <file name="Tidyness.xhtml" role="test" />
+          </dir>
+        </dir>
+        <dir name="parsedown">
+          <dir name="fixtures">
+            <file name="aesthetic_table.html" role="test" />
+            <file name="aesthetic_table.md" role="test" />
+            <file name="aligned_table.html" role="test" />
+            <file name="aligned_table.md" role="test" />
+            <file name="atx_heading.html" role="test" />
+            <file name="atx_heading.md" role="test" />
+            <file name="automatic_link.html" role="test" />
+            <file name="automatic_link.md" role="test" />
+            <file name="block-level_html.html" role="test" />
+            <file name="block-level_html.md" role="test" />
+            <file name="code_block.html" role="test" />
+            <file name="code_block.md" role="test" />
+            <file name="code_span.html" role="test" />
+            <file name="code_span.md" role="test" />
+            <file name="compound_blockquote.html" role="test" />
+            <file name="compound_blockquote.md" role="test" />
+            <file name="compound_emphasis.html" role="test" />
+            <file name="compound_emphasis.md" role="test" />
+            <file name="compound_list.html" role="test" />
+            <file name="compound_list.md" role="test" />
+            <file name="deeply_nested_list.html" role="test" />
+            <file name="deeply_nested_list.md" role="test" />
+            <file name="em_strong.html" role="test" />
+            <file name="em_strong.md" role="test" />
+            <file name="email.html" role="test" />
+            <file name="email.md" role="test" />
+            <file name="emphasis.html" role="test" />
+            <file name="emphasis.md" role="test" />
+            <file name="escaping.html" role="test" />
+            <file name="escaping.md" role="test" />
+            <file name="fenced_code_block.html" role="test" />
+            <file name="fenced_code_block.md" role="test" />
+            <file name="horizontal_rule.html" role="test" />
+            <file name="horizontal_rule.md" role="test" />
+            <file name="html_comment.html" role="test" />
+            <file name="html_comment.md" role="test" />
+            <file name="html_entity.html" role="test" />
+            <file name="html_entity.md" role="test" />
+            <file name="image_reference.html" role="test" />
+            <file name="image_reference.md" role="test" />
+            <file name="image_title.html" role="test" />
+            <file name="image_title.md" role="test" />
+            <file name="implicit_reference.html" role="test" />
+            <file name="implicit_reference.md" role="test" />
+            <file name="inline_link.html" role="test" />
+            <file name="inline_link.md" role="test" />
+            <file name="inline_link_title.html" role="test" />
+            <file name="inline_link_title.md" role="test" />
+            <file name="inline_title.html" role="test" />
+            <file name="inline_title.md" role="test" />
+            <file name="lazy_blockquote.html" role="test" />
+            <file name="lazy_blockquote.md" role="test" />
+            <file name="lazy_list.html" role="test" />
+            <file name="lazy_list.md" role="test" />
+            <file name="line_break.html" role="test" />
+            <file name="line_break.md" role="test" />
+            <file name="markup_consecutive_one.html" role="test" />
+            <file name="markup_consecutive_one.md" role="test" />
+            <file name="markup_consecutive_one_line.html" role="test" />
+            <file name="markup_consecutive_one_line.md" role="test" />
+            <file name="markup_consecutive_one_stripped.html" role="test" />
+            <file name="markup_consecutive_one_stripped.md" role="test" />
+            <file name="markup_consecutive_two.html" role="test" />
+            <file name="markup_consecutive_two.md" role="test" />
+            <file name="markup_consecutive_two_lines.html" role="test" />
+            <file name="markup_consecutive_two_lines.md" role="test" />
+            <file name="markup_consecutive_two_stripped.html" role="test" />
+            <file name="markup_consecutive_two_stripped.md" role="test" />
+            <file name="multiline_list_paragraph.html" role="test" />
+            <file name="multiline_list_paragraph.md" role="test" />
+            <file name="multiline_lists.html" role="test" />
+            <file name="multiline_lists.md" role="test" />
+            <file name="nested_block-level_html.html" role="test" />
+            <file name="nested_block-level_html.md" role="test" />
+            <file name="ordered_list.html" role="test" />
+            <file name="ordered_list.md" role="test" />
+            <file name="paragraph_list.html" role="test" />
+            <file name="paragraph_list.md" role="test" />
+            <file name="reference_title.html" role="test" />
+            <file name="reference_title.md" role="test" />
+            <file name="self-closing_html.html" role="test" />
+            <file name="self-closing_html.md" role="test" />
+            <file name="separated_nested_list.html" role="test" />
+            <file name="separated_nested_list.md" role="test" />
+            <file name="setext_header.html" role="test" />
+            <file name="setext_header.md" role="test" />
+            <file name="setext_header_spaces.html" role="test" />
+            <file name="setext_header_spaces.md" role="test" />
+            <file name="simple_blockquote.html" role="test" />
+            <file name="simple_blockquote.md" role="test" />
+            <file name="simple_table.html" role="test" />
+            <file name="simple_table.md" role="test" />
+            <file name="span-level_html.html" role="test" />
+            <file name="span-level_html.md" role="test" />
+            <file name="sparse_dense_list.html" role="test" />
+            <file name="sparse_dense_list.md" role="test" />
+            <file name="sparse_html.html" role="test" />
+            <file name="sparse_html.md" role="test" />
+            <file name="sparse_list.html" role="test" />
+            <file name="sparse_list.md" role="test" />
+            <file name="special_characters.html" role="test" />
+            <file name="special_characters.md" role="test" />
+            <file name="strict_atx_heading.html" role="test" />
+            <file name="strict_atx_heading.md" role="test" />
+            <file name="strikethrough.html" role="test" />
+            <file name="strikethrough.md" role="test" />
+            <file name="strong_em.html" role="test" />
+            <file name="strong_em.md" role="test" />
+            <file name="tab-indented_code_block.html" role="test" />
+            <file name="tab-indented_code_block.md" role="test" />
+            <file name="table_inline_markdown.html" role="test" />
+            <file name="table_inline_markdown.md" role="test" />
+            <file name="text_reference.html" role="test" />
+            <file name="text_reference.md" role="test" />
+            <file name="unordered_list.html" role="test" />
+            <file name="unordered_list.md" role="test" />
+            <file name="untidy_table.html" role="test" />
+            <file name="untidy_table.md" role="test" />
+            <file name="url_autolinking.html" role="test" />
+            <file name="url_autolinking.md" role="test" />
+            <file name="whitespace.html" role="test" />
+            <file name="whitespace.md" role="test" />
+            <file name="xss_attribute_encoding.html" role="test" />
+            <file name="xss_attribute_encoding.md" role="test" />
+            <file name="xss_bad_url.html" role="test" />
+            <file name="xss_bad_url.md" role="test" />
+            <file name="xss_text_encoding.html" role="test" />
+            <file name="xss_text_encoding.md" role="test" />
+          </dir>
+        </dir>
+      </dir>
+    </dir>
+    <dir name="vendor">
+      <file name="VENDOR.md" role="src" />
+      <file name="upstream-rebase-notes.md" role="src" />
+      <dir name="cmark">
+        <file name="COPYING" role="src" />
+        <dir name="extensions">
+          <file name="autolink.c" role="src" />
+          <file name="autolink.h" role="src" />
+          <file name="cmark-gfm-core-extensions.h" role="src" />
+          <file name="core-extensions.c" role="src" />
+          <file name="ext_scanners.c" role="src" />
+          <file name="ext_scanners.h" role="src" />
+          <file name="ext_scanners.re" role="src" />
+          <file name="strikethrough.c" role="src" />
+          <file name="strikethrough.h" role="src" />
+          <file name="table.c" role="src" />
+          <file name="table.h" role="src" />
+          <file name="tagfilter.c" role="src" />
+          <file name="tagfilter.h" role="src" />
+          <file name="tasklist.c" role="src" />
+          <file name="tasklist.h" role="src" />
+        </dir>
+        <dir name="src">
+          <file name="arena.c" role="src" />
+          <file name="blocks.c" role="src" />
+          <file name="buffer.c" role="src" />
+          <file name="buffer.h" role="src" />
+          <file name="case_fold_switch.inc" role="src" />
+          <file name="chunk.h" role="src" />
+          <file name="cmark-gfm-extension_api.h" role="src" />
+          <file name="cmark-gfm.h" role="src" />
+          <file name="cmark-gfm_export.h" role="src" />
+          <file name="cmark-gfm_version.h" role="src" />
+          <file name="cmark-gfm_version.h.in" role="src" />
+          <file name="cmark.c" role="src" />
+          <file name="cmark_ctype.c" role="src" />
+          <file name="cmark_ctype.h" role="src" />
+          <file name="commonmark.c" role="src" />
+          <file name="entities.inc" role="src" />
+          <file name="footnotes.c" role="src" />
+          <file name="footnotes.h" role="src" />
+          <file name="houdini.h" role="src" />
+          <file name="houdini_href_e.c" role="src" />
+          <file name="houdini_html_e.c" role="src" />
+          <file name="houdini_html_u.c" role="src" />
+          <file name="html.c" role="src" />
+          <file name="html.h" role="src" />
+          <file name="inlines.c" role="src" />
+          <file name="inlines.h" role="src" />
+          <file name="iterator.c" role="src" />
+          <file name="iterator.h" role="src" />
+          <file name="latex.c" role="src" />
+          <file name="libcmark-gfm.pc.in" role="src" />
+          <file name="linked_list.c" role="src" />
+          <file name="man.c" role="src" />
+          <file name="map.c" role="src" />
+          <file name="map.h" role="src" />
+          <file name="node.c" role="src" />
+          <file name="node.h" role="src" />
+          <file name="parser.h" role="src" />
+          <file name="plaintext.c" role="src" />
+          <file name="plugin.c" role="src" />
+          <file name="plugin.h" role="src" />
+          <file name="references.c" role="src" />
+          <file name="references.h" role="src" />
+          <file name="registry.c" role="src" />
+          <file name="registry.h" role="src" />
+          <file name="render.c" role="src" />
+          <file name="render.h" role="src" />
+          <file name="scanners.c" role="src" />
+          <file name="scanners.h" role="src" />
+          <file name="syntax_extension.c" role="src" />
+          <file name="syntax_extension.h" role="src" />
+          <file name="utf8.c" role="src" />
+          <file name="utf8.h" role="src" />
+          <file name="xml.c" role="src" />
+        </dir>
+      </dir>
+    </dir>
+  </dir>
+</contents>
+  <dependencies>
+    <required>
+      <php>
+        <min>8.2.0</min>
+      </php>
+      <pearinstaller>
+        <min>1.10.0</min>
+      </pearinstaller>
+    </required>
+  </dependencies>
+  <providesextension>mdparser</providesextension>
+  <extsrcrelease>
+    <configureoption name="enable-mdparser" default="yes"
+                     prompt="Enable mdparser support?" />
+  </extsrcrelease>
+</package>
