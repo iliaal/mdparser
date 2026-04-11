@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-11
+
+Release hygiene patch. Zero extension behavior change from 0.1.0 —
+all changes are around the release infrastructure. Cut as a new
+tag because 0.1.0 predates `composer.json` existing in the repo,
+so Packagist silently skipped the 0.1.0 tag and PIE couldn't
+resolve `iliaal/mdparser` without the `:@dev` constraint. 0.1.1 is
+the first tag that has `composer.json` at the tagged commit.
+
 ### Added
 
 - Root-level `composer.json` with `type: "php-ext"` and a full
@@ -54,6 +63,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `permissions: contents: write` block. The default `GITHUB_TOKEN` on
   new GitHub repos has read-only contents scope, which blocked
   `php-windows-builder/release@v1` from creating the GitHub release.
+- Dropped PHP 8.2 from the matrix. 8.2 lacks
+  `zend_class_entry.default_object_handlers`, which `mdparser_parser.c`
+  uses. `php_excel` already targets 8.3+; mdparser now matches.
+- Added a static-inline compat shim for
+  `zend_register_internal_class_with_flags` (added in PHP 8.4) so
+  gen_stub's emitted arginfo compiles cleanly on 8.3.
+- `.gitattributes` forcing LF on source files and `binary` on
+  `tests/fixtures/commonmark-spec.txt` and every
+  `tests/parity/**/fixtures/*` file so Windows runners don't
+  autocrlf-convert the exact-byte comparison corpora.
+- Windows tag trigger widened from `['v*']` to
+  `['[0-9]*.[0-9]*.[0-9]*', 'v[0-9]*.[0-9]*.[0-9]*']` so both bare
+  SemVer and v-prefixed tags fire the release build.
+
+[0.1.1]: https://github.com/iliaal/mdparser/releases/tag/0.1.1
 
 ## [0.1.0] - 2026-04-11
 
@@ -107,5 +131,5 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.1.1...HEAD
 [0.1.0]: https://github.com/iliaal/mdparser/releases/tag/0.1.0

@@ -42,7 +42,7 @@ Typical usage:
   </lead>
   <date>2026-04-11</date>
   <version>
-    <release>0.1.0</release>
+    <release>0.1.1</release>
     <api>0.1.0</api>
   </version>
   <stability>
@@ -51,11 +51,22 @@ Typical usage:
   </stability>
   <license uri="http://www.php.net/license/3_01.txt">PHP</license>
   <notes>
-Initial release.
-- MdParser\Parser with toHtml, toXml, toAst entry points
-- MdParser\Options (readonly) covering 17 cmark/GFM toggles
-- MdParser\Exception thrown on allocation or parser failure
-- Embedded cmark-gfm 0.29.0.gfm.13; no external runtime dependencies
+0.1.1 release hygiene. Zero extension behavior change from 0.1.0.
+
+- Root composer.json with type: "php-ext" for canonical PIE resolution
+  (replaces legacy pie.json). Fixes "pie install iliaal/mdparser" not
+  finding the 0.1.0 tag on Packagist — the 0.1.0 tag pre-dated the
+  composer.json and Packagist silently skipped it.
+- CONTRIBUTING.md, SECURITY.md, .github/dependabot.yml, README badges.
+- scripts/pie-smoke.sh for reproducible PIE verification.
+- CI fixes: drop PHP 8.2 (matches php_excel), compat shim for
+  zend_register_internal_class_with_flags on 8.3, .gitattributes
+  forcing LF on source and binary on fixtures, permissions: contents
+  write on the release job, SemVer tag trigger matches bare numeric
+  and v-prefixed forms.
+- docs/installation.md rewrite covering PIE's bison+libtool-bin
+  requirement and the "post-tag-before-Packagist-crawl" fallback.
+- bench/ harness and parity baselines (pinned).
   </notes>
 <contents>
   <dir name="/">
