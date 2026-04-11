@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cherry-pick procedure.
 - `.github/dependabot.yml` to auto-PR monthly updates for the
   `github-actions` ecosystem and the `bench/` composer dependencies.
+- `scripts/pie-smoke.sh` — reproducible end-to-end build+install+
+  smoke test in a clean `php:8.4-cli` Docker container, including
+  the build-tool dependencies (`bison`, `libtool-bin`) that PIE
+  itself requires. Used to verify the install path in
+  `docs/installation.md`.
+
+### Documented
+
+- PIE 1.4.0 requires packages to be registered on Packagist.org
+  before `pie install iliaal/mdparser` can resolve them. PIE has
+  no CLI flag or composer-config override for local-path or
+  private-git installation. Called out in `docs/installation.md`
+  with a manual build fallback for development clones.
 
 ### Removed
 
