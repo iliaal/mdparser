@@ -41,32 +41,60 @@ pie install iliaal/mdparser
 
 PIE resolves the package via the canonical `composer.json` at the repo
 root (which declares `type: "php-ext"` and the `configure-options`
-schema). It handles the configure + build + install cycle and writes
-the INI fragment automatically.
+schema), downloads the source from the matching GitHub release, and
+handles the configure + build + install cycle plus writing the INI
+fragment automatically. You'll see output like:
 
-### PIE 1.4 Packagist requirement
-
-PIE 1.4.0 only resolves packages via Packagist.org — there is no
-CLI flag or composer-config escape hatch for local paths or private
-git URLs. If you're testing `pie install` against a development
-clone of mdparser that isn't yet published to Packagist, PIE will
-report "Unable to find an installable package iliaal/mdparser".
-
-For that case, bypass PIE and build directly:
-
-```bash
-git clone https://github.com/iliaal/mdparser.git
-cd mdparser
-phpize && ./configure --enable-mdparser
-make -j$(nproc)
-sudo make install
-echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
+```
+🥧 PHP Installer for Extensions (PIE) 1.4.0, from The PHP Foundation
+Found package: iliaal/mdparser:0.1.0 which provides ext-mdparser
+Extracted iliaal/mdparser:0.1.0 source to: /root/.pie/.../vendor/iliaal/mdparser
+phpize complete.
+Configure complete with options: --with-php-config=/usr/local/bin/php-config
+Build complete: /root/.pie/.../modules/mdparser.so
+Install complete: /usr/local/lib/php/extensions/.../mdparser.so
+✅ Extension is enabled and loaded in /usr/local/bin/php
 ```
 
-`scripts/pie-smoke.sh` runs the full build + install + smoke test in
-a clean `php:8.4-cli` Docker container and is what I use to verify
-the install path end-to-end. Needs `bison` and `libtool-bin` on the
-container (the script installs both).
+### PIE build-tool requirements
+
+PIE 1.4.0 requires a few build tools beyond what a minimal PHP
+install ships with. On Debian/Ubuntu:
+
+```bash
+sudo apt-get install -y bison libtool-bin
+```
+
+On macOS:
+
+```bash
+brew install bison libtool
+```
+
+The PHP image `php:8.x-cli` from Docker Hub does not ship with these
+pre-installed. `scripts/pie-smoke.sh` in this repo installs them for
+you before running PIE and is the reference end-to-end verification
+harness.
+
+### Before the first stable tag is indexed
+
+If you install mdparser immediately after a new release tag is
+pushed, Packagist may not have crawled the tag yet. In that window
+`pie install iliaal/mdparser` will fail with "Unable to find an
+installable package ... with minimum stability stable". You can
+either:
+
+- Force Packagist to re-crawl from the package page on
+  packagist.org (logged-in maintainer gets a "Force Update" button),
+  then retry `pie install iliaal/mdparser`.
+- Install the master-branch development version explicitly:
+
+  ```bash
+  pie install iliaal/mdparser:@dev
+  ```
+
+  This resolves to `dev-master` and installs the current HEAD. Once
+  the stable tag is indexed, switch back to the plain form.
 
 ## From source
 
