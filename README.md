@@ -1,10 +1,14 @@
 # mdparser
 
+[![Tests](https://github.com/iliaal/mdparser/actions/workflows/tests.yml/badge.svg)](https://github.com/iliaal/mdparser/actions/workflows/tests.yml)
+[![Windows Build](https://github.com/iliaal/mdparser/actions/workflows/windows.yml/badge.svg)](https://github.com/iliaal/mdparser/actions/workflows/windows.yml)
+[![Version](https://img.shields.io/github/v/release/iliaal/mdparser)](https://github.com/iliaal/mdparser/releases)
+[![License: PHP-3.01](https://img.shields.io/badge/License-PHP--3.01-green.svg)](http://www.php.net/license/3_01.txt)
+[![Follow @iliaa](https://img.shields.io/badge/Follow-@iliaa-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/follow?screen_name=iliaa)
+
 Native C CommonMark + GitHub Flavored Markdown parser for PHP, available
 via PECL and PIE. No external runtime dependencies; everything ships
 inside a single `.so`.
-
-Status: **0.1.0 in development.** Not yet released.
 
 ## Goals
 
@@ -119,7 +123,15 @@ $ast  = $parser->toAst($markdown);   // nested arrays, see below
 
 ## Install
 
-Not yet released. Development build:
+```bash
+# PECL
+pecl install mdparser
+
+# PIE (uses the canonical composer.json with a php-ext section)
+pie install iliaal/mdparser
+```
+
+### From source
 
 ```bash
 git clone https://github.com/iliaal/mdparser.git
@@ -130,15 +142,10 @@ sudo make install
 echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
 ```
 
-After 0.1.0 ships:
+### Windows binaries
 
-```bash
-# PECL
-pecl install mdparser
-
-# PIE
-pie install iliaal/mdparser
-```
+Pre-built DLLs for PHP 8.3, 8.4, and 8.5 (TS/NTS, x86/x64) are attached
+to each [GitHub release](https://github.com/iliaal/mdparser/releases).
 
 ## License
 

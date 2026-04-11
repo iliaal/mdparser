@@ -61,8 +61,10 @@ Initial release.
   <dir name="/">
     <file name="CHANGELOG.md" role="doc" />
     <file name="CLAUDE.md" role="doc" />
+    <file name="CONTRIBUTING.md" role="doc" />
     <file name="LICENSE" role="doc" />
     <file name="README.md" role="doc" />
+    <file name="composer.json" role="src" />
     <file name="config.m4" role="src" />
     <file name="config.w32" role="src" />
     <file name="mdparser.c" role="src" />
@@ -74,7 +76,6 @@ Initial release.
     <file name="mdparser_parser.c" role="src" />
     <file name="package.xml" role="src" />
     <file name="php_mdparser.h" role="src" />
-    <file name="pie.json" role="src" />
     <dir name="tests">
       <file name="000_smoke.phpt" role="test" />
       <file name="001_options.phpt" role="test" />

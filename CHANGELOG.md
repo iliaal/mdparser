@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Root-level `composer.json` with `type: "php-ext"` and a full
+  `configure-options` schema for PIE resolution. Mirrors the
+  `iliaal/php_excel` conventions.
+- README badges: Tests workflow, Windows Build workflow, GitHub
+  release version, PHP-3.01 license, Follow @iliaa.
+- `CONTRIBUTING.md` with requirements, bug-report guidance, PR
+  workflow, test guidelines, code-style notes, and a vendored-cmark
+  cherry-pick procedure.
+- `.github/dependabot.yml` to auto-PR monthly updates for the
+  `github-actions` ecosystem and the `bench/` composer dependencies.
+
+### Removed
+
+- Legacy `pie.json` manifest. PIE now resolves via the canonical
+  `composer.json` at the repo root.
+
+### Fixed
+
+- Windows release workflow's tag trigger was `['v*']`, which did not
+  match SemVer tags without a leading `v` prefix. Widened to accept
+  both `[0-9]*.[0-9]*.[0-9]*` and `v[0-9]*.[0-9]*.[0-9]*` forms.
+- `release` job in `windows.yml` now has an explicit
+  `permissions: contents: write` block. The default `GITHUB_TOKEN` on
+  new GitHub repos has read-only contents scope, which blocked
+  `php-windows-builder/release@v1` from creating the GitHub release.
+
 ## [0.1.0] - 2026-04-11
 
 First release. Native C CommonMark + GFM parser for PHP 8.3+.
@@ -42,7 +70,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
   XSS/security regression, and footnotes.
 - GitHub Actions CI: Linux matrix (PHP 8.3-8.5), macOS (8.3-8.4), ASAN
   job on 8.4, Windows build matrix via php/php-windows-builder.
-- PECL `package.xml` and PIE `pie.json` manifests.
+- PECL `package.xml` manifest (PIE manifest added in 0.1.1-dev via
+  the canonical `composer.json`).
 - Full reference documentation under `docs/` (installation, parser,
   options, AST format, security, spec coverage).
 - Runnable examples under `examples/` covering basic usage, options,

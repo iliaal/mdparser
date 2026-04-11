@@ -39,8 +39,10 @@ echo "OK"
 pie install iliaal/mdparser
 ```
 
-PIE handles the configure + build + install cycle and writes the INI
-fragment automatically.
+PIE resolves the package via the canonical `composer.json` at the repo
+root (which declares `type: "php-ext"` and the `configure-options`
+schema). It handles the configure + build + install cycle and writes
+the INI fragment automatically.
 
 ## From source
 

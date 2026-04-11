@@ -1,0 +1,34 @@
+{
+    "name": "iliaal/mdparser",
+    "type": "php-ext",
+    "description": "Native C CommonMark + GitHub Flavored Markdown parser for PHP. 100% spec compliance, 15-30x faster than pure-PHP parsers, zero runtime dependencies.",
+    "keywords": ["markdown", "commonmark", "gfm", "parser", "cmark", "php-extension", "pecl", "pie"],
+    "license": "PHP-3.01",
+    "homepage": "https://github.com/iliaal/mdparser",
+    "authors": [
+        {
+            "name": "Ilia Alshanetsky",
+            "email": "ilia@ilia.ws"
+        }
+    ],
+    "require": {
+        "php": ">=8.3"
+    },
+    "php-ext": {
+        "extension-name": "mdparser",
+        "configure-options": [
+            {
+                "name": "enable-mdparser",
+                "description": "Enable mdparser (CommonMark + GFM) support",
+                "needs-value": false
+            },
+            {
+                "name": "enable-mdparser-dev",
+                "description": "Enable -Wall -Wextra for wrapper code (development builds)",
+                "needs-value": false
+            }
+        ],
+        "support-zts": true,
+        "support-nts": true
+    }
+}
