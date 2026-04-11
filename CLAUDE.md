@@ -1,8 +1,8 @@
 # mdparser
 
 Native C CommonMark + GitHub Flavored Markdown parser for PHP, packaged as
-a PECL/PIE extension. Wraps a vendored copy of `cmark-gfm` in a thin Zend
-binding; no external runtime dependencies.
+a PIE extension (PHP Foundation's PECL successor). Wraps a vendored copy
+of `cmark-gfm` in a thin Zend binding; no external runtime dependencies.
 
 ## Status
 
@@ -127,5 +127,4 @@ through.
 
 ## Repository
 
-Local-only for now. When published, intended for `iliaal/mdparser`
-(private until first release, then public on PECL and PIE).
+Public at `iliaal/mdparser`, published via Packagist + PIE.

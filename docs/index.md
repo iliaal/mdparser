@@ -1,14 +1,15 @@
 # mdparser documentation
 
-Native C CommonMark + GitHub Flavored Markdown parser for PHP, available
-via PECL and PIE. 100% CommonMark 0.31 spec compliance, GFM extensions
-(tables, strikethrough, task lists, autolinks, tag filter), three output
-formats (HTML, XML, AST), zero external runtime dependencies.
+Native C CommonMark + GitHub Flavored Markdown parser for PHP,
+installable via PIE (the PHP Foundation's PECL successor). 100%
+CommonMark 0.31 spec compliance, GFM extensions (tables, strikethrough,
+task lists, autolinks, tag filter), three output formats (HTML, XML,
+AST), zero external runtime dependencies.
 
 ## Reference
 
-- **[installation.md](installation.md)** — build from source, install
-  from PECL, install via PIE, platform notes
+- **[installation.md](installation.md)** — install via PIE, build
+  from source, platform notes, Windows binaries
 - **[parser.md](parser.md)** — `MdParser\Parser` class: `toHtml`,
   `toXml`, `toAst`, constructor, error model
 - **[options.md](options.md)** — `MdParser\Options` class: all 17 bool

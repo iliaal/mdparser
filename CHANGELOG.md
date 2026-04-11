@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `package.xml`, `scripts/gen_package_xml.php`, and
+  `scripts/validate_package.php`. PECL is deprecated (the PHP
+  Foundation's PIE is its successor and we publish via
+  Packagist + PIE), so the 422-line PECL manifest and its
+  generator/validator tooling were dead weight. If you need a
+  PECL-style tarball against a local mirror, run `pecl package`
+  on an older checkout at 0.1.1 or earlier.
+- `PECL` keyword dropped from `composer.json`.
+- PECL install instructions removed from `README.md` and
+  `docs/installation.md`. `PECL` still appears as a one-line
+  description of what PIE is ("the PHP Foundation's PECL
+  successor") for readers familiar with the older tool.
+
+### Added
+
+- `scripts/check_version.sh` — minimal bash version cross-check
+  between `PHP_MDPARSER_VERSION` in `php_mdparser.h` and the top
+  `## [X.Y.Z]` section of `CHANGELOG.md`, plus a SemVer 2.0.0
+  sanity check. Replaces the PECL-focused
+  `scripts/validate_package.php`. Used by the release checklist
+  in `CONTRIBUTING.md`.
+
 ## [0.1.1] - 2026-04-11
 
 Release hygiene patch. Zero extension behavior change from 0.1.0 —

@@ -31,7 +31,7 @@ git clone -q file:///mdparser /tmp/src
 cd /tmp/src
 echo "HEAD: $(git log --oneline -1)"
 echo "tag:  $(git describe --tags --always)"
-ls composer.json package.xml config.m4 php_mdparser.h | head
+ls composer.json config.m4 php_mdparser.h | head
 echo
 
 echo "---- 3. Install Composer ----"

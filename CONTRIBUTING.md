@@ -118,25 +118,42 @@ to touch cmark sources, follow the existing cherry-pick pattern:
 For maintainers cutting a new version:
 
 1. Bump `PHP_MDPARSER_VERSION` in `php_mdparser.h` to the new
-   semver, update `<release>` in `package.xml` and the top section
-   of `CHANGELOG.md`, and run `php scripts/validate_package.php` to
-   confirm all three are consistent.
-2. Commit + push to master.
-3. `git tag -a X.Y.Z -m "mdparser X.Y.Z"` with a release-note body,
-   then `git push origin X.Y.Z`.
-4. The `windows.yml` workflow picks up the tag, runs the full
+   semver and update the top section of `CHANGELOG.md`. The
+   current `[Unreleased]` entries become the new version
+   section with a release date and a compare link.
+2. Sanity-check the bump:
+
+   ```sh
+   scripts/check_version.sh
+   ```
+
+   This verifies `PHP_MDPARSER_VERSION` in `php_mdparser.h` matches
+   the top section of `CHANGELOG.md` and that the version is a
+   valid SemVer 2.0.0 string.
+
+3. Commit + push to master. CI (Tests + Windows Build) must be
+   green on the resulting commit before tagging.
+4. `git tag -a X.Y.Z -m "mdparser X.Y.Z"` with a release-note
+   body, then `git push origin X.Y.Z`. Use bare semver
+   (`0.1.1`, not `v0.1.1`) to match the existing tag convention.
+5. The `windows.yml` workflow picks up the tag, runs the full
    build matrix (PHP 8.3-8.5 x TS/NTS x x86/x64), and uses
    `php-windows-builder/release@v1` to create the GitHub release
    and attach the 12 DLL zips.
-5. Packagist's GitHub webhook (configured on the repo) fires on
-   the tag push and re-scans versions. `pie install iliaal/mdparser`
-   resolves to the new tag within a minute or two. If Packagist
-   hasn't indexed the tag yet, users can fall back to `pie install
-   iliaal/mdparser:@dev` or click "Force Update" on
-   https://packagist.org/packages/iliaal/mdparser.
-6. PECL (optional, slower cycle): `pecl package package.xml` to
-   build the tarball, then `pecl upload mdparser-X.Y.Z.tgz` once
-   the new-package slot has been approved by the PECL group.
+6. Packagist's GitHub webhook (configured on the repo) fires on
+   the tag push and re-scans versions. `pie install
+   iliaal/mdparser` resolves to the new tag within a minute or
+   two. If Packagist hasn't indexed the tag yet, users can fall
+   back to `pie install iliaal/mdparser:@dev` or hit the
+   `api/update-package` endpoint with your Packagist API token
+   to force a re-crawl. See
+   `~/ai/wiki/tools/packagist-quirks.md` for the full list of
+   Packagist indexing gotchas.
+7. Before the first tag of any new release cycle, double-check
+   that `composer.json` exists in the tree at HEAD (`git ls-tree
+   HEAD | grep composer.json`). Packagist silently skips tags
+   whose commit doesn't contain `composer.json` at the root —
+   mdparser's 0.1.0 release hit this trap.
 
 ### License
 

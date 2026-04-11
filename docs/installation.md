@@ -14,25 +14,6 @@ embedded directly in the extension shared object.
 No external libraries are required. cmark-gfm is bundled under
 `vendor/cmark/`.
 
-## PECL
-
-```bash
-pecl install mdparser
-```
-
-The channel is `pecl.php.net`. After install, enable the extension:
-
-```bash
-echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
-```
-
-Verify:
-
-```bash
-php -r '(new MdParser\Parser)->toHtml("# Hi") === "<h1>Hi</h1>\n" or exit(1);'
-echo "OK"
-```
-
 ## PIE
 
 ```bash

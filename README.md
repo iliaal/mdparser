@@ -6,8 +6,9 @@
 [![License: PHP-3.01](https://img.shields.io/badge/License-PHP--3.01-green.svg)](http://www.php.net/license/3_01.txt)
 [![Follow @iliaa](https://img.shields.io/badge/Follow-@iliaa-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/follow?screen_name=iliaa)
 
-Native C CommonMark + GitHub Flavored Markdown parser for PHP, available
-via PECL and PIE. No external runtime dependencies; everything ships
+Native C CommonMark + GitHub Flavored Markdown parser for PHP,
+installable via [PIE](https://github.com/php/pie) (the PHP Foundation's
+PECL successor). No external runtime dependencies; everything ships
 inside a single `.so`.
 
 ## Goals
@@ -124,11 +125,20 @@ $ast  = $parser->toAst($markdown);   // nested arrays, see below
 ## Install
 
 ```bash
-# PECL
-pecl install mdparser
-
-# PIE (uses the canonical composer.json with a php-ext section)
+# PIE (PHP Foundation's extension installer; uses the composer.json
+# at the repo root with type: "php-ext")
 pie install iliaal/mdparser
+```
+
+On a minimal PHP image (e.g. `php:8.x-cli` from Docker Hub), PIE
+needs a few build tools installed first:
+
+```bash
+# Debian/Ubuntu
+sudo apt install -y git bison libtool-bin
+
+# macOS
+brew install bison libtool
 ```
 
 ### From source
