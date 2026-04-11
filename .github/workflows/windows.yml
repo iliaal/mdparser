@@ -43,6 +43,11 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: windows-build
     runs-on: ubuntu-latest
+    # Explicit write scope for releases; default GITHUB_TOKEN is read-only
+    # for the contents permission on newly-created repos and the
+    # php-windows-builder/release@v1 action calls POST /releases.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
