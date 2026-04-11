@@ -27,11 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documented
 
-- PIE 1.4.0 requires packages to be registered on Packagist.org
-  before `pie install iliaal/mdparser` can resolve them. PIE has
-  no CLI flag or composer-config override for local-path or
-  private-git installation. Called out in `docs/installation.md`
-  with a manual build fallback for development clones.
+- `pie install iliaal/mdparser` verified end-to-end in a clean
+  `php:8.4-cli` Docker container: PIE downloads from Packagist,
+  runs phpize + configure + make + install, and auto-enables the
+  extension. Transcript and working command shown in
+  `docs/installation.md`.
+- PIE 1.4.0 requires `bison` and `libtool-bin` beyond a minimal
+  PHP install; apt-get / brew install commands added to
+  `docs/installation.md`.
+- Narrow window after a new release tag where Packagist hasn't
+  crawled the tag yet: documented the `pie install
+  iliaal/mdparser:@dev` fallback that installs the master branch,
+  and the Packagist "Force Update" button for manual refresh.
 
 ### Removed
 
