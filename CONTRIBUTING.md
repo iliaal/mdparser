@@ -49,7 +49,7 @@ Before filing, try to reproduce against the latest `master` branch.
 
 6. Verify zero compiler warnings (`--enable-mdparser-dev` sets
    `-Wall -Wextra`; the CI treats any warning as a build failure) and
-   that all 12+ tests pass.
+   that all 17+ tests pass.
 7. Validate the package manifest didn't regress:
 
    ```sh
