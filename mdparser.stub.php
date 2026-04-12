@@ -94,4 +94,36 @@ final class Parser
     public function toXml(string $source): string {}
 
     public function toAst(string $source): array {}
+
+    /**
+     * Render `$source` as inline-only HTML: no `<p>` wrapper and no
+     * block-level constructs. Block markers like `#`, `-`, `>`, `1.`
+     * are emitted as literal text instead of being parsed as
+     * headings / lists / blockquotes. Matches the semantics of
+     * Parsedown::line() and cebe/markdown::parseParagraph() so users
+     * migrating from those libraries have a drop-in path for
+     * rendering short strings (chat messages, table cell contents,
+     * user display names) without the surrounding paragraph tags.
+     */
+    public function toInlineHtml(string $source): string {}
+
+    /**
+     * Static shortcut: parse `$source` with the default Options and
+     * return HTML. Equivalent to `(new Parser)->toHtml($source)` but
+     * without the object boilerplate for one-off conversions. Mirrors
+     * `Markdown::defaultTransform()` from michelf/php-markdown.
+     */
+    public static function html(string $source): string {}
+
+    /**
+     * Static shortcut: parse `$source` with the default Options and
+     * return CommonMark XML.
+     */
+    public static function xml(string $source): string {}
+
+    /**
+     * Static shortcut: parse `$source` with the default Options and
+     * return the nested-array AST.
+     */
+    public static function ast(string $source): array {}
 }

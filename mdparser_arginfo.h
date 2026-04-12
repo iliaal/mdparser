@@ -1,5 +1,5 @@
 /* This is a generated file, edit mdparser.stub.php instead.
- * Stub hash: a41000b1112eac6a5762bc2f78699eaa20d47364 */
+ * Stub hash: 3862328c1c3ea5151f86774c753f84958999e15d */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sourcepos, _IS_BOOL, 0, "false")
@@ -42,6 +42,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_MdParser_Parser_toAst, 0, 
 	ZEND_ARG_TYPE_INFO(0, source, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
+#define arginfo_class_MdParser_Parser_toInlineHtml arginfo_class_MdParser_Parser_toHtml
+
+#define arginfo_class_MdParser_Parser_html arginfo_class_MdParser_Parser_toHtml
+
+#define arginfo_class_MdParser_Parser_xml arginfo_class_MdParser_Parser_toHtml
+
+#define arginfo_class_MdParser_Parser_ast arginfo_class_MdParser_Parser_toAst
+
 ZEND_METHOD(MdParser_Options, __construct);
 ZEND_METHOD(MdParser_Options, strict);
 ZEND_METHOD(MdParser_Options, github);
@@ -50,6 +58,10 @@ ZEND_METHOD(MdParser_Parser, __construct);
 ZEND_METHOD(MdParser_Parser, toHtml);
 ZEND_METHOD(MdParser_Parser, toXml);
 ZEND_METHOD(MdParser_Parser, toAst);
+ZEND_METHOD(MdParser_Parser, toInlineHtml);
+ZEND_METHOD(MdParser_Parser, html);
+ZEND_METHOD(MdParser_Parser, xml);
+ZEND_METHOD(MdParser_Parser, ast);
 
 static const zend_function_entry class_MdParser_Options_methods[] = {
 	ZEND_ME(MdParser_Options, __construct, arginfo_class_MdParser_Options___construct, ZEND_ACC_PUBLIC)
@@ -64,6 +76,10 @@ static const zend_function_entry class_MdParser_Parser_methods[] = {
 	ZEND_ME(MdParser_Parser, toHtml, arginfo_class_MdParser_Parser_toHtml, ZEND_ACC_PUBLIC)
 	ZEND_ME(MdParser_Parser, toXml, arginfo_class_MdParser_Parser_toXml, ZEND_ACC_PUBLIC)
 	ZEND_ME(MdParser_Parser, toAst, arginfo_class_MdParser_Parser_toAst, ZEND_ACC_PUBLIC)
+	ZEND_ME(MdParser_Parser, toInlineHtml, arginfo_class_MdParser_Parser_toInlineHtml, ZEND_ACC_PUBLIC)
+	ZEND_ME(MdParser_Parser, html, arginfo_class_MdParser_Parser_html, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(MdParser_Parser, xml, arginfo_class_MdParser_Parser_xml, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(MdParser_Parser, ast, arginfo_class_MdParser_Parser_ast, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_FE_END
 };
 

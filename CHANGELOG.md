@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `MdParser\Parser::html(string)`, `MdParser\Parser::xml(string)`,
+  and `MdParser\Parser::ast(string)` — static one-shot shortcuts
+  that parse with the default Options and return the corresponding
+  output without the `new Parser()` boilerplate. Mirrors
+  `Markdown::defaultTransform()` from michelf/php-markdown. Use for
+  simple scripts and migration from libraries with a static API.
+- `MdParser\Parser::toInlineHtml(string)` — renders inline-only
+  HTML with no `<p>` wrapper. Block-level markers (`#`, `-`, `>`,
+  `1.`, 4-space indents) become literal text rather than being
+  parsed as headings / lists / blockquotes / code blocks. Matches
+  the semantics of Parsedown's `line()` and
+  cebe/markdown's `parseParagraph()` so users migrating from
+  those libraries have a drop-in path for rendering short strings
+  (chat messages, table cells, user display names) without the
+  surrounding paragraph tags. Implemented by prepending a
+  zero-width space (U+200B) before feeding cmark, forcing the
+  entire input into paragraph context, then stripping the
+  sentinel plus the `<p>` / `</p>` wrappers from the output.
 - `MdParser\Options::strict()`, `MdParser\Options::github()`, and
   `MdParser\Options::permissive()` — static factory presets for
   common deployment patterns. `strict()` is the standard defaults
