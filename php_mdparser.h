@@ -14,7 +14,7 @@
 #ifndef PHP_MDPARSER_H
 #define PHP_MDPARSER_H
 
-#define PHP_MDPARSER_VERSION "0.1.1"
+#define PHP_MDPARSER_VERSION "0.2.0"
 
 extern zend_module_entry mdparser_module_entry;
 #define phpext_mdparser_ptr &mdparser_module_entry

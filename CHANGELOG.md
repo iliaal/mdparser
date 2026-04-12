@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-11
+
 ### Added
 
 - `MdParser\Parser::html(string)`, `MdParser\Parser::xml(string)`,
@@ -57,12 +59,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Options` default masks are cached in `mdparser_default_cmark_options`
   / `mdparser_default_extension_mask` at MINIT. `mdparser_options_default_masks`
   collapses to a two-word copy.
-- `Parser` is marked `ZEND_ACC_NOT_SERIALIZABLE`. Default PHP
+- `Parser` and `Options` are both marked
+  `ZEND_ACC_NOT_SERIALIZABLE`. For `Parser`, default PHP
   serialization would have silently dropped the cached
   `cmark_options` / `extension_mask` ints (they are not exposed as
   PHP properties), so `unserialize($parser)` would have yielded a
   parser running on defaults regardless of the original `Options`.
-  Clone was already blocked; serialize now matches.
+  `Options` is blocked alongside for consistency -- both carry
+  derived state users should not round-trip through serialize.
+  `MdParser\Exception` is intentionally left serializable so
+  monolog / queue workers / PHPUnit failure reporting can still
+  log thrown exceptions normally. Clone was already blocked on
+  `Parser`; serialize now matches.
 - AST walker: fixed-size `array_init_size(out, 8)` per node, interned
   key strings, `zend_hash_add_new` with precomputed hashes instead of
   re-hashing `"type"`/`"children"`/`"literal"`/... on every node,
@@ -77,10 +85,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns now include the source length so bug reports land with at
   least the size of the offending input.
 
+### Fixed
+
+- `toAst()` on markdown containing footnotes previously emitted
+  `'type' => '<unknown>'` nodes. Root cause: cmark-gfm's
+  `cmark_node_get_type_string()` switch does not cover
+  `CMARK_NODE_FOOTNOTE_REFERENCE` or `CMARK_NODE_FOOTNOTE_DEFINITION`
+  and falls through to `"<unknown>"`. The AST walker now overrides
+  both locally to `"footnote_reference"` / `"footnote_definition"`,
+  surfaces the label via the `literal` field, and recurses the
+  definition's children so the body (paragraphs / lists / etc.)
+  is reachable.
+
 ### Security
 
-- Parser serialization blocked (see above) — prevents silent state
-  loss across a serialize/unserialize round trip.
+- Parser and Options serialization blocked (see above) — prevents
+  silent state loss across a serialize/unserialize round trip on
+  Parser, and gives Options the same treatment for consistency.
 - `toAst()` on deeply-nested markdown now throws cleanly at
   `MDPARSER_MAX_AST_DEPTH` instead of segfaulting via C stack
   exhaustion. Regression test in `tests/022_limits.phpt`.
@@ -209,5 +230,6 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.1.1...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/iliaal/mdparser/releases/tag/0.2.0
 [0.1.0]: https://github.com/iliaal/mdparser/releases/tag/0.1.0
