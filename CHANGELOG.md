@@ -67,14 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MDPARSER_MAX_AST_DEPTH` instead of segfaulting via C stack
   exhaustion. Regression test in `tests/022_limits.phpt`.
 
-### Developer
-
-- Wrapper now ships with `-Wall -Wextra` on by default in `config.m4`
-  so local builds catch regressions; `--enable-mdparser-dev` upgrades
-  to `-Werror -Wstrict-prototypes`. `-Wshadow` is intentionally NOT
-  enabled because PHP 8.5's `php_streams.h` shadows the `zval`
-  typedef with a struct member of the same name.
-
 ## [0.1.1] - 2026-04-11
 
 Release hygiene patch. Zero extension behavior change from 0.1.0 —
