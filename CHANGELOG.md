@@ -7,29 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
-
-- `package.xml`, `scripts/gen_package_xml.php`, and
-  `scripts/validate_package.php`. PECL is deprecated (the PHP
-  Foundation's PIE is its successor and we publish via
-  Packagist + PIE), so the 422-line PECL manifest and its
-  generator/validator tooling were dead weight. If you need a
-  PECL-style tarball against a local mirror, run `pecl package`
-  on an older checkout at 0.1.1 or earlier.
-- `PECL` keyword dropped from `composer.json`.
-- PECL install instructions removed from `README.md` and
-  `docs/installation.md`. `PECL` still appears as a one-line
-  description of what PIE is ("the PHP Foundation's PECL
-  successor") for readers familiar with the older tool.
-
 ### Added
 
-- `scripts/check_version.sh` — minimal bash version cross-check
-  between `PHP_MDPARSER_VERSION` in `php_mdparser.h` and the top
-  `## [X.Y.Z]` section of `CHANGELOG.md`, plus a SemVer 2.0.0
-  sanity check. Replaces the PECL-focused
-  `scripts/validate_package.php`. Used by the release checklist
-  in `CONTRIBUTING.md`.
+- `MdParser\Options::strict()`, `MdParser\Options::github()`, and
+  `MdParser\Options::permissive()` — static factory presets for
+  common deployment patterns. `strict()` is the standard defaults
+  plus `autolink: false` so bare URLs in untrusted input stay inert
+  text. `github()` adds `footnotes: true` to match github.com's
+  rendered feature set. `permissive()` sets `unsafe: true`,
+  `tagfilter: false`, `liberalHtmlTag: true` for trusted input where
+  raw HTML should pass through. All three coexist with the full
+  17-bool named-argument constructor.
+- Hard cap on input size (`MDPARSER_MAX_INPUT_SIZE`, 256 MB). Inputs
+  past the cap throw `MdParser\Exception` at the wrapper boundary
+  rather than depending on cmark's `int32_t` `bufsize_t` edge.
+- Hard cap on `toAst()` recursion depth (`MDPARSER_MAX_AST_DEPTH`,
+  1000 levels). Deeply-nested markdown like `> ` × 50000 now throws
+  `MdParser\Exception` instead of smashing the C stack during the
+  recursive AST walk. `toHtml()` and `toXml()` were already safe
+  because cmark's own renderers are iterative.
+
+### Changed
+
+- Per-parse extension attachment is now a bitmask loop over cached
+  `cmark_syntax_extension*` pointers resolved once at MINIT, instead
+  of five `cmark_find_syntax_extension()` linked-list walks plus
+  `strcmp`s on every `toHtml()`/`toXml()`/`toAst()` call. Also
+  hard-fails MINIT if any default-on extension (notably `tagfilter`)
+  is missing from the cmark-gfm registry rather than silently running
+  without the safety net.
+- `Options` default masks are cached in `mdparser_default_cmark_options`
+  / `mdparser_default_extension_mask` at MINIT. `mdparser_options_default_masks`
+  collapses to a two-word copy.
+- `Parser` is marked `ZEND_ACC_NOT_SERIALIZABLE`. Default PHP
+  serialization would have silently dropped the cached
+  `cmark_options` / `extension_mask` ints (they are not exposed as
+  PHP properties), so `unserialize($parser)` would have yielded a
+  parser running on defaults regardless of the original `Options`.
+  Clone was already blocked; serialize now matches.
+- AST walker: fixed-size `array_init_size(out, 8)` per node, interned
+  key strings, `zend_hash_add_new` with precomputed hashes instead of
+  re-hashing `"type"`/`"children"`/`"literal"`/... on every node,
+  extension detection via `cmark_node_get_syntax_extension()` instead
+  of a 6-way `strcmp` chain against the type name. The AST-only key
+  strings are lazily initialized on the first `toAst()` call so users
+  who only need `toHtml()`/`toXml()` don't pay the setup cost at
+  module load.
+- `toHtml`/`toXml`/`toAst` migrated from `Z_PARAM_STRING` to
+  `Z_PARAM_STR`, matching modern `ext/standard` / `ext/dom` usage.
+- Exception messages from `cmark_parser_finish` and renderer null
+  returns now include the source length so bug reports land with at
+  least the size of the offending input.
+
+### Security
+
+- Parser serialization blocked (see above) — prevents silent state
+  loss across a serialize/unserialize round trip.
+- `toAst()` on deeply-nested markdown now throws cleanly at
+  `MDPARSER_MAX_AST_DEPTH` instead of segfaulting via C stack
+  exhaustion. Regression test in `tests/022_limits.phpt`.
+
+### Developer
+
+- Wrapper now ships with `-Wall -Wextra` on by default in `config.m4`
+  so local builds catch regressions; `--enable-mdparser-dev` upgrades
+  to `-Werror -Wstrict-prototypes`. `-Wshadow` is intentionally NOT
+  enabled because PHP 8.5's `php_streams.h` shadows the `zval`
+  typedef with a struct member of the same name.
 
 ## [0.1.1] - 2026-04-11
 
