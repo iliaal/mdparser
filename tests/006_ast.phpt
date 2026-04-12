@@ -79,6 +79,55 @@ $ast = $p->toAst("before ~~strike~~ after");
 $para = $ast['children'][0];
 var_dump($para['children'][1]['type']);
 var_dump($para['children'][1]['children'][0]['literal']);
+
+// block_quote wraps its paragraph child
+$ast = $p->toAst("> quoted\n");
+$bq = $ast['children'][0];
+var_dump($bq['type']);
+var_dump($bq['children'][0]['type']);
+var_dump($bq['children'][0]['children'][0]['literal']);
+
+// html_block: raw HTML at block level, literal carries the full block
+$ast = $p->toAst("<div>raw</div>\n");
+$hb = $ast['children'][0];
+var_dump($hb['type']);
+var_dump($hb['literal']);
+
+// html_inline: inline HTML fragments interleaved with text
+$ast = $p->toAst("x <b>y</b> z");
+$inlines = $ast['children'][0]['children'];
+var_dump($inlines[1]['type']);
+var_dump($inlines[1]['literal']);
+var_dump($inlines[3]['type']);
+var_dump($inlines[3]['literal']);
+
+// softbreak: plain newline between inline text (no trailing spaces)
+$ast = $p->toAst("line one\nline two");
+var_dump($ast['children'][0]['children'][1]['type']);
+
+// linebreak: two trailing spaces force a hard line break
+$ast = $p->toAst("line one  \nline two");
+var_dump($ast['children'][0]['children'][1]['type']);
+
+// table_cell: child of a table_row inside a table
+$ast = $p->toAst("| a | b |\n|---|---|\n| 1 | 2 |\n");
+$cell = $ast['children'][0]['children'][0]['children'][0];
+var_dump($cell['type']);
+var_dump($cell['children'][0]['literal']);
+
+// footnote_reference + footnote_definition (requires footnotes: true).
+// cmark-gfm's own get_type_string returns "<unknown>" for these; the
+// walker overrides locally so consumers see stable names.
+$fp = new MdParser\Parser(new MdParser\Options(footnotes: true));
+$ast = $fp->toAst("here[^1]\n\n[^1]: the note\n");
+$para = $ast['children'][0];
+$ref = $para['children'][1];
+var_dump($ref['type']);
+var_dump($ref['literal']);
+$def = $ast['children'][1];
+var_dump($def['type']);
+var_dump($def['literal']);
+var_dump($def['children'][0]['children'][0]['literal']);
 ?>
 --EXPECT--
 string(8) "document"
@@ -121,3 +170,22 @@ string(14) "thematic_break"
 bool(false)
 string(13) "strikethrough"
 string(6) "strike"
+string(11) "block_quote"
+string(9) "paragraph"
+string(6) "quoted"
+string(10) "html_block"
+string(15) "<div>raw</div>
+"
+string(11) "html_inline"
+string(3) "<b>"
+string(11) "html_inline"
+string(4) "</b>"
+string(9) "softbreak"
+string(9) "linebreak"
+string(10) "table_cell"
+string(1) "a"
+string(18) "footnote_reference"
+string(1) "1"
+string(19) "footnote_definition"
+string(1) "1"
+string(8) "the note"

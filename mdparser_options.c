@@ -182,6 +182,7 @@ void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *exte
 void mdparser_options_register_class(void)
 {
     mdparser_options_ce = register_class_MdParser_Options();
+    mdparser_options_ce->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
 }
 
 PHP_METHOD(MdParser_Options, __construct)

@@ -204,7 +204,16 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
      * ×4). array_init_size(8) avoids the first rehash. */
     array_init_size(out, 8);
 
+    /* cmark-gfm's get_type_string switch does not cover footnote node
+     * types and returns "<unknown>" for them. Override locally so AST
+     * consumers get stable, documented names. */
     const char *type_string = cmark_node_get_type_string(node);
+    cmark_node_type ntype = cmark_node_get_type(node);
+    if (ntype == CMARK_NODE_FOOTNOTE_REFERENCE) {
+        type_string = "footnote_reference";
+    } else if (ntype == CMARK_NODE_FOOTNOTE_DEFINITION) {
+        type_string = "footnote_definition";
+    }
     md_add_string(out, md_str_type, type_string);
 
     if (cmark_options & CMARK_OPT_SOURCEPOS) {
@@ -278,6 +287,18 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
         case CMARK_NODE_LINEBREAK:
         case CMARK_NODE_THEMATIC_BREAK:
             /* No fields, no children. */
+            break;
+
+        case CMARK_NODE_FOOTNOTE_REFERENCE:
+            /* Inline node whose literal is the label ("1" for [^1]). */
+            md_add_string(out, md_str_literal, cmark_node_get_literal(node));
+            break;
+
+        case CMARK_NODE_FOOTNOTE_DEFINITION:
+            /* Block node: the literal is the label, children are the
+             * definition body (paragraphs, lists, etc.). */
+            md_add_string(out, md_str_literal, cmark_node_get_literal(node));
+            mdparser_add_children(node, cmark_options, depth, out);
             break;
 
         default:
