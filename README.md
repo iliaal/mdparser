@@ -8,7 +8,7 @@
 
 ![mdparser: 15-30× faster than pure-PHP](images/mdparser-hero.jpg)
 
-Native C CommonMark + GitHub Flavored Markdown parser for PHP. 15-30× faster than pure-PHP alternatives (Parsedown, cebe, michelf) with full CommonMark 0.31 compliance — 652/652 spec examples pass. GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.3 minimum, OO API with `final` classes and `readonly` options.
+Native C CommonMark + GitHub Flavored Markdown parser for PHP. 15-30× faster than pure-PHP alternatives (Parsedown, cebe, michelf) with full CommonMark 0.31 compliance: 652/652 spec examples pass. GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.3 minimum, OO API with `final` classes and `readonly` options.
 
 ## 📦 Install
 
@@ -94,28 +94,28 @@ Against the major pure-PHP Markdown libraries, on PHP 8.4 with each parser in it
 
 ## ✨ Feature matrix
 
-Comparison with the major pure-PHP Markdown libraries. "via ext" means the feature exists but requires opting in to a non-default extension; "Extra" means the feature ships in the library's Markdown Extra dialect, not its base mode; "—" means the feature is not supported at all.
+Comparison with the major pure-PHP Markdown libraries. "via ext" means the feature exists but requires opting in to a non-default extension; "Extra" means the feature ships in the library's Markdown Extra dialect, not its base mode; "✗" means the feature is not supported at all.
 
 | Feature              | mdparser                | Parsedown   | league/cm core | cebe GFM | michelf Extra | Ciconia |
 |----------------------|-------------------------|-------------|----------------|----------|---------------|---------|
 | CommonMark core      | ✓                       | partial     | ✓              | partial  | partial       | partial |
 | Fenced code blocks   | ✓                       | ✓           | ✓              | ✓        | ✓             | ✓       |
 | GFM tables           | ✓                       | ✓           | via ext        | ✓        | via Extra     | ✓       |
-| Strikethrough        | ✓                       | ✓           | via ext        | ✓        | —             | ✓       |
-| Task lists           | ✓                       | —           | via ext        | —        | —             | ✓       |
-| Autolinks (bare URL) | ✓                       | ✓           | via ext        | ✓        | —             | ✓       |
-| `<script>` tag filter| ✓ (tagfilter)           | ✓ (escaped) | via ext        | partial  | —             | —       |
-| Smart punctuation    | ✓ (`Options::smart`)    | —           | via ext        | —        | —             | —       |
-| Footnotes            | ✓ (`Options::footnotes`)| Extra       | via ext        | —        | ✓ Extra       | plugin  |
-| Hardbreaks/nobreaks  | ✓                       | —           | —              | —        | —             | —       |
-| Sourcepos            | ✓                       | —           | ✓              | —        | —             | —       |
+| Strikethrough        | ✓                       | ✓           | via ext        | ✓        | ✗             | ✓       |
+| Task lists           | ✓                       | ✗           | via ext        | ✗        | ✗             | ✓       |
+| Autolinks (bare URL) | ✓                       | ✓           | via ext        | ✓        | ✗             | ✓       |
+| `<script>` tag filter| ✓ (tagfilter)           | ✓ (escaped) | via ext        | partial  | ✗             | ✗       |
+| Smart punctuation    | ✓ (`Options::smart`)    | ✗           | via ext        | ✗        | ✗             | ✗       |
+| Footnotes            | ✓ (`Options::footnotes`)| Extra       | via ext        | ✗        | ✓ Extra       | plugin  |
+| Hardbreaks/nobreaks  | ✓                       | ✗           | ✗              | ✗        | ✗             | ✗       |
+| Sourcepos            | ✓                       | ✗           | ✓              | ✗        | ✗             | ✗       |
 | HTML output          | ✓                       | ✓           | ✓              | ✓        | ✓             | ✓       |
-| XML output           | ✓                       | —           | —              | —        | —             | —       |
-| AST output           | ✓ (arrays)              | —           | ✓ (objects)    | —        | —             | —       |
+| XML output           | ✓                       | ✗           | ✗              | ✗        | ✗             | ✗       |
+| AST output           | ✓ (arrays)              | ✗           | ✓ (objects)    | ✗        | ✗             | ✗       |
 
 ## What we don't cover
 
-mdparser is deliberately scoped to what cmark-gfm supports: CommonMark core plus the five GFM extensions. It does **not** cover the "Markdown Extra" family of features that Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions offer. If you need any of the following, reach for league/commonmark — it's the most actively-maintained pure-PHP option for extended Markdown:
+mdparser is deliberately scoped to what cmark-gfm supports: CommonMark core plus the five GFM extensions. It does **not** cover the "Markdown Extra" family of features that Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions offer. If you need any of the following, reach for league/commonmark, the most actively-maintained pure-PHP option for extended Markdown:
 
 - Definition lists (`Term :: definition`)
 - Abbreviations (`*[HTML]: ...`)
@@ -135,8 +135,8 @@ These are real features. They're just not in scope for a CommonMark+GFM core par
 
 Companion native PHP extensions for high-throughput PHP workloads:
 
-- **[php_excel](https://github.com/iliaal/php_excel)** — Native Excel I/O. 7-10× faster than PhpSpreadsheet, full XLS/XLSX with formulas, formatting, and styling. Powered by LibXL.
-- **[php_clickhouse](https://github.com/iliaal/php_clickhouse)** — Native ClickHouse client speaking the wire protocol directly. Picks up where SeasClick left off.
+- **[php_excel](https://github.com/iliaal/php_excel)**: native Excel I/O. 7-10× faster than PhpSpreadsheet, full XLS/XLSX with formulas, formatting, and styling. Powered by LibXL.
+- **[php_clickhouse](https://github.com/iliaal/php_clickhouse)**: native ClickHouse client speaking the wire protocol directly. Picks up where SeasClick left off.
 
 ## 📚 Read more
 
