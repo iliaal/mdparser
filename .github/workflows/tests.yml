@@ -83,6 +83,45 @@ jobs:
             exit 1
           fi
 
+  linux-zts:
+    name: PHP ${{ matrix.php }} ZTS - Linux (canary)
+    runs-on: ubuntu-latest
+    env:
+      PHPTS: zts
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.4']
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP (ZTS)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: phpize, php-config
+          coverage: none
+
+      - name: Build extension under ZTS
+        run: |
+          phpize
+          ./configure --enable-mdparser --with-php-config=$(which php-config)
+          make -j$(nproc)
+
+      - name: Run tests under ZTS
+        run: |
+          export TEST_PHP_EXECUTABLE=$(which php)
+          export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
+          export NO_INTERACTION=1
+          RESULT=$(php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1)
+          echo "$RESULT"
+          FAILED=$(echo "$RESULT" | grep 'Tests failed' | grep -oP '\d+' | head -1)
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED test(s) failed under ZTS"
+            exit 1
+          fi
+
   macos:
     name: PHP ${{ matrix.php }} - macOS
     runs-on: macos-latest
