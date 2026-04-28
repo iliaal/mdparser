@@ -1,0 +1,12 @@
+# /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
+# detected from vendor/cmark/src/cmark-gfm_version.h (CMARK_GFM_VERSION_STRING)
+
+pinned: 0.29.0.gfm.13
+vendored_at: vendor/cmark
+resolver: github
+repo: github/cmark-gfm
+note: |
+  cmark-gfm fork, not vanilla cmark. Upstream-rebase notes in
+  vendor/upstream-rebase-notes.md document the 2026-04-11 investigation
+  of rebasing onto cmark 0.31.2 -- declined because gfm-specific
+  scanners (_scan_liberal_html_tag etc.) need to stay.
