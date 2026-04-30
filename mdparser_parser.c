@@ -184,7 +184,8 @@ static void mdparser_do_render_string(
 
     if (postprocess_mask) {
         zend_string *processed = mdparser_html_postprocess(
-            rendered, strlen(rendered), document, postprocess_mask);
+            rendered, strlen(rendered), document, cmark_options,
+            cmark_parser_get_syntax_extensions(parser), postprocess_mask);
         if (!processed) {
             mem->free(rendered);
             cmark_node_free(document);
@@ -382,7 +383,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
      * set. */
     int pp = obj->postprocess_mask & MDPARSER_PP_NOFOLLOW_LINKS;
     if (pp) {
-        zend_string *processed = mdparser_html_postprocess(body, body_len, NULL, pp);
+        zend_string *processed = mdparser_html_postprocess(body, body_len, NULL, 0, NULL, pp);
         if (!processed) {
             mem->free(rendered);
             cmark_node_free(document);

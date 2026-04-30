@@ -29,6 +29,18 @@ and AST output are unaffected. The static `Parser::html()` /
 `Parser::xml()` shortcuts use the module defaults and so do not
 apply either transform.
 
+Heading anchors are positioned by rendering each AST heading
+standalone and locating its exact byte sequence in the document
+HTML, rather than by counting line-start `<hN>` tags. Under
+`unsafe: true`, raw HTML headings written directly in the markdown
+source are therefore left alone and do not consume slugs intended
+for real headings.
+
+### Fixed
+
+- `config.w32` now lists `mdparser_html_postprocess.c` so Windows
+  builds link successfully.
+
 ## [0.2.0] - 2026-04-11
 
 ### Added

@@ -22,47 +22,56 @@
 
 #include "cmark-gfm.h"
 
-#include <ctype.h>
 #include <string.h>
 
-/* ---------- slug list ------------------------------------------------ */
+/* ---------- heading entry list -------------------------------------- */
+
+/* One entry per CMARK_NODE_HEADING in the document, in source order.
+ * `slug` is the GitHub-style slug (possibly empty, possibly deduped).
+ * `rendered` / `rendered_len` are cmark's standalone HTML rendering of
+ * the heading node, used as a fingerprint to find the exact byte
+ * position of THIS heading in the full document HTML. Without this
+ * fingerprint, raw HTML blocks containing `<h1>` (only possible under
+ * `unsafe: true`) would silently consume slugs intended for real
+ * headings further down. `doc_offset` is filled in just before
+ * apply_transforms by sequential memmem; SIZE_MAX means "not found"
+ * and the entry is skipped during apply. */
+typedef struct {
+    char *slug;
+    char *rendered;
+    size_t rendered_len;
+    size_t doc_offset;
+    int level;
+} mdparser_heading_entry;
 
 typedef struct {
-    char **items;
+    mdparser_heading_entry *items;
     size_t count;
     size_t cap;
-} mdparser_slug_list;
+} mdparser_heading_list;
 
-static void slug_list_init(mdparser_slug_list *l)
-{
-    l->items = NULL;
-    l->count = 0;
-    l->cap = 0;
-}
-
-static bool slug_list_push(mdparser_slug_list *l, char *slug)
+static bool heading_list_push(mdparser_heading_list *l, mdparser_heading_entry e)
 {
     if (l->count == l->cap) {
         size_t new_cap = l->cap ? l->cap * 2 : 8;
-        char **next = erealloc(l->items, new_cap * sizeof(char *));
+        mdparser_heading_entry *next = erealloc(l->items, new_cap * sizeof(*next));
         if (!next) {
             return false;
         }
         l->items = next;
         l->cap = new_cap;
     }
-    l->items[l->count++] = slug;
+    l->items[l->count++] = e;
     return true;
 }
 
-static void slug_list_free(mdparser_slug_list *l)
+static void heading_list_free(mdparser_heading_list *l, cmark_mem *mem)
 {
     for (size_t i = 0; i < l->count; i++) {
-        efree(l->items[i]);
+        if (l->items[i].slug) efree(l->items[i].slug);
+        if (l->items[i].rendered) mem->free(l->items[i].rendered);
     }
-    if (l->items) {
-        efree(l->items);
-    }
+    if (l->items) efree(l->items);
     l->items = NULL;
     l->count = 0;
     l->cap = 0;
@@ -73,30 +82,23 @@ static void slug_list_free(mdparser_slug_list *l)
 /* GitHub-style slug:
  *   - lowercase ASCII A-Z -> a-z
  *   - keep ASCII alnum, '-', '_'
- *   - keep all bytes >= 0x80 (UTF-8 continuation/lead) verbatim, so
- *     non-ASCII characters survive (CJK, Cyrillic, Greek, ...)
- *   - replace any run of whitespace with a single '-'
- *   - drop everything else (punctuation, symbols)
- *   - collapse runs of '-'
- *   - trim leading/trailing '-'
+ *   - keep all bytes >= 0x80 verbatim (UTF-8 letters/digits survive)
+ *   - replace any whitespace run with one '-'
+ *   - drop other ASCII punctuation
+ *   - collapse runs of '-', trim trailing '-'
  *
- * Output is heap-allocated via emalloc; caller owns. Empty input returns
- * a zero-length string ("\0"-terminated). */
+ * Output is heap-allocated via emalloc; caller owns. */
 static char *mdparser_slugify(const char *text, size_t len)
 {
-    /* Worst-case output is len bytes (we only ever drop or replace,
-     * never expand). +1 for terminator. */
     char *out = emalloc(len + 1);
     size_t o = 0;
-    bool prev_dash = true; /* treat start as "after a dash" so leading
-                              dashes are suppressed */
+    bool prev_dash = true;
 
     for (size_t i = 0; i < len; i++) {
         unsigned char c = (unsigned char)text[i];
 
         if (c >= 0x80) {
-            /* UTF-8: keep verbatim. Lowercasing non-ASCII without ICU
-             * is not safe, so leave case alone. */
+            /* Lowercasing non-ASCII without ICU is unsafe; pass through. */
             out[o++] = (char)c;
             prev_dash = false;
             continue;
@@ -114,52 +116,37 @@ static char *mdparser_slugify(const char *text, size_t len)
                 prev_dash = true;
             }
         }
-        /* else: drop punctuation / symbols */
     }
 
-    /* trim trailing dash */
-    while (o > 0 && out[o - 1] == '-') {
-        o--;
-    }
-
+    while (o > 0 && out[o - 1] == '-') o--;
     out[o] = '\0';
     return out;
 }
 
-/* If `slug` already appears in `seen`, append "-1", "-2", ... until a
- * fresh value is found. Frees the original `slug` on collision and
- * returns a fresh emalloc'd one; otherwise returns `slug` unchanged.
- * The returned pointer is always valid emalloc'd memory the caller
- * may push onto `seen`. Empty slugs collide too, mirroring GitHub's
- * "section" / "section-1" behavior for headings that slugify to "". */
-static char *mdparser_dedupe_slug(mdparser_slug_list *seen, char *slug)
+/* If `slug` already appears in `seen` (as the slug field of some prior
+ * heading), append "-1", "-2", ... until a fresh value is found.
+ * Empty slugs are not deduped: they suppress the id attribute entirely
+ * at apply time, so deduping them would emit invalid id="-1". */
+static char *mdparser_dedupe_slug(mdparser_heading_list *seen, char *slug)
 {
-    /* Empty slugs never get an id="" emitted at apply-time, so don't
-     * try to dedupe them into "-1" / "-2"; that would produce invalid
-     * id="-1" on a heading whose plain text was empty after slugify. */
-    if (slug[0] == '\0') {
-        return slug;
-    }
+    if (slug[0] == '\0') return slug;
 
     bool collides = false;
     for (size_t i = 0; i < seen->count; i++) {
-        if (strcmp(seen->items[i], slug) == 0) {
+        if (seen->items[i].slug && strcmp(seen->items[i].slug, slug) == 0) {
             collides = true;
             break;
         }
     }
-    if (!collides) {
-        return slug;
-    }
+    if (!collides) return slug;
 
     size_t base_len = strlen(slug);
-    /* enough room for slug + "-" + 20-digit counter + NUL */
     char *candidate = emalloc(base_len + 24);
     for (unsigned long n = 1; ; n++) {
         snprintf(candidate, base_len + 24, "%s-%lu", slug, n);
         bool taken = false;
         for (size_t i = 0; i < seen->count; i++) {
-            if (strcmp(seen->items[i], candidate) == 0) {
+            if (seen->items[i].slug && strcmp(seen->items[i].slug, candidate) == 0) {
                 taken = true;
                 break;
             }
@@ -173,105 +160,89 @@ static char *mdparser_dedupe_slug(mdparser_slug_list *seen, char *slug)
 
 /* ---------- heading text extraction ---------------------------------- */
 
-/* Append the literal text of a heading subtree into `buf`. Walks
- * TEXT, CODE, and HTML_INLINE leaves; recurses into emph/strong/link.
- * Caller passes in a strbuf-like (cap=current allocation). Returns
- * false on alloc failure. */
-typedef struct {
-    char *data;
-    size_t len;
-    size_t cap;
-} mdparser_text_buf;
-
-static bool tbuf_append(mdparser_text_buf *b, const char *src, size_t n)
+/* Append the text content of a heading subtree into `b`. Walks TEXT
+ * and CODE leaves; recurses into emph/strong/link/image. Image children
+ * (i.e. alt text) flow through naturally because cmark stores them as
+ * TEXT children of the IMAGE node — that matches GitHub's slug
+ * behavior, which includes alt text. softbreak/linebreak become a
+ * single space. html_inline literals are skipped (we don't want raw
+ * tag bytes leaking into the slug). Returns false only on depth
+ * overflow; smart_str's allocator bails on OOM via the engine. */
+static bool collect_heading_text(cmark_node *node, smart_str *b, int depth)
 {
-    if (b->len + n + 1 > b->cap) {
-        size_t need = b->len + n + 1;
-        size_t new_cap = b->cap ? b->cap * 2 : 64;
-        while (new_cap < need) new_cap *= 2;
-        char *next = erealloc(b->data, new_cap);
-        if (!next) {
-            return false;
-        }
-        b->data = next;
-        b->cap = new_cap;
-    }
-    if (n) {
-        memcpy(b->data + b->len, src, n);
-    }
-    b->len += n;
-    b->data[b->len] = '\0';
-    return true;
-}
-
-static bool collect_heading_text(cmark_node *node, mdparser_text_buf *b, int depth)
-{
-    if (depth > MDPARSER_MAX_AST_DEPTH) {
-        /* Mirrors the AST walker's depth cap. Headings shouldn't ever
-         * nest this deeply, but cmark's AST is what it is. */
-        return false;
-    }
+    if (depth > MDPARSER_MAX_AST_DEPTH) return false;
 
     cmark_node_type t = cmark_node_get_type(node);
     if (t == CMARK_NODE_TEXT || t == CMARK_NODE_CODE) {
         const char *lit = cmark_node_get_literal(node);
-        if (lit) {
-            return tbuf_append(b, lit, strlen(lit));
-        }
+        if (lit) smart_str_appendl(b, lit, strlen(lit));
         return true;
     }
-
-    /* For other node kinds (emph, strong, link, image, softbreak,
-     * linebreak, html_inline) recurse over children but don't include
-     * their literal data: image alt text and html tags don't belong
-     * in a slug. softbreak/linebreak become a space. */
     if (t == CMARK_NODE_SOFTBREAK || t == CMARK_NODE_LINEBREAK) {
-        return tbuf_append(b, " ", 1);
+        smart_str_appendc(b, ' ');
+        return true;
+    }
+    if (t == CMARK_NODE_HTML_INLINE) {
+        return true;
     }
 
     for (cmark_node *child = cmark_node_first_child(node); child;
          child = cmark_node_next(child)) {
-        if (!collect_heading_text(child, b, depth + 1)) {
-            return false;
-        }
+        if (!collect_heading_text(child, b, depth + 1)) return false;
     }
     return true;
 }
 
 /* ---------- heading list construction -------------------------------- */
 
-/* Walk the document collecting (slug) entries in document order, one
- * per CMARK_NODE_HEADING. Slug list is appended to `out`. Returns
- * false on any allocation failure (out is left in caller's hands and
- * can be freed via slug_list_free). */
-static bool collect_heading_slugs(cmark_node *document, mdparser_slug_list *out)
+/* Walk the document; for each heading node, capture its slug and a
+ * standalone HTML rendering. The standalone rendering is later used
+ * as a position fingerprint inside the full document HTML. Returns
+ * false on alloc failure or depth overflow. `out` is left in a state
+ * the caller can pass to heading_list_free regardless. */
+static bool collect_headings(cmark_node *document, int cmark_options,
+    cmark_llist *extensions, cmark_mem *mem, mdparser_heading_list *out)
 {
     cmark_iter *iter = cmark_iter_new(document);
-    if (!iter) {
-        return false;
-    }
+    if (!iter) return false;
 
     cmark_event_type ev;
     while ((ev = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
-        if (ev != CMARK_EVENT_ENTER) {
-            continue;
-        }
+        if (ev != CMARK_EVENT_ENTER) continue;
         cmark_node *cur = cmark_iter_get_node(iter);
-        if (cmark_node_get_type(cur) != CMARK_NODE_HEADING) {
-            continue;
-        }
+        if (cmark_node_get_type(cur) != CMARK_NODE_HEADING) continue;
 
-        mdparser_text_buf tb = {0};
+        smart_str tb = {0};
         if (!collect_heading_text(cur, &tb, 0)) {
-            if (tb.data) efree(tb.data);
+            smart_str_free(&tb);
             cmark_iter_free(iter);
             return false;
         }
 
-        char *slug = mdparser_slugify(tb.data ? tb.data : "", tb.len);
-        if (tb.data) efree(tb.data);
+        const char *raw = tb.s ? ZSTR_VAL(tb.s) : "";
+        size_t raw_len = tb.s ? ZSTR_LEN(tb.s) : 0;
+        char *slug = mdparser_slugify(raw, raw_len);
+        smart_str_free(&tb);
         slug = mdparser_dedupe_slug(out, slug);
-        if (!slug_list_push(out, slug)) {
+
+        /* Standalone render of the heading. cmark allocates via `mem`;
+         * we own the buffer and release it in heading_list_free. */
+        char *rendered = cmark_render_html_with_mem(cur, cmark_options, extensions, mem);
+        if (!rendered) {
+            efree(slug);
+            cmark_iter_free(iter);
+            return false;
+        }
+
+        mdparser_heading_entry e = {
+            .slug = slug,
+            .rendered = rendered,
+            .rendered_len = strlen(rendered),
+            .doc_offset = SIZE_MAX,
+            .level = cmark_node_get_heading_level(cur),
+        };
+        if (!heading_list_push(out, e)) {
+            mem->free(rendered);
             efree(slug);
             cmark_iter_free(iter);
             return false;
@@ -282,18 +253,34 @@ static bool collect_heading_slugs(cmark_node *document, mdparser_slug_list *out)
     return true;
 }
 
-/* ---------- HTML transformation -------------------------------------- */
-
-/* Append n bytes from src to a smart_str. */
-static inline void ss_append(smart_str *s, const char *src, size_t n)
+/* Resolve each heading entry's doc_offset by sequential memmem in the
+ * full document HTML. Each search starts past the prior match to keep
+ * source order. Entries whose rendered bytes can't be located keep
+ * doc_offset=SIZE_MAX and are silently skipped at apply time; that
+ * happens for headings whose body contains state-dependent renderer
+ * output (e.g. footnote references inside a heading: the standalone
+ * footnote_ix is 0 but the in-document index is whatever counter cmark
+ * had reached at that point). */
+static void resolve_heading_offsets(const char *html, size_t html_len,
+    mdparser_heading_list *headings)
 {
-    smart_str_appendl(s, src, n);
+    size_t cursor = 0;
+    for (size_t i = 0; i < headings->count; i++) {
+        mdparser_heading_entry *e = &headings->items[i];
+        if (cursor >= html_len) break;
+        const char *hit = memmem(html + cursor, html_len - cursor,
+            e->rendered, e->rendered_len);
+        if (!hit) continue;
+        e->doc_offset = (size_t)(hit - html);
+        cursor = e->doc_offset + e->rendered_len;
+    }
 }
 
-/* Find the next match of `<a href="`, treating it as a literal byte
- * pattern. cmark always emits this exact sequence (double quotes, no
- * leading whitespace) so a memmem-style scan is safe. Returns offset
- * within [from, html_len) or SIZE_MAX if not found. */
+/* ---------- HTML transformation -------------------------------------- */
+
+/* Find the next match of `<a href="`. cmark always emits this exact
+ * sequence (double quotes, no leading whitespace) for every link tag
+ * it generates, so a literal-byte scan is precise. */
 static size_t find_anchor_open(const char *html, size_t from, size_t html_len)
 {
     static const char needle[] = "<a href=\"";
@@ -303,79 +290,71 @@ static size_t find_anchor_open(const char *html, size_t from, size_t html_len)
     return hit ? (size_t)(hit - html) : SIZE_MAX;
 }
 
-/* Detect if position `i` starts a heading open tag at line-start:
- *   - i == 0 or html[i-1] == '\n'
- *   - html[i..] begins with "<h[1-6]"
- *   - the byte after the digit is '>' or ' ' (so we don't match
- *     "<h7>" or "<head>" or "<hr>")
- * Returns the heading level (1..6) on match, 0 on no match. */
-static int detect_heading_open(const char *html, size_t i, size_t html_len)
-{
-    if (i != 0 && html[i - 1] != '\n') return 0;
-    if (i + 4 > html_len) return 0;
-    if (html[i] != '<' || html[i + 1] != 'h') return 0;
-    char d = html[i + 2];
-    if (d < '1' || d > '6') return 0;
-    char after = html[i + 3];
-    if (after != '>' && after != ' ') return 0;
-    return d - '0';
-}
-
-/* Apply the postprocess transforms in a single pass over the HTML.
- * Heading anchors get an `id="slug"` attribute injected immediately
- * after the level digit; nofollow gets `rel="nofollow noopener
- * noreferrer" ` injected before the existing `href="..."` of every
- * `<a href="..."` open tag. The two transforms commute (they target
- * disjoint markup), so a single linear scan handles both. */
+/* Apply both postprocess transforms in one linear pass.
+ *
+ * Heading anchors: the anchored positions are pre-computed in
+ * `headings->items[k].doc_offset` (zero-based byte offsets into
+ * `html`). When we reach the next such offset we splice
+ * ` id="slug"` between the level digit and the rest of the open tag.
+ *
+ * Nofollow: at every `<a href="` we emit `<a rel="..." href="...`.
+ *
+ * The two transforms target disjoint markup (`<h>` vs `<a>`) and
+ * commute trivially, so a single scan handles both. */
 static zend_string *apply_transforms(const char *html, size_t html_len,
-    mdparser_slug_list *slugs, int pp_mask)
+    mdparser_heading_list *headings, int pp_mask)
 {
     static const char rel_inject[] = "rel=\"nofollow noopener noreferrer\" ";
     static const size_t rel_inject_len = sizeof(rel_inject) - 1;
 
     smart_str out = {0};
-    /* Pre-grow: heading-id injections add ~10 + slug bytes; rel adds
-     * ~36 bytes per link. A 2x size estimate is generous and avoids
-     * many doublings on dense inputs. */
     smart_str_alloc(&out, html_len + html_len / 4 + 64, 0);
 
     size_t i = 0;
-    size_t slug_ix = 0;
+    size_t heading_ix = 0;
     bool want_anchors = (pp_mask & MDPARSER_PP_HEADING_ANCHORS) != 0;
     bool want_nofollow = (pp_mask & MDPARSER_PP_NOFOLLOW_LINKS) != 0;
 
-    /* Cache the next anchor-open position so we don't re-scan the
-     * whole tail on every byte. Updated when we cross past it. */
+    /* Advance heading_ix past entries whose offsets failed to resolve
+     * (rare; see resolve_heading_offsets). */
+    if (want_anchors) {
+        while (heading_ix < headings->count &&
+               headings->items[heading_ix].doc_offset == SIZE_MAX) {
+            heading_ix++;
+        }
+    }
+
     size_t next_anchor = want_nofollow ? find_anchor_open(html, 0, html_len) : SIZE_MAX;
 
     while (i < html_len) {
-        /* Heading injection */
-        if (want_anchors && slug_ix < slugs->count) {
-            int level = detect_heading_open(html, i, html_len);
-            if (level) {
-                /* Always consume one slug per heading even when the
-                 * text slugified to nothing (so subsequent headings
-                 * stay aligned). Skip the id="" emit for that case
-                 * since empty id is invalid HTML5. */
-                const char *s = slugs->items[slug_ix++];
-                size_t s_len = strlen(s);
-                ss_append(&out, html + i, 3); /* "<hN" */
-                if (s_len) {
-                    ss_append(&out, " id=\"", 5);
-                    ss_append(&out, s, s_len);
-                    smart_str_appendc(&out, '"');
-                }
-                i += 3;
-                continue;
+        if (want_anchors && heading_ix < headings->count &&
+            i == headings->items[heading_ix].doc_offset)
+        {
+            mdparser_heading_entry *e = &headings->items[heading_ix];
+            /* Emit "<hN" then optionally ` id="slug"`. The remainder of
+             * the open tag (data-sourcepos="..." or just `>`) flows
+             * naturally on the next loop iterations. Empty slug means
+             * the heading slugified to nothing (pure punctuation): emit
+             * <hN> with no id rather than id="". */
+            smart_str_appendl(&out, html + i, 3);
+            size_t s_len = strlen(e->slug);
+            if (s_len) {
+                smart_str_appendl(&out, " id=\"", 5);
+                smart_str_appendl(&out, e->slug, s_len);
+                smart_str_appendc(&out, '"');
             }
+            i += 3;
+            do {
+                heading_ix++;
+            } while (heading_ix < headings->count &&
+                     headings->items[heading_ix].doc_offset == SIZE_MAX);
+            continue;
         }
 
-        /* Nofollow injection */
         if (want_nofollow && i == next_anchor) {
-            /* Emit "<a " then "rel=...\" " then continue from "href" */
-            ss_append(&out, "<a ", 3);
-            ss_append(&out, rel_inject, rel_inject_len);
-            i += 3; /* skip "<a " */
+            smart_str_appendl(&out, "<a ", 3);
+            smart_str_appendl(&out, rel_inject, rel_inject_len);
+            i += 3;
             next_anchor = find_anchor_open(html, i, html_len);
             continue;
         }
@@ -392,27 +371,30 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
 
 zend_string *mdparser_html_postprocess(
     const char *html_in, size_t html_len,
-    cmark_node *document, int pp_mask)
+    cmark_node *document, int cmark_options,
+    cmark_llist *extensions, int pp_mask)
 {
     if (pp_mask == 0) {
         return zend_string_init(html_in, html_len, 0);
     }
 
-    mdparser_slug_list slugs;
-    slug_list_init(&slugs);
+    mdparser_heading_list headings = {0};
 
     if (pp_mask & MDPARSER_PP_HEADING_ANCHORS) {
         if (!document) {
             /* Caller bug: anchors requested without an AST. */
             return NULL;
         }
-        if (!collect_heading_slugs(document, &slugs)) {
-            slug_list_free(&slugs);
+        cmark_mem *mem = cmark_get_default_mem_allocator();
+        if (!collect_headings(document, cmark_options, extensions, mem, &headings)) {
+            heading_list_free(&headings, mem);
             return NULL;
         }
+        resolve_heading_offsets(html_in, html_len, &headings);
     }
 
-    zend_string *out = apply_transforms(html_in, html_len, &slugs, pp_mask);
-    slug_list_free(&slugs);
+    zend_string *out = apply_transforms(html_in, html_len, &headings, pp_mask);
+    cmark_mem *mem = cmark_get_default_mem_allocator();
+    heading_list_free(&headings, mem);
     return out;
 }

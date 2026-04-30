@@ -78,6 +78,22 @@ check("toXml ignores anchor flag", !str_contains($x, 'id="hello"'));
 $a = $p->toAst("# Hi\n");
 check("toAst returns array regardless", is_array($a));
 
+// raw HTML <hN> under unsafe:true does not steal slugs from real headings
+$opts3 = new MdParser\Options(headingAnchors: true, unsafe: true);
+$p3 = new MdParser\Parser($opts3);
+$h = $p3->toHtml("<h1>raw attacker</h1>\n\n# real heading\n");
+check("unsafe: raw <h1> stays without id",
+    str_contains($h, '<h1>raw attacker</h1>'));
+check("unsafe: real heading still gets correct slug",
+    str_contains($h, '<h1 id="real-heading">real heading</h1>'));
+
+// interleaved raw + real
+$h = $p3->toHtml("<h2>raw1</h2>\n\n# real1\n\n<h3>raw2</h3>\n\n# real2\n");
+check("interleaved: raw1 unchanged",   str_contains($h, '<h2>raw1</h2>'));
+check("interleaved: real1 slugged",    str_contains($h, '<h1 id="real1">real1</h1>'));
+check("interleaved: raw2 unchanged",   str_contains($h, '<h3>raw2</h3>'));
+check("interleaved: real2 slugged",    str_contains($h, '<h1 id="real2">real2</h1>'));
+
 ?>
 --EXPECT--
 OK: default: no id attribute
@@ -97,3 +113,9 @@ OK: sourcepos coexists
 OK: static html() default has no anchors
 OK: toXml ignores anchor flag
 OK: toAst returns array regardless
+OK: unsafe: raw <h1> stays without id
+OK: unsafe: real heading still gets correct slug
+OK: interleaved: raw1 unchanged
+OK: interleaved: real1 slugged
+OK: interleaved: raw2 unchanged
+OK: interleaved: real2 slugged

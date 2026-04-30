@@ -114,7 +114,6 @@ void mdparser_exception_register_class(void);
 
 /* Default-options helpers (defined in mdparser_options.c) */
 void mdparser_options_init_defaults(void);
-void mdparser_options_default_masks(int *cmark_options, int *extension_mask, int *postprocess_mask);
 void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask, int *postprocess_mask);
 
 #endif /* PHP_MDPARSER_H */

@@ -18,15 +18,18 @@
 #include "cmark-gfm.h"
 
 /* Apply postprocess transforms (heading anchors, nofollow links) to a
- * cmark-rendered HTML buffer. Returns a freshly-malloc'd zend_string
+ * cmark-rendered HTML buffer. Returns a freshly-allocated zend_string
  * with the result, or NULL on allocation failure. The caller owns the
  * returned string. `pp_mask` is a bitmask of MDPARSER_PP_* flags;
- * passing 0 returns a zend_string copy of `html_in` unchanged. The
- * `document` AST is consulted for heading text when the anchor flag
- * is set; it may be NULL only when the heading-anchor flag is not in
- * pp_mask. */
+ * passing 0 returns a zend_string copy of `html_in` unchanged. When
+ * the heading-anchor flag is in pp_mask, `document`, `cmark_options`,
+ * and `extensions` are consulted to build a per-heading rendering
+ * fingerprint that locates each heading's exact byte position in
+ * `html_in` (so raw HTML <h> blocks under unsafe:true do not steal
+ * slugs). They may be ignored otherwise. */
 zend_string *mdparser_html_postprocess(
     const char *html_in, size_t html_len,
-    cmark_node *document, int pp_mask);
+    cmark_node *document, int cmark_options,
+    cmark_llist *extensions, int pp_mask);
 
 #endif

@@ -16,7 +16,7 @@ if (PHP_MDPARSER != "no") {
         "tasklist.c autolink.c tagfilter.c ext_scanners.c";
 
     var wrapper_sources = "mdparser.c mdparser_parser.c mdparser_options.c " +
-        "mdparser_exception.c mdparser_ast.c";
+        "mdparser_exception.c mdparser_ast.c mdparser_html_postprocess.c";
 
     EXTENSION("mdparser", wrapper_sources, null, "/DCMARK_GFM_STATIC_DEFINE /DCMARK_GFM_EXTENSIONS_STATIC_DEFINE");
     ADD_SOURCES(configure_module_dirname + "\\" + cmark_src_dir, cmark_sources, "mdparser");

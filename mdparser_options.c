@@ -129,13 +129,6 @@ void mdparser_options_init_defaults(void)
     mdparser_default_postprocess_mask = p;
 }
 
-void mdparser_options_default_masks(int *cmark_options, int *extension_mask, int *postprocess_mask)
-{
-    *cmark_options = mdparser_default_cmark_options;
-    *extension_mask = mdparser_default_extension_mask;
-    *postprocess_mask = mdparser_default_postprocess_mask;
-}
-
 /* Write a 17-bool value vector into a freshly-allocated Options
  * object's properties. Used by __construct and by the static preset
  * factories. Safe to call only on an object whose properties are
