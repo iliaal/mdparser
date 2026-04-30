@@ -34,9 +34,26 @@ upstream. It's a historical reference, not something we ship — use it to
 seed the base for a 3-way merge if you ever need to cherry-pick a cmark
 bug fix. The real working tree is cmark-gfm at 587a12b.
 
-The CommonMark spec file used by the conformance test ships at
-`tests/fixtures/commonmark-spec.txt`, taken from cmark 0.29.0's
-`test/spec.txt`. It's the spec that cmark-gfm 0.29.0.gfm.13 targets.
+### Parser pin vs conformance fixture
+
+Two related but distinct pins matter here, and conflating them sends
+maintainers at the wrong upstream tree:
+
+| Pin | Source | What it controls |
+|---|---|---|
+| Parser tree | cmark-gfm `587a12b` (0.29.0.gfm.13, July 2023) | The C source compiled into `mdparser.so`. cmark-gfm itself targets CommonMark 0.29 (May 2019). |
+| Conformance fixture | `commonmark/cmark` `eec0eeb` (CommonMark 0.31.2, February 2026) | The `spec.txt` shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` asserts 652/652 against it. |
+
+The fixture is *deliberately* newer than what cmark-gfm natively
+supports. The four cherry-picks documented under "Local
+modifications" close that 0.29 → 0.31 spec gap so the test passes
+100%.
+
+If you refresh the fixture (drop in a newer `spec.txt` from
+`commonmark/cmark`), update the row above, the example count near the
+top of `tests/005_commonmark_spec.phpt`, and the version statement in
+`docs/spec-coverage.md`. If you upgrade the parser pin, update only
+the parser-tree row.
 
 ## Generated files
 

@@ -67,6 +67,20 @@ diverging from the CommonMark spec in their own ways. The parity tests
 are pinned so any unexpected movement (either direction) becomes
 visible in a diff.
 
+## What's covered beyond CommonMark + GFM
+
+mdparser ships two HTML postprocess passes that don't come from
+cmark-gfm itself:
+
+| Feature | Option | Behavior |
+|---|---|---|
+| Heading permalinks / anchors | `headingAnchors: true` | Every `<hN>` gains a GitHub-style slug `id`; collisions deduped with `-1`, `-2`, ... |
+| External link postprocessing | `nofollowLinks: true` | Every `<a href="...">` gets `rel="nofollow noopener noreferrer"`; in-document fragment anchors are skipped |
+
+Both default to `false`. See `docs/options.md` for behavior, edge
+cases, and the documented `unsafe: true` byte-collision limitation
+on heading anchors.
+
 ## What's NOT covered
 
 Features mdparser does not implement, because cmark-gfm doesn't:
@@ -75,11 +89,9 @@ Features mdparser does not implement, because cmark-gfm doesn't:
   Extra, cebe Extra
 - Abbreviations (`*[HTML]: ...`) — Parsedown Extra, michelf Extra
 - Attribute syntax (`{.class #id}`) — league/commonmark extension
-- Heading permalinks / anchors — league/commonmark extension
 - Table of contents generation — league/commonmark extension
 - YAML front matter — league/commonmark extension
 - Mentions (`@user`) — league/commonmark extension, Ciconia
-- External link postprocessing (`rel="nofollow"`)
 - LaTeX math (`$$...$$`) — md4c has it
 - Emoji (`:smile:`) — league/commonmark extension
 - Custom admonition containers (`::: warning`)

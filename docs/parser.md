@@ -151,25 +151,54 @@ nodes, or emit your own custom format.
 
 ## Error model
 
-All three render methods can throw `MdParser\Exception` (final, extends
-`\RuntimeException`) on:
+All render methods can throw `MdParser\Exception` (final, extends
+`\RuntimeException`). The throw cases are deliberately narrow:
 
-- Allocation failure inside cmark (returns `null` parser or document)
-- Renderer returning `null`
+- **Wrapper validation guards.** Inputs over `MDPARSER_MAX_INPUT_SIZE`
+  (256 MB) throw before cmark ever sees them. `toAst()` walks the
+  document recursively and throws if nesting exceeds
+  `MDPARSER_MAX_AST_DEPTH` (1000) — adversarial inputs like `> ` × 50000
+  hit this. `toHtml()` and `toXml()` use cmark's iterative renderer
+  and are unaffected by AST depth.
+- **cmark null returns.** Parser construction, `cmark_parser_finish`,
+  the renderer, or the postprocess pass returning `NULL` raises an
+  exception with the source length included for triage.
+- **Reflection-bypassed Options.** Constructing a Parser with an
+  `Options` object built via
+  `ReflectionClass::newInstanceWithoutConstructor()` (uninitialized
+  typed properties) throws before any parser state is cached.
+- **Cloning / serializing.** Parser blocks both via Zend ACC flags;
+  `clone $parser` and `serialize($parser)` raise the engine's standard
+  Error.
 
 cmark is extremely tolerant of malformed markdown by design — any byte
-sequence parses to something — so the exception path is narrow. You
-don't need try/catch for normal rendering of well-formed or even
-malformed input. Only OOM-style failures trigger it.
+sequence parses to something — so normal rendering of well-formed or
+malformed input does not need a try/catch. The exception path covers
+hostile inputs and resource limits.
 
 ```php
 try {
     $html = $parser->toHtml($source);
 } catch (\MdParser\Exception $e) {
-    // extremely rare: parser allocation or render failure
+    // input-size cap, AST depth cap, or rare cmark/render null path
     error_log("mdparser failed: " . $e->getMessage());
 }
 ```
+
+### Memory exhaustion is a fatal, not an exception
+
+cmark allocations now route through Zend MM (`ecalloc` / `erealloc` /
+`efree`), so cmark-side memory is accounted by `memory_limit` and
+visible to `memory_get_usage()`. Hitting the limit triggers PHP's
+standard `Allowed memory size of X bytes exhausted` fatal error, not
+`MdParser\Exception`. This is the normal Zend MM bailout path and is
+**not catchable** with `try/catch`. The previous behavior (cmark's
+default allocator calling `abort()` on OOM and tearing down the
+process) is gone.
+
+If you need to defend against runaway markdown allocating beyond a
+budget, the right tool is PHP's `memory_limit` — set it appropriately
+for the request and let the engine bail.
 
 ## Reusing parsers
 

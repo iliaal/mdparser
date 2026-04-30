@@ -94,9 +94,12 @@ function bench(callable $fn, string $md, int $iters, int $warmup): array {
     }
 
     sort($times);
-    // Trim 10% tails (simple outlier handling).
-    $trim = max(1, (int)($iters * 0.1));
-    $trimmed = array_slice($times, $trim, -$trim);
+    // Trim 10% tails (simple outlier handling). Cap trim at (iters-1)/2
+    // per side so at least one sample always remains -- otherwise low
+    // --iters values (1, 2, 3) produced an empty trimmed slice and a
+    // DivisionByZeroError on the mean computation.
+    $trim = min((int)($iters * 0.1), intdiv(max(0, $iters - 1), 2));
+    $trimmed = $trim > 0 ? array_slice($times, $trim, -$trim) : $times;
     $mean = array_sum($trimmed) / count($trimmed);
 
     return [

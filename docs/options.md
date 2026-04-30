@@ -2,10 +2,11 @@
 
 `final readonly class MdParser\Options`
 
-Holds 17 bool toggles that control parser and renderer behavior. All
-fields are readonly after construction, and the class is `final` so it
-can't be subclassed. Use named arguments to set only the fields you
-care about.
+Holds 19 bool toggles that control parser and renderer behavior: 12
+core cmark options, 5 GFM extension toggles, and 2 HTML postprocess
+flags. All fields are readonly after construction, and the class is
+`final` so it can't be subclassed. Use named arguments to set only
+the fields you care about.
 
 ## Defaults
 
@@ -31,12 +32,17 @@ new Options(
     tasklist: true,
     autolink: true,
     tagfilter: true,
+
+    // HTML postprocess flags
+    headingAnchors: false,
+    nofollowLinks: false,
 );
 ```
 
 The defaults are tuned for rendering untrusted input as GitHub-style
 markdown: safe URL filtering, tag filter, UTF-8 validation, GFM
-extensions enabled, GitHub-style code block class attribute.
+extensions enabled, GitHub-style code block class attribute, no
+postprocess passes.
 
 ## Core cmark options
 
@@ -207,6 +213,59 @@ GitHub's tag filter: escapes `<title>`, `<textarea>`, `<style>`,
 `<plaintext>` tags even when raw HTML is otherwise allowed. This is a
 defense-in-depth layer when `unsafe: true` — the filter still prevents
 the most dangerous tags from passing through.
+
+## HTML postprocess flags
+
+These two flags trigger string-level transforms applied *after* cmark
+finishes rendering. They affect `toHtml()` (and `toInlineHtml()` where
+applicable). XML and AST output are unaffected. The static
+`Parser::html()` / `Parser::xml()` shortcuts use the module defaults
+and do not apply either transform.
+
+### `headingAnchors: bool = false`
+
+When `true`, every rendered `<hN>` gets an `id` attribute holding a
+GitHub-style slug derived from the heading's text. Slugs lowercase
+ASCII, replace whitespace runs with a single `-`, drop other ASCII
+punctuation, preserve UTF-8 multibyte bytes, and dedupe collisions
+with `-1`, `-2`, ... Headings whose text slugifies to nothing (pure
+punctuation) emit `<hN>` with no id rather than `id=""`. Coexists
+with `sourcepos`: the `id` lands before `data-sourcepos`.
+
+```php
+echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Hello World\n");
+// <h1 id="hello-world">Hello World</h1>
+
+echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Foo\n## Foo\n");
+// <h1 id="foo">Foo</h1>
+// <h2 id="foo-1">Foo</h2>
+```
+
+Known limitation under `unsafe: true, tagfilter: false`: a raw HTML
+heading whose rendered bytes match a later Markdown heading (e.g.
+`<h1>same</h1>` followed by `# same`) absorbs the `id`, leaving the
+real Markdown heading without one. Pinned in
+`tests/030_anchor_unsafe_collision.phpt`. A renderer-level fix is
+planned. For trusted-input pipelines that need stable heading ids,
+avoid raw HTML headings whose text matches Markdown ones.
+
+### `nofollowLinks: bool = false`
+
+When `true`, every emitted `<a href="...">` gets
+`rel="nofollow noopener noreferrer"` injected. Applies to inline
+links, reference links, and autolinks across `toHtml()` and
+`toInlineHtml()`. In-document fragment anchors (`href="#..."`,
+including footnote references and backrefs) are intentionally
+skipped. Anchors inside fenced or inline code are untouched because
+cmark escapes them before the postprocess runs. Raw `<script>` /
+`<style>` regions under `unsafe: true` are emitted verbatim so
+anchor-shaped substrings inside JavaScript or CSS are not corrupted.
+
+```php
+echo (new Parser(new Options(nofollowLinks: true)))
+    ->toHtml("[ext](https://example.com)");
+// <p><a rel="nofollow noopener noreferrer" href="https://example.com">ext</a></p>
+```
 
 ## Patterns
 

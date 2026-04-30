@@ -12,8 +12,9 @@ AST), zero external runtime dependencies.
   from source, platform notes, Windows binaries
 - **[parser.md](parser.md)** — `MdParser\Parser` class: `toHtml`,
   `toXml`, `toAst`, constructor, error model
-- **[options.md](options.md)** — `MdParser\Options` class: all 17 bool
-  fields documented, per-option examples of the output change
+- **[options.md](options.md)** — `MdParser\Options` class: all 19 bool
+  fields documented (12 cmark options, 5 GFM extension toggles, 2 HTML
+  postprocess flags), per-option examples of the output change
 - **[ast.md](ast.md)** — `toAst()` output format: node types, fields
   per type, sourcepos behavior, walking the tree
 - **[security.md](security.md)** — safe mode guarantees, XSS
