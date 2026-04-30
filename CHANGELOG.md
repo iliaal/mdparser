@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MdParser\Options::headingAnchors` — when true, every rendered
+  `<hN>` gets an `id` attribute holding a GitHub-style slug of the
+  heading's text. Slugs lowercase ASCII, replace whitespace runs with
+  a single `-`, drop other ASCII punctuation, preserve UTF-8
+  multibyte bytes, and dedupe collisions with `-1`, `-2`, ...
+  Headings whose text slugifies to nothing (pure punctuation) emit
+  `<hN>` with no id rather than `id=""`. Coexists with `sourcepos`:
+  the `id` lands before `data-sourcepos`.
+- `MdParser\Options::nofollowLinks` — when true, every emitted
+  `<a href="...">` (inline links, reference links, autolinks,
+  footnote internal anchors) gets `rel="nofollow noopener noreferrer"`
+  injected. Applies to `toHtml()` and `toInlineHtml()`. Anchors that
+  appear inside fenced or inline code are left untouched because
+  cmark escapes them before reaching the postprocess step.
+
+Both flags default to `false`. They are pure HTML post-passes; XML
+and AST output are unaffected. The static `Parser::html()` /
+`Parser::xml()` shortcuts use the module defaults and so do not
+apply either transform.
+
 ## [0.2.0] - 2026-04-11
 
 ### Added

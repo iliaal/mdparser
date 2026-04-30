@@ -54,7 +54,7 @@ if test "$PHP_MDPARSER" != "no"; then
     $CMARK_EXT_DIR/tagfilter.c \
     $CMARK_EXT_DIR/ext_scanners.c"
 
-  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_ast.c"
+  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_ast.c mdparser_html_postprocess.c"
 
   dnl -Wall -Wextra are on by default so wrapper regressions get caught
   dnl in every local build; --enable-mdparser-dev upgrades warnings to

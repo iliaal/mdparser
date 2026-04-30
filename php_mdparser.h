@@ -52,6 +52,7 @@ extern zend_class_entry *mdparser_exception_ce;
 typedef struct _mdparser_parser_obj {
     int cmark_options;
     int extension_mask;
+    int postprocess_mask;
     zend_object std;
 } mdparser_parser_obj;
 
@@ -76,6 +77,12 @@ static inline mdparser_parser_obj *mdparser_parser_from_obj(zend_object *obj) {
 
 #define MDPARSER_EXT_COUNT 5
 
+/* Postprocess flags. These are not cmark options or extensions; they
+ * select string-level transforms applied to the rendered HTML after
+ * cmark is done. Currently only HTML output uses these. */
+#define MDPARSER_PP_HEADING_ANCHORS (1 << 0)
+#define MDPARSER_PP_NOFOLLOW_LINKS  (1 << 1)
+
 /* Hard cap on input size. 256 MB is far above any realistic document
  * and well below cmark's internal bufsize_t (int32) overflow edge. */
 #define MDPARSER_MAX_INPUT_SIZE ((size_t)(256UL * 1024UL * 1024UL))
@@ -98,6 +105,7 @@ extern mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
 /* Default masks, computed once from mdparser_options_fields at MINIT. */
 extern int mdparser_default_cmark_options;
 extern int mdparser_default_extension_mask;
+extern int mdparser_default_postprocess_mask;
 
 /* Registration entry points (defined in the respective .c files) */
 void mdparser_parser_register_class(void);
@@ -106,7 +114,7 @@ void mdparser_exception_register_class(void);
 
 /* Default-options helpers (defined in mdparser_options.c) */
 void mdparser_options_init_defaults(void);
-void mdparser_options_default_masks(int *cmark_options, int *extension_mask);
-void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask);
+void mdparser_options_default_masks(int *cmark_options, int *extension_mask, int *postprocess_mask);
+void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask, int *postprocess_mask);
 
 #endif /* PHP_MDPARSER_H */

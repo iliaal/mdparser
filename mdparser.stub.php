@@ -35,6 +35,8 @@ final readonly class Options
     public bool $tasklist;
     public bool $autolink;
     public bool $tagfilter;
+    public bool $headingAnchors;
+    public bool $nofollowLinks;
 
     public function __construct(
         bool $sourcepos = false,
@@ -54,6 +56,8 @@ final readonly class Options
         bool $tasklist = true,
         bool $autolink = true,
         bool $tagfilter = true,
+        bool $headingAnchors = false,
+        bool $nofollowLinks = false,
     ) {}
 
     /**

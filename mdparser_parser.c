@@ -26,6 +26,7 @@
 #include "cmark-gfm-extension_api.h"
 
 #include "mdparser_ast.h"
+#include "mdparser_html_postprocess.h"
 
 zend_class_entry *mdparser_parser_ce;
 
@@ -41,6 +42,7 @@ static zend_object *mdparser_parser_create(zend_class_entry *ce)
 
     obj->cmark_options = mdparser_default_cmark_options;
     obj->extension_mask = mdparser_default_extension_mask;
+    obj->postprocess_mask = mdparser_default_postprocess_mask;
 
     return &obj->std;
 }
@@ -100,7 +102,7 @@ PHP_METHOD(MdParser_Parser, __construct)
     this_obj = Z_OBJ_P(ZEND_THIS);
 
     if (options_zv) {
-        mdparser_options_read_masks(options_zv, &obj->cmark_options, &obj->extension_mask);
+        mdparser_options_read_masks(options_zv, &obj->cmark_options, &obj->extension_mask, &obj->postprocess_mask);
         zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
     } else {
         /* Build a default Options and stash it so $parser->options is
@@ -142,9 +144,10 @@ static bool mdparser_check_input_size(size_t source_len)
  * methods and static shortcuts can call it with either the Parser's
  * cached masks or the module-level defaults). Caller is responsible
  * for ZPP and the input-size cap; this helper owns the cmark lifecycle
- * and writes the result into return_value or throws. */
+ * and writes the result into return_value or throws. `postprocess_mask`
+ * is applied only to HTML output; XML callers pass 0. */
 static void mdparser_do_render_string(
-    int cmark_options, int extension_mask,
+    int cmark_options, int extension_mask, int postprocess_mask,
     zend_string *source, mdparser_renderer_fn renderer,
     zval *return_value)
 {
@@ -179,7 +182,21 @@ static void mdparser_do_render_string(
         return;
     }
 
-    RETVAL_STRING(rendered);
+    if (postprocess_mask) {
+        zend_string *processed = mdparser_html_postprocess(
+            rendered, strlen(rendered), document, postprocess_mask);
+        if (!processed) {
+            mem->free(rendered);
+            cmark_node_free(document);
+            cmark_parser_free(parser);
+            zend_throw_exception(mdparser_exception_ce,
+                "mdparser: HTML postprocess allocation failure", 0);
+            return;
+        }
+        RETVAL_STR(processed);
+    } else {
+        RETVAL_STRING(rendered);
+    }
 
     mem->free(rendered);
     cmark_node_free(document);
@@ -220,7 +237,8 @@ static void mdparser_do_render_ast(
     cmark_parser_free(parser);
 }
 
-static void mdparser_render_string_method(INTERNAL_FUNCTION_PARAMETERS, mdparser_renderer_fn renderer)
+static void mdparser_render_string_method(INTERNAL_FUNCTION_PARAMETERS,
+    mdparser_renderer_fn renderer, bool html_path)
 {
     zend_string *source;
 
@@ -233,7 +251,8 @@ static void mdparser_render_string_method(INTERNAL_FUNCTION_PARAMETERS, mdparser
     }
 
     mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
-    mdparser_do_render_string(obj->cmark_options, obj->extension_mask,
+    int pp_mask = html_path ? obj->postprocess_mask : 0;
+    mdparser_do_render_string(obj->cmark_options, obj->extension_mask, pp_mask,
         source, renderer, return_value);
 
     if (EG(exception)) {
@@ -243,12 +262,12 @@ static void mdparser_render_string_method(INTERNAL_FUNCTION_PARAMETERS, mdparser
 
 PHP_METHOD(MdParser_Parser, toHtml)
 {
-    mdparser_render_string_method(INTERNAL_FUNCTION_PARAM_PASSTHRU, cmark_render_html_with_mem);
+    mdparser_render_string_method(INTERNAL_FUNCTION_PARAM_PASSTHRU, cmark_render_html_with_mem, true);
 }
 
 PHP_METHOD(MdParser_Parser, toXml)
 {
-    mdparser_render_string_method(INTERNAL_FUNCTION_PARAM_PASSTHRU, mdparser_render_xml_adapter);
+    mdparser_render_string_method(INTERNAL_FUNCTION_PARAM_PASSTHRU, mdparser_render_xml_adapter, false);
 }
 
 PHP_METHOD(MdParser_Parser, toAst)
@@ -343,14 +362,38 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     static const char suffix[] = "</p>\n";
     static const size_t suffix_len = sizeof(suffix) - 1;
 
+    const char *body;
+    size_t body_len;
     if (out_len >= prefix_len + suffix_len &&
         memcmp(rendered, prefix, prefix_len) == 0 &&
         memcmp(rendered + out_len - suffix_len, suffix, suffix_len) == 0)
     {
-        size_t inner_len = out_len - prefix_len - suffix_len;
-        RETVAL_STRINGL(rendered + prefix_len, inner_len);
+        body = rendered + prefix_len;
+        body_len = out_len - prefix_len - suffix_len;
     } else {
-        RETVAL_STRING(rendered);
+        body = rendered;
+        body_len = out_len;
+    }
+
+    /* nofollow applies to inline HTML (links can appear in inline
+     * snippets); heading-anchors does not (block markers are suppressed
+     * by toInlineHtml's design, so no headings are emitted). Mask off
+     * the heading bit to avoid touching the AST when only nofollow is
+     * set. */
+    int pp = obj->postprocess_mask & MDPARSER_PP_NOFOLLOW_LINKS;
+    if (pp) {
+        zend_string *processed = mdparser_html_postprocess(body, body_len, NULL, pp);
+        if (!processed) {
+            mem->free(rendered);
+            cmark_node_free(document);
+            cmark_parser_free(parser);
+            zend_throw_exception(mdparser_exception_ce,
+                "mdparser: HTML postprocess allocation failure", 0);
+            RETURN_THROWS();
+        }
+        RETVAL_STR(processed);
+    } else {
+        RETVAL_STRINGL(body, body_len);
     }
 
     mem->free(rendered);
@@ -372,6 +415,7 @@ PHP_METHOD(MdParser_Parser, html)
 
     mdparser_do_render_string(
         mdparser_default_cmark_options, mdparser_default_extension_mask,
+        mdparser_default_postprocess_mask,
         source, cmark_render_html_with_mem, return_value);
 
     if (EG(exception)) {
@@ -392,7 +436,7 @@ PHP_METHOD(MdParser_Parser, xml)
     }
 
     mdparser_do_render_string(
-        mdparser_default_cmark_options, mdparser_default_extension_mask,
+        mdparser_default_cmark_options, mdparser_default_extension_mask, 0,
         source, mdparser_render_xml_adapter, return_value);
 
     if (EG(exception)) {

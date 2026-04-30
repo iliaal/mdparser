@@ -109,6 +109,8 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 | Footnotes            | ✓ (`Options::footnotes`)| Extra       | via ext        | ✗        | ✓ Extra       | plugin  |
 | Hardbreaks/nobreaks  | ✓                       | ✗           | ✗              | ✗        | ✗             | ✗       |
 | Sourcepos            | ✓                       | ✗           | ✓              | ✗        | ✗             | ✗       |
+| Heading anchors      | ✓ (`Options::headingAnchors`) | ✗     | via ext        | ✗        | ✗             | ✗       |
+| `rel="nofollow"`     | ✓ (`Options::nofollowLinks`)  | ✗     | via ext        | ✗        | ✗             | ✗       |
 | HTML output          | ✓                       | ✓           | ✓              | ✓        | ✓             | ✓       |
 | XML output           | ✓                       | ✗           | ✗              | ✗        | ✗             | ✗       |
 | AST output           | ✓ (arrays)              | ✗           | ✓ (objects)    | ✗        | ✗             | ✗       |
@@ -120,11 +122,11 @@ mdparser is deliberately scoped to what cmark-gfm supports: CommonMark core plus
 - Definition lists (`Term :: definition`)
 - Abbreviations (`*[HTML]: ...`)
 - Attribute syntax (`{.class #id key="val"}`)
-- Heading permalinks / anchors
+- Permalink anchor markup (we emit heading `id` slugs; we don't inject
+  the inner `<a class="anchor">` element GitHub uses for permalinks)
 - Table of contents
 - YAML front matter
 - Mentions (`@user`)
-- External-link postprocessing (`rel="nofollow"`)
 - LaTeX math (`$$...$$`)
 - Emoji (`:smile:`)
 - Custom admonition containers (`::: warning`)

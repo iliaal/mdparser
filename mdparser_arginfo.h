@@ -1,5 +1,5 @@
 /* This is a generated file, edit mdparser.stub.php instead.
- * Stub hash: 3862328c1c3ea5151f86774c753f84958999e15d */
+ * Stub hash: ba08182de4a6304e2849bdcc06f2829806897534 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sourcepos, _IS_BOOL, 0, "false")
@@ -19,6 +19,8 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, tasklist, _IS_BOOL, 0, "true")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, autolink, _IS_BOOL, 0, "true")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, tagfilter, _IS_BOOL, 0, "true")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, headingAnchors, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, nofollowLinks, _IS_BOOL, 0, "false")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_MdParser_Options_strict, 0, 0, MdParser\\Options, 0)
@@ -201,6 +203,18 @@ static zend_class_entry *register_class_MdParser_Options(void)
 	zend_string *property_tagfilter_name = zend_string_init("tagfilter", sizeof("tagfilter") - 1, true);
 	zend_declare_typed_property(class_entry, property_tagfilter_name, &property_tagfilter_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
 	zend_string_release_ex(property_tagfilter_name, true);
+
+	zval property_headingAnchors_default_value;
+	ZVAL_UNDEF(&property_headingAnchors_default_value);
+	zend_string *property_headingAnchors_name = zend_string_init("headingAnchors", sizeof("headingAnchors") - 1, true);
+	zend_declare_typed_property(class_entry, property_headingAnchors_name, &property_headingAnchors_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_headingAnchors_name, true);
+
+	zval property_nofollowLinks_default_value;
+	ZVAL_UNDEF(&property_nofollowLinks_default_value);
+	zend_string *property_nofollowLinks_name = zend_string_init("nofollowLinks", sizeof("nofollowLinks") - 1, true);
+	zend_declare_typed_property(class_entry, property_nofollowLinks_name, &property_nofollowLinks_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_nofollowLinks_name, true);
 
 	return class_entry;
 }

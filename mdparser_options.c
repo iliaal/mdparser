@@ -27,6 +27,7 @@ zend_class_entry *mdparser_options_ce;
 
 int mdparser_default_cmark_options = 0;
 int mdparser_default_extension_mask = 0;
+int mdparser_default_postprocess_mask = 0;
 
 /* Each Options property corresponds to either a CMARK_OPT_* flag or a
  * GFM extension toggle.
@@ -59,38 +60,43 @@ enum {
     MDOPT_TASKLIST,
     MDOPT_AUTOLINK,
     MDOPT_TAGFILTER,
+    MDOPT_HEADING_ANCHORS,
+    MDOPT_NOFOLLOW_LINKS,
     MDOPT_COUNT_
 };
 
 typedef struct {
     const char *name;
     size_t name_len;
-    int cmark_bit;          /* 0 if this maps to an extension instead */
-    int extension_bit;      /* 0 if this maps to a cmark option instead */
+    int cmark_bit;          /* nonzero if this maps to a cmark option */
+    int extension_bit;      /* nonzero if this maps to a GFM extension */
+    int postprocess_bit;    /* nonzero if this drives an HTML post-pass */
     bool default_value;
 } mdparser_options_field;
 
-#define F(name_, cmark_, ext_, def_) \
-    { name_, sizeof(name_) - 1, cmark_, ext_, def_ }
+#define F(name_, cmark_, ext_, pp_, def_) \
+    { name_, sizeof(name_) - 1, cmark_, ext_, pp_, def_ }
 
 static const mdparser_options_field mdparser_options_fields[] = {
-    F("sourcepos",                  CMARK_OPT_SOURCEPOS,                   0, false),
-    F("hardbreaks",                 CMARK_OPT_HARDBREAKS,                  0, false),
-    F("nobreaks",                   CMARK_OPT_NOBREAKS,                    0, false),
-    F("smart",                      CMARK_OPT_SMART,                       0, false),
-    F("unsafe",                     CMARK_OPT_UNSAFE,                      0, false),
-    F("validateUtf8",               CMARK_OPT_VALIDATE_UTF8,               0, true),
-    F("githubPreLang",              CMARK_OPT_GITHUB_PRE_LANG,             0, true),
-    F("liberalHtmlTag",             CMARK_OPT_LIBERAL_HTML_TAG,            0, false),
-    F("footnotes",                  CMARK_OPT_FOOTNOTES,                   0, false),
-    F("strikethroughDoubleTilde",   CMARK_OPT_STRIKETHROUGH_DOUBLE_TILDE,  0, false),
-    F("tablePreferStyleAttributes", CMARK_OPT_TABLE_PREFER_STYLE_ATTRIBUTES, 0, false),
-    F("fullInfoString",             CMARK_OPT_FULL_INFO_STRING,            0, false),
-    F("tables",                     0, MDPARSER_EXT_TABLES,                true),
-    F("strikethrough",              0, MDPARSER_EXT_STRIKETHROUGH,         true),
-    F("tasklist",                   0, MDPARSER_EXT_TASKLIST,              true),
-    F("autolink",                   0, MDPARSER_EXT_AUTOLINK,              true),
-    F("tagfilter",                  0, MDPARSER_EXT_TAGFILTER,             true),
+    F("sourcepos",                  CMARK_OPT_SOURCEPOS,                     0, 0, false),
+    F("hardbreaks",                 CMARK_OPT_HARDBREAKS,                    0, 0, false),
+    F("nobreaks",                   CMARK_OPT_NOBREAKS,                      0, 0, false),
+    F("smart",                      CMARK_OPT_SMART,                         0, 0, false),
+    F("unsafe",                     CMARK_OPT_UNSAFE,                        0, 0, false),
+    F("validateUtf8",               CMARK_OPT_VALIDATE_UTF8,                 0, 0, true),
+    F("githubPreLang",              CMARK_OPT_GITHUB_PRE_LANG,               0, 0, true),
+    F("liberalHtmlTag",             CMARK_OPT_LIBERAL_HTML_TAG,              0, 0, false),
+    F("footnotes",                  CMARK_OPT_FOOTNOTES,                     0, 0, false),
+    F("strikethroughDoubleTilde",   CMARK_OPT_STRIKETHROUGH_DOUBLE_TILDE,    0, 0, false),
+    F("tablePreferStyleAttributes", CMARK_OPT_TABLE_PREFER_STYLE_ATTRIBUTES, 0, 0, false),
+    F("fullInfoString",             CMARK_OPT_FULL_INFO_STRING,              0, 0, false),
+    F("tables",                     0, MDPARSER_EXT_TABLES,                  0, true),
+    F("strikethrough",              0, MDPARSER_EXT_STRIKETHROUGH,           0, true),
+    F("tasklist",                   0, MDPARSER_EXT_TASKLIST,                0, true),
+    F("autolink",                   0, MDPARSER_EXT_AUTOLINK,                0, true),
+    F("tagfilter",                  0, MDPARSER_EXT_TAGFILTER,               0, true),
+    F("headingAnchors",             0, 0, MDPARSER_PP_HEADING_ANCHORS,          false),
+    F("nofollowLinks",              0, 0, MDPARSER_PP_NOFOLLOW_LINKS,           false),
 };
 
 #undef F
@@ -102,6 +108,7 @@ void mdparser_options_init_defaults(void)
 {
     int c = 0;
     int e = 0;
+    int p = 0;
 
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
         const mdparser_options_field *f = &mdparser_options_fields[i];
@@ -110,19 +117,23 @@ void mdparser_options_init_defaults(void)
         }
         if (f->cmark_bit) {
             c |= f->cmark_bit;
-        } else {
+        } else if (f->extension_bit) {
             e |= f->extension_bit;
+        } else {
+            p |= f->postprocess_bit;
         }
     }
 
     mdparser_default_cmark_options = c;
     mdparser_default_extension_mask = e;
+    mdparser_default_postprocess_mask = p;
 }
 
-void mdparser_options_default_masks(int *cmark_options, int *extension_mask)
+void mdparser_options_default_masks(int *cmark_options, int *extension_mask, int *postprocess_mask)
 {
     *cmark_options = mdparser_default_cmark_options;
     *extension_mask = mdparser_default_extension_mask;
+    *postprocess_mask = mdparser_default_postprocess_mask;
 }
 
 /* Write a 17-bool value vector into a freshly-allocated Options
@@ -150,10 +161,11 @@ static void mdparser_options_seed_defaults(bool values[MDPARSER_OPTIONS_FIELD_CO
     }
 }
 
-void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask)
+void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask, int *postprocess_mask)
 {
     int c = 0;
     int e = 0;
+    int p = 0;
     zend_object *obj = Z_OBJ_P(options_zv);
 
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
@@ -170,13 +182,16 @@ void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *exte
 
         if (f->cmark_bit) {
             c |= f->cmark_bit;
-        } else {
+        } else if (f->extension_bit) {
             e |= f->extension_bit;
+        } else {
+            p |= f->postprocess_bit;
         }
     }
 
     *cmark_options = c;
     *extension_mask = e;
+    *postprocess_mask = p;
 }
 
 void mdparser_options_register_class(void)
@@ -214,6 +229,8 @@ PHP_METHOD(MdParser_Options, __construct)
         Z_PARAM_BOOL(values[MDOPT_TASKLIST])
         Z_PARAM_BOOL(values[MDOPT_AUTOLINK])
         Z_PARAM_BOOL(values[MDOPT_TAGFILTER])
+        Z_PARAM_BOOL(values[MDOPT_HEADING_ANCHORS])
+        Z_PARAM_BOOL(values[MDOPT_NOFOLLOW_LINKS])
     ZEND_PARSE_PARAMETERS_END();
 
     mdparser_options_populate_object(Z_OBJ_P(ZEND_THIS), values);
