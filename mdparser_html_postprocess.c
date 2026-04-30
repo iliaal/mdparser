@@ -290,6 +290,53 @@ static size_t find_anchor_open(const char *html, size_t from, size_t html_len)
     return hit ? (size_t)(hit - html) : SIZE_MAX;
 }
 
+/* If `i` is at the start of a raw-text element (`<script>` or
+ * `<style>`), return the byte offset just past its matching close
+ * tag. Otherwise return SIZE_MAX. Tag-name match is case-insensitive
+ * to handle raw HTML written in any case under unsafe:true. The HTML5
+ * spec defines these elements as containing raw text that cannot
+ * include their own close tag, so the first `</script>` / `</style>`
+ * scanning forward terminates the element; an unmatched open extends
+ * to end-of-input. The whole skipped region is later emitted verbatim
+ * so the postprocess does not splice attributes into JavaScript or
+ * CSS that happens to contain the literal substring `<a href="`. */
+static size_t scan_raw_text_element(const char *html, size_t i, size_t html_len)
+{
+    static const struct {
+        const char *name;
+        size_t name_len;
+        const char *close;
+        size_t close_len;
+    } tags[] = {
+        { "script", 6, "</script>", 9 },
+        { "style",  5, "</style>",  8 },
+    };
+
+    if (i >= html_len || html[i] != '<') return SIZE_MAX;
+
+    for (size_t t = 0; t < sizeof(tags) / sizeof(tags[0]); t++) {
+        size_t end = i + 1 + tags[t].name_len;
+        if (end >= html_len) continue;
+        if (strncasecmp(html + i + 1, tags[t].name, tags[t].name_len) != 0) continue;
+
+        char delim = html[end];
+        if (delim != '>' && delim != ' ' && delim != '\t' &&
+            delim != '\n' && delim != '\r' && delim != '/') continue;
+
+        /* Locate the close tag. memmem is case-sensitive so we walk
+         * manually with strncasecmp on each candidate `<`. */
+        for (size_t j = end; j + tags[t].close_len <= html_len; j++) {
+            if (html[j] == '<' &&
+                strncasecmp(html + j, tags[t].close, tags[t].close_len) == 0)
+            {
+                return j + tags[t].close_len;
+            }
+        }
+        return html_len; /* unmatched open: skip the rest */
+    }
+    return SIZE_MAX;
+}
+
 /* Apply both postprocess transforms in one linear pass.
  *
  * Heading anchors: the anchored positions are pre-computed in
@@ -327,6 +374,29 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
     size_t next_anchor = want_nofollow ? find_anchor_open(html, 0, html_len) : SIZE_MAX;
 
     while (i < html_len) {
+        /* Raw-text elements (<script>, <style>) are emitted verbatim:
+         * neither the nofollow byte-pattern scan nor a memmem-located
+         * heading position should fire inside them, since their
+         * contents are JS or CSS that could contain misleading byte
+         * sequences. The skip is gated on either flag being on; pp
+         * with mask=0 never reaches apply_transforms in the first
+         * place. */
+        size_t raw_skip = scan_raw_text_element(html, i, html_len);
+        if (raw_skip != SIZE_MAX) {
+            smart_str_appendl(&out, html + i, raw_skip - i);
+            while (want_anchors && heading_ix < headings->count &&
+                   headings->items[heading_ix].doc_offset != SIZE_MAX &&
+                   headings->items[heading_ix].doc_offset < raw_skip)
+            {
+                heading_ix++;
+            }
+            if (want_nofollow && next_anchor < raw_skip) {
+                next_anchor = find_anchor_open(html, raw_skip, html_len);
+            }
+            i = raw_skip;
+            continue;
+        }
+
         if (want_anchors && heading_ix < headings->count &&
             i == headings->items[heading_ix].doc_offset)
         {
