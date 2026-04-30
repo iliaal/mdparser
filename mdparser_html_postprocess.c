@@ -352,11 +352,24 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
         }
 
         if (want_nofollow && i == next_anchor) {
-            smart_str_appendl(&out, "<a ", 3);
-            smart_str_appendl(&out, rel_inject, rel_inject_len);
-            i += 3;
-            next_anchor = find_anchor_open(html, i, html_len);
-            continue;
+            /* Skip injection on in-document fragment anchors
+             * (href="#..."). Footnote references and backrefs land
+             * here. nofollow on an anchor that just jumps within the
+             * same document is meaningless; leaving them alone keeps
+             * the output cosmetically clean and avoids cluttering the
+             * footnote-back-and-forth markup. */
+            bool is_fragment = (i + 9 < html_len && html[i + 9] == '#');
+            if (!is_fragment) {
+                smart_str_appendl(&out, "<a ", 3);
+                smart_str_appendl(&out, rel_inject, rel_inject_len);
+                i += 3;
+                next_anchor = find_anchor_open(html, i, html_len);
+                continue;
+            }
+            /* Move the anchor cache past this fragment anchor so we do
+             * not match it again on the next iteration; the byte at i
+             * still falls through to the default per-byte emit. */
+            next_anchor = find_anchor_open(html, i + 9, html_len);
         }
 
         smart_str_appendc(&out, html[i]);

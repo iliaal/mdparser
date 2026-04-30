@@ -80,6 +80,22 @@ check("both: link rel present",
 $h = MdParser\Parser::html("[x](https://e.com)\n");
 check("static html() default has no rel", !str_contains($h, "rel="));
 
+// fragment anchors (href="#...") skip rel injection
+$opts_fn = new MdParser\Options(footnotes: true, nofollowLinks: true);
+$h = (new MdParser\Parser($opts_fn))->toHtml("Hello[^1]\n\n[^1]: world\n");
+check("footnote ref (#fn-) keeps no rel",
+    str_contains($h, '<a href="#fn-1"'));
+check("footnote backref (#fnref-) keeps no rel",
+    str_contains($h, '<a href="#fnref-1"'));
+check("fragment anchors: no rel anywhere", !str_contains($h, "rel="));
+
+// fragment + external mix: external still gets rel
+$h = (new MdParser\Parser($opts))->toHtml("[in](#anchor) and [out](https://e.com)\n");
+check("fragment in mixed doc: no rel",
+    str_contains($h, '<a href="#anchor">in</a>'));
+check("external in mixed doc: gets rel",
+    str_contains($h, "<a $REL href=\"https://e.com\">out</a>"));
+
 ?>
 --EXPECT--
 OK: default: no rel attribute
@@ -98,3 +114,8 @@ OK: toXml ignores nofollow flag
 OK: both: heading id present
 OK: both: link rel present
 OK: static html() default has no rel
+OK: footnote ref (#fn-) keeps no rel
+OK: footnote backref (#fnref-) keeps no rel
+OK: fragment anchors: no rel anywhere
+OK: fragment in mixed doc: no rel
+OK: external in mixed doc: gets rel

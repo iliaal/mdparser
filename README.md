@@ -133,6 +133,15 @@ mdparser is deliberately scoped to what cmark-gfm supports: CommonMark core plus
 
 These are real features. They're just not in scope for a CommonMark+GFM core parser, and cmark-gfm doesn't implement them.
 
+## A note on `unsafe: true`
+
+`Options::unsafe = true` tells cmark to pass raw HTML through verbatim instead of escaping or stripping it. The contract for this mode is that you own the input: it is yours, or it comes from a pipeline you trust. Two postprocess interactions are worth knowing if you also turn on `headingAnchors` or `nofollowLinks`:
+
+- **Heading slug positioning under raw `<hN>`.** mdparser locates each AST heading in the rendered HTML by rendering it standalone and matching its exact byte sequence. Raw `<h1>x</h1>` blocks written directly in the markdown source are therefore left untouched and do not consume slugs. The narrow exception is when raw and real produce byte-identical output (same level, same inner text, same sourcepos), in which case the `id` attribute lands on the first match.
+- **`nofollowLinks` is byte-pattern based.** It rewrites every literal `<a href="...">` it finds in the output. With `unsafe: true` this includes anchor-shaped substrings inside raw HTML attribute values or inside `<script>` / `<style>` block contents. Don't combine `nofollowLinks` with `unsafe: true` if your input contains scripts or attribute-embedded anchor literals you need to preserve.
+
+In-document fragment anchors (`href="#..."`) are intentionally skipped by `nofollowLinks`, so footnote references and backrefs stay clean.
+
 ## 🔗 PHP Performance Toolkit
 
 Companion native PHP extensions for high-throughput PHP workloads:
