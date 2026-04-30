@@ -24,6 +24,31 @@
 
 #include <string.h>
 
+/* memmem is a GNU/BSD extension; MSVC's libc does not provide it. Use a
+ * portable two-loop fallback on Windows. The needle lengths we pass are
+ * either short literals ("<a href=\"", "</script>"...) or a single
+ * heading's rendered HTML, so a naive scan is acceptable. */
+#ifdef _WIN32
+static const void *mdparser_memmem(const void *haystack, size_t haystack_len,
+    const void *needle, size_t needle_len)
+{
+    if (needle_len == 0) return haystack;
+    if (needle_len > haystack_len) return NULL;
+    const char *h = (const char *)haystack;
+    const char *n = (const char *)needle;
+    const char *end = h + (haystack_len - needle_len) + 1;
+    char first = n[0];
+    for (const char *p = h; p < end; p++) {
+        const char *cand = (const char *)memchr(p, first, (size_t)(end - p));
+        if (!cand) return NULL;
+        if (memcmp(cand, n, needle_len) == 0) return cand;
+        p = cand;
+    }
+    return NULL;
+}
+#define memmem mdparser_memmem
+#endif
+
 /* ---------- heading entry list -------------------------------------- */
 
 /* One entry per CMARK_NODE_HEADING in the document, in source order.
@@ -48,13 +73,23 @@ typedef struct {
     mdparser_heading_entry *items;
     size_t count;
     size_t cap;
+    /* Index of slug strings already used, for O(1) collision detection
+     * during dedupe. NULL until the first push; lazily allocated. */
+    HashTable *slug_index;
 } mdparser_heading_list;
+
+/* Dedupe retry cap: after this many "-N" attempts on the same base
+ * slug, fall back to emitting a heading without an id rather than
+ * spinning the loop. The hash-index path makes this almost unreachable,
+ * but the cap also bounds the snprintf+lookup work even on a malformed
+ * index. */
+#define MDPARSER_DEDUPE_MAX_RETRIES 100000
 
 static bool heading_list_push(mdparser_heading_list *l, mdparser_heading_entry e)
 {
     if (l->count == l->cap) {
         size_t new_cap = l->cap ? l->cap * 2 : 8;
-        mdparser_heading_entry *next = erealloc(l->items, new_cap * sizeof(*next));
+        mdparser_heading_entry *next = safe_erealloc(l->items, sizeof(*next), new_cap, 0);
         if (!next) {
             return false;
         }
@@ -72,9 +107,51 @@ static void heading_list_free(mdparser_heading_list *l, cmark_mem *mem)
         if (l->items[i].rendered) mem->free(l->items[i].rendered);
     }
     if (l->items) efree(l->items);
+    if (l->slug_index) {
+        zend_hash_destroy(l->slug_index);
+        FREE_HASHTABLE(l->slug_index);
+        l->slug_index = NULL;
+    }
     l->items = NULL;
     l->count = 0;
     l->cap = 0;
+}
+
+/* Record `slug` in the dedupe index. Caller still owns the slug pointer;
+ * the index just stores a presence flag keyed by the slug bytes. */
+static void heading_list_index_slug(mdparser_heading_list *l, const char *slug, size_t slug_len)
+{
+    if (!slug || slug_len == 0) return;
+    if (!l->slug_index) {
+        ALLOC_HASHTABLE(l->slug_index);
+        zend_hash_init(l->slug_index, 16, NULL, ZVAL_PTR_DTOR, 0);
+    }
+    zval marker;
+    ZVAL_TRUE(&marker);
+    zend_hash_str_add(l->slug_index, slug, slug_len, &marker);
+}
+
+static bool heading_list_slug_taken(mdparser_heading_list *l, const char *slug, size_t slug_len)
+{
+    if (!l->slug_index) return false;
+    return zend_hash_str_exists(l->slug_index, slug, slug_len);
+}
+
+/* Locale-independent ASCII-only case-insensitive byte compare. strncasecmp
+ * honours LC_CTYPE; in tr_TR.UTF-8 the dotless/dotted-I rule makes
+ * 'I' != 'i'. We only ever compare against the literal HTML tag names
+ * "script"/"style" and their close forms, so an ASCII fold is sufficient
+ * and safe under any locale. */
+static int mdparser_ascii_strncasecmp(const char *a, const char *b, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        unsigned char x = (unsigned char)a[i];
+        unsigned char y = (unsigned char)b[i];
+        if (x >= 'A' && x <= 'Z') x = (unsigned char)(x + ('a' - 'A'));
+        if (y >= 'A' && y <= 'Z') y = (unsigned char)(y + ('a' - 'A'));
+        if (x != y) return (int)x - (int)y;
+    }
+    return 0;
 }
 
 /* ---------- slugify -------------------------------------------------- */
@@ -123,39 +200,42 @@ static char *mdparser_slugify(const char *text, size_t len)
     return out;
 }
 
-/* If `slug` already appears in `seen` (as the slug field of some prior
- * heading), append "-1", "-2", ... until a fresh value is found.
- * Empty slugs are not deduped: they suppress the id attribute entirely
- * at apply time, so deduping them would emit invalid id="-1". */
+/* If `slug` already appears in `seen->slug_index`, append "-1", "-2", ...
+ * until a fresh value is found. Empty slugs are not deduped: they
+ * suppress the id attribute entirely at apply time, so deduping them
+ * would emit invalid id="-1". After this function returns the new slug
+ * is NOT yet recorded in the index; the caller must call
+ * heading_list_index_slug once it knows the slug will actually be kept
+ * (so a push that fails later doesn't leave a phantom entry).
+ *
+ * Returns NULL on the (practically unreachable) case of exhausting
+ * MDPARSER_DEDUPE_MAX_RETRIES; caller should treat as "drop the id"
+ * and continue. The original `slug` is freed in that path too. */
 static char *mdparser_dedupe_slug(mdparser_heading_list *seen, char *slug)
 {
     if (slug[0] == '\0') return slug;
 
-    bool collides = false;
-    for (size_t i = 0; i < seen->count; i++) {
-        if (seen->items[i].slug && strcmp(seen->items[i].slug, slug) == 0) {
-            collides = true;
-            break;
-        }
+    if (!heading_list_slug_taken(seen, slug, strlen(slug))) {
+        return slug;
     }
-    if (!collides) return slug;
 
     size_t base_len = strlen(slug);
     char *candidate = emalloc(base_len + 24);
-    for (unsigned long n = 1; ; n++) {
-        snprintf(candidate, base_len + 24, "%s-%lu", slug, n);
-        bool taken = false;
-        for (size_t i = 0; i < seen->count; i++) {
-            if (seen->items[i].slug && strcmp(seen->items[i].slug, candidate) == 0) {
-                taken = true;
-                break;
-            }
-        }
-        if (!taken) {
+    for (unsigned long n = 1; n <= MDPARSER_DEDUPE_MAX_RETRIES; n++) {
+        int written = snprintf(candidate, base_len + 24, "%s-%lu", slug, n);
+        if (written < 0 || (size_t)written >= base_len + 24) continue;
+        if (!heading_list_slug_taken(seen, candidate, (size_t)written)) {
             efree(slug);
             return candidate;
         }
     }
+    /* Pathological case (>100k collisions on the same base): drop the
+     * slug entirely. apply_transforms emits <hN> without id=. */
+    efree(candidate);
+    efree(slug);
+    char *empty = emalloc(1);
+    empty[0] = '\0';
+    return empty;
 }
 
 /* ---------- heading text extraction ---------------------------------- */
@@ -247,6 +327,9 @@ static bool collect_headings(cmark_node *document, int cmark_options,
             cmark_iter_free(iter);
             return false;
         }
+        /* Record only after the push succeeds so a failed push doesn't
+         * leave a phantom slug in the index. */
+        heading_list_index_slug(out, slug, strlen(slug));
     }
 
     cmark_iter_free(iter);
@@ -317,7 +400,7 @@ static size_t scan_raw_text_element(const char *html, size_t i, size_t html_len)
     for (size_t t = 0; t < sizeof(tags) / sizeof(tags[0]); t++) {
         size_t end = i + 1 + tags[t].name_len;
         if (end >= html_len) continue;
-        if (strncasecmp(html + i + 1, tags[t].name, tags[t].name_len) != 0) continue;
+        if (mdparser_ascii_strncasecmp(html + i + 1, tags[t].name, tags[t].name_len) != 0) continue;
 
         char delim = html[end];
         if (delim != '>' && delim != ' ' && delim != '\t' &&
@@ -327,7 +410,7 @@ static size_t scan_raw_text_element(const char *html, size_t i, size_t html_len)
          * manually with strncasecmp on each candidate `<`. */
         for (size_t j = end; j + tags[t].close_len <= html_len; j++) {
             if (html[j] == '<' &&
-                strncasecmp(html + j, tags[t].close, tags[t].close_len) == 0)
+                mdparser_ascii_strncasecmp(html + j, tags[t].close, tags[t].close_len) == 0)
             {
                 return j + tags[t].close_len;
             }
