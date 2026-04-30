@@ -339,15 +339,16 @@ static size_t scan_raw_text_element(const char *html, size_t i, size_t html_len)
 
 /* Apply both postprocess transforms in one linear pass.
  *
- * Heading anchors: the anchored positions are pre-computed in
- * `headings->items[k].doc_offset` (zero-based byte offsets into
- * `html`). When we reach the next such offset we splice
- * ` id="slug"` between the level digit and the rest of the open tag.
+ * The hot loop tracks a run of bytes (`run_start..i`) that are emitted
+ * verbatim. memchr jumps from `<` to `<` so non-tag bytes never enter
+ * the per-byte path. At each `<` the loop tries (in order): raw-text
+ * skip, heading injection, nofollow injection. A match flushes the
+ * pending run, emits the rewritten bytes, and reopens a new run; a
+ * miss advances `i` by one and continues.
  *
- * Nofollow: at every `<a href="` we emit `<a rel="..." href="...`.
- *
- * The two transforms target disjoint markup (`<h>` vs `<a>`) and
- * commute trivially, so a single scan handles both. */
+ * Heading anchor positions are pre-computed in
+ * `headings->items[k].doc_offset`. Nofollow positions are the literal
+ * `<a href="` byte sequence located via memmem. */
 static zend_string *apply_transforms(const char *html, size_t html_len,
     mdparser_heading_list *headings, int pp_mask)
 {
@@ -358,12 +359,11 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
     smart_str_alloc(&out, html_len + html_len / 4 + 64, 0);
 
     size_t i = 0;
+    size_t run_start = 0;
     size_t heading_ix = 0;
     bool want_anchors = (pp_mask & MDPARSER_PP_HEADING_ANCHORS) != 0;
     bool want_nofollow = (pp_mask & MDPARSER_PP_NOFOLLOW_LINKS) != 0;
 
-    /* Advance heading_ix past entries whose offsets failed to resolve
-     * (rare; see resolve_heading_offsets). */
     if (want_anchors) {
         while (heading_ix < headings->count &&
                headings->items[heading_ix].doc_offset == SIZE_MAX) {
@@ -374,16 +374,15 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
     size_t next_anchor = want_nofollow ? find_anchor_open(html, 0, html_len) : SIZE_MAX;
 
     while (i < html_len) {
-        /* Raw-text elements (<script>, <style>) are emitted verbatim:
-         * neither the nofollow byte-pattern scan nor a memmem-located
-         * heading position should fire inside them, since their
-         * contents are JS or CSS that could contain misleading byte
-         * sequences. The skip is gated on either flag being on; pp
-         * with mask=0 never reaches apply_transforms in the first
-         * place. */
+        const char *next_lt = memchr(html + i, '<', html_len - i);
+        if (!next_lt) break;
+        i = (size_t)(next_lt - html);
+
+        /* Raw-text elements (<script>, <style>) are emitted verbatim;
+         * advance past the matching close without flushing so the
+         * region stays inside the current run. */
         size_t raw_skip = scan_raw_text_element(html, i, html_len);
         if (raw_skip != SIZE_MAX) {
-            smart_str_appendl(&out, html + i, raw_skip - i);
             while (want_anchors && heading_ix < headings->count &&
                    headings->items[heading_ix].doc_offset != SIZE_MAX &&
                    headings->items[heading_ix].doc_offset < raw_skip)
@@ -401,11 +400,14 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
             i == headings->items[heading_ix].doc_offset)
         {
             mdparser_heading_entry *e = &headings->items[heading_ix];
-            /* Emit "<hN" then optionally ` id="slug"`. The remainder of
-             * the open tag (data-sourcepos="..." or just `>`) flows
-             * naturally on the next loop iterations. Empty slug means
-             * the heading slugified to nothing (pure punctuation): emit
-             * <hN> with no id rather than id="". */
+            /* Flush run, emit "<hN" and optionally ` id="slug"`. The
+             * rest of the open tag (data-sourcepos or just `>`) flows
+             * with the next run. Empty slug means the heading
+             * slugified to nothing (pure punctuation): emit <hN> with
+             * no id rather than id="". */
+            if (i > run_start) {
+                smart_str_appendl(&out, html + run_start, i - run_start);
+            }
             smart_str_appendl(&out, html + i, 3);
             size_t s_len = strlen(e->slug);
             if (s_len) {
@@ -414,6 +416,7 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
                 smart_str_appendc(&out, '"');
             }
             i += 3;
+            run_start = i;
             do {
                 heading_ix++;
             } while (heading_ix < headings->count &&
@@ -422,28 +425,29 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
         }
 
         if (want_nofollow && i == next_anchor) {
-            /* Skip injection on in-document fragment anchors
-             * (href="#..."). Footnote references and backrefs land
-             * here. nofollow on an anchor that just jumps within the
-             * same document is meaningless; leaving them alone keeps
-             * the output cosmetically clean and avoids cluttering the
-             * footnote-back-and-forth markup. */
+            /* Fragment anchors (href="#...") get no rel injection:
+             * footnote refs and backrefs jump within the same
+             * document, where nofollow is meaningless. */
             bool is_fragment = (i + 9 < html_len && html[i + 9] == '#');
             if (!is_fragment) {
+                if (i > run_start) {
+                    smart_str_appendl(&out, html + run_start, i - run_start);
+                }
                 smart_str_appendl(&out, "<a ", 3);
                 smart_str_appendl(&out, rel_inject, rel_inject_len);
                 i += 3;
+                run_start = i;
                 next_anchor = find_anchor_open(html, i, html_len);
                 continue;
             }
-            /* Move the anchor cache past this fragment anchor so we do
-             * not match it again on the next iteration; the byte at i
-             * still falls through to the default per-byte emit. */
             next_anchor = find_anchor_open(html, i + 9, html_len);
         }
 
-        smart_str_appendc(&out, html[i]);
         i++;
+    }
+
+    if (html_len > run_start) {
+        smart_str_appendl(&out, html + run_start, html_len - run_start);
     }
 
     smart_str_0(&out);
