@@ -25,12 +25,15 @@
 #include "cmark-gfm-core-extensions.h"
 #include "cmark-gfm-extension_api.h"
 
-/* AST key strings are lazy-initialized on the first toAst() call so
- * users who only need toHtml/toXml don't pay the ~4 µs setup at module
- * load. zend_string_init_interned after startup creates request-scoped
- * interned strings which would dangle across requests, so we use
- * persistent non-interned zend_strings instead; the hash is cached on
- * first use inside zend_hash_add_new. Released in MSHUTDOWN. */
+/* AST key strings are populated at MINIT (mdparser_init_ast_strings)
+ * and released at MSHUTDOWN. They were once lazy-initialized on the
+ * first toAst() call to skip the ~4 µs setup for callers that never
+ * needed them, but lazy init is not safe under ZTS: two threads
+ * entering toAst() concurrently could observe a partially-initialized
+ * table. zend_string_init_interned after startup creates request-
+ * scoped interned strings which would dangle across requests, so we
+ * use persistent non-interned zend_strings; the hash is cached on
+ * first use inside zend_hash_add_new. */
 static zend_string *md_str_type;
 static zend_string *md_str_children;
 static zend_string *md_str_literal;
@@ -50,7 +53,7 @@ static zend_string *md_str_start_column;
 static zend_string *md_str_end_line;
 static zend_string *md_str_end_column;
 
-static void mdparser_init_ast_strings(void)
+void mdparser_init_ast_strings(void)
 {
     md_str_type         = zend_string_init("type",         sizeof("type") - 1,         1);
     md_str_children     = zend_string_init("children",     sizeof("children") - 1,     1);
@@ -311,8 +314,5 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
 
 void mdparser_render_ast(cmark_node *document, int cmark_options, zval *return_value)
 {
-    if (UNEXPECTED(!md_str_type)) {
-        mdparser_init_ast_strings();
-    }
     mdparser_node_to_array(document, cmark_options, 0, return_value);
 }

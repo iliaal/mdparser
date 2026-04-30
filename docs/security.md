@@ -151,9 +151,11 @@ mdparser does NOT:
   HTML sanitizer like HTML Purifier for attribute-level filtering.
 - Enforce a Content Security Policy. Set your own CSP headers at the
   HTTP layer.
-- Validate that links point at same-origin resources. If you need to
-  block external links or add `rel="nofollow"`, post-process the
-  output with `DOMDocument` or a regex.
+- Validate that links point at same-origin resources. mdparser can
+  inject `rel="nofollow noopener noreferrer"` on every rendered anchor
+  via `Options::nofollowLinks` (skips fragment-only `#anchor` links and
+  raw HTML inside `<script>` / `<style>` regions). Same-origin
+  allow/deny policy and CSP are still application concerns.
 - Detect malicious Unicode homographs, invisible characters, or
   right-to-left override tricks. Markdown is rendered as-is; if you're
   worried about spoofed links you need a separate normalization pass.

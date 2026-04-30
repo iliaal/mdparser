@@ -101,14 +101,13 @@ PHP_METHOD(MdParser_Parser, __construct)
     obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
     this_obj = Z_OBJ_P(ZEND_THIS);
 
-    if (options_zv) {
-        mdparser_options_read_masks(options_zv, &obj->cmark_options, &obj->extension_mask, &obj->postprocess_mask);
-        zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
-    } else {
+    zval default_options;
+    bool default_owned = false;
+
+    if (!options_zv) {
         /* Build a default Options and stash it so $parser->options is
          * never null. mdparser_parser_create already seeded the cached
          * default masks on obj; nothing else to compute here. */
-        zval default_options;
         object_init_ex(&default_options, mdparser_options_ce);
         zend_call_known_instance_method_with_0_params(
             mdparser_options_ce->constructor, Z_OBJ(default_options), NULL);
@@ -116,9 +115,36 @@ PHP_METHOD(MdParser_Parser, __construct)
             zval_ptr_dtor(&default_options);
             RETURN_THROWS();
         }
-        zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, &default_options);
+        options_zv = &default_options;
+        default_owned = true;
+    }
+
+    /* Read masks into locals first, then publish the readonly $options
+     * property, and only commit the cached masks on success. A second
+     * __construct() call throws on the readonly write below; without
+     * this ordering the cached masks would have already been replaced,
+     * leaving the public $options out of sync with rendering behavior
+     * (security-relevant: an unsafe-mask object reporting safe options).
+     */
+    int new_cmark_options;
+    int new_extension_mask;
+    int new_postprocess_mask;
+    mdparser_options_read_masks(options_zv,
+        &new_cmark_options, &new_extension_mask, &new_postprocess_mask);
+
+    zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
+
+    if (default_owned) {
         zval_ptr_dtor(&default_options);
     }
+
+    if (EG(exception)) {
+        RETURN_THROWS();
+    }
+
+    obj->cmark_options = new_cmark_options;
+    obj->extension_mask = new_extension_mask;
+    obj->postprocess_mask = new_postprocess_mask;
 }
 
 typedef char *(*mdparser_renderer_fn)(cmark_node *root, int options, cmark_llist *extensions, cmark_mem *mem);
@@ -296,15 +322,26 @@ PHP_METHOD(MdParser_Parser, toAst)
  * without the `<p>` wrapper, and suppress all block-level constructs
  * so `# h` / `- a` / `> q` / `1. x` render as literal text.
  *
- * cmark-gfm does not expose an inline-only parse mode, so we prepend
- * a zero-width space (U+200B, UTF-8 E2 80 8B) before feeding the
- * source. The ZWSP is an ordinary text character to cmark's block
- * parser, which means the caller's first character never appears at
- * column 0 and therefore cannot trigger an ATX heading, list marker,
- * blockquote, indented code block, thematic break, or fenced code.
- * cmark treats the whole input as a single paragraph, renders it as
- * `<p>\xE2\x80\x8B...</p>\n`, and we strip the sentinel + the wrapper
- * on the way out. */
+ * cmark-gfm does not expose an inline-only parse mode. Block parsing
+ * is line-oriented and triggers off the first byte of every physical
+ * line, so a single sentinel before the source only protects the first
+ * line. We instead build a normalized buffer where every line starts
+ * with a zero-width space (U+200B, UTF-8 E2 80 8B):
+ *
+ *   - \r\n and lone \r are normalized to \n (cmark normalizes too,
+ *     but doing it here lets us know exactly where line breaks are);
+ *   - runs of \n are collapsed to one (blank lines would otherwise
+ *     end the paragraph and start a new one);
+ *   - leading and trailing \n are dropped;
+ *   - ZWSP is prepended at the start, and after every retained \n.
+ *
+ * cmark sees a single paragraph whose every line begins with ZWSP, so
+ * ATX headings, list markers, blockquotes, indented code, thematic
+ * breaks, fenced code, and HTML blocks cannot fire on any line. The
+ * rendered HTML is `<p>\xE2\x80\x8B...</p>\n`; we strip the wrapper
+ * and any remaining ZWSPs (the per-line sentinels) from the body.
+ * Literal U+200B in source is collateral and gets stripped too.
+ */
 PHP_METHOD(MdParser_Parser, toInlineHtml)
 {
     zend_string *source;
@@ -319,17 +356,55 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
 
     mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
 
+    static const char zwsp[3] = { (char)0xE2, (char)0x80, (char)0x8B };
+
+    /* Worst case: every byte gains a 3-byte ZWSP prefix (input that's
+     * all newlines) -- bounded by 4*src_len + 3. */
+    const char *src = ZSTR_VAL(source);
+    size_t src_len = ZSTR_LEN(source);
+    size_t buf_cap = src_len * 4 + 3;
+    char *buf = emalloc(buf_cap);
+    size_t buf_len = 0;
+    bool need_zwsp = true;
+
+    for (size_t i = 0; i < src_len; i++) {
+        char c = src[i];
+        if (c == '\r') {
+            if (i + 1 < src_len && src[i + 1] == '\n') {
+                i++;
+            }
+            c = '\n';
+        }
+        if (c == '\n') {
+            if (need_zwsp) {
+                /* leading newline, or run of newlines; drop. */
+                continue;
+            }
+            buf[buf_len++] = '\n';
+            need_zwsp = true;
+            continue;
+        }
+        if (need_zwsp) {
+            memcpy(buf + buf_len, zwsp, sizeof(zwsp));
+            buf_len += sizeof(zwsp);
+            need_zwsp = false;
+        }
+        buf[buf_len++] = c;
+    }
+    /* If the input ended on a \n, buf already has no trailing newline
+     * (we deferred the ZWSP for a non-existent next line). */
+
     cmark_mem *mem = cmark_get_default_mem_allocator();
     cmark_parser *parser = mdparser_build_cmark_parser(obj->cmark_options, obj->extension_mask);
     if (!parser) {
+        efree(buf);
         zend_throw_exception(mdparser_exception_ce,
             "mdparser: failed to allocate cmark parser", 0);
         RETURN_THROWS();
     }
 
-    static const char zwsp[3] = { (char)0xE2, (char)0x80, (char)0x8B };
-    cmark_parser_feed(parser, zwsp, sizeof(zwsp));
-    cmark_parser_feed(parser, ZSTR_VAL(source), ZSTR_LEN(source));
+    cmark_parser_feed(parser, buf, buf_len);
+    efree(buf);
     cmark_node *document = cmark_parser_finish(parser);
 
     if (!document) {
@@ -354,27 +429,48 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
 
     /* Expect exact prefix `<p>\xE2\x80\x8B` and exact suffix `</p>\n`.
      * If the sentinel trick failed (e.g. some future cmark change that
-     * normalizes ZWSP) the prefix won't match and we fall back to the
-     * full rendered HTML, so the caller never gets a corrupted half-
-     * stripped output. */
+     * normalizes ZWSP, or input that ended up empty after stripping)
+     * the prefix won't match and we fall back to the full rendered
+     * HTML, so the caller never gets a corrupted half-stripped output.
+     */
     size_t out_len = strlen(rendered);
     static const char prefix[] = "<p>\xE2\x80\x8B";
     static const size_t prefix_len = sizeof(prefix) - 1;
     static const char suffix[] = "</p>\n";
     static const size_t suffix_len = sizeof(suffix) - 1;
 
-    const char *body;
-    size_t body_len;
+    const char *body_src;
+    size_t body_src_len;
     if (out_len >= prefix_len + suffix_len &&
         memcmp(rendered, prefix, prefix_len) == 0 &&
         memcmp(rendered + out_len - suffix_len, suffix, suffix_len) == 0)
     {
-        body = rendered + prefix_len;
-        body_len = out_len - prefix_len - suffix_len;
+        body_src = rendered + prefix_len;
+        body_src_len = out_len - prefix_len - suffix_len;
     } else {
-        body = rendered;
-        body_len = out_len;
+        body_src = rendered;
+        body_src_len = out_len;
     }
+
+    /* Strip remaining ZWSPs (the per-line sentinels we inserted).
+     * Always allocate a fresh buffer: even when no ZWSPs are left, the
+     * uniform path keeps the postprocess branch simple. */
+    zend_string *body_str = zend_string_alloc(body_src_len, 0);
+    char *out = ZSTR_VAL(body_str);
+    size_t out_idx = 0;
+    for (size_t i = 0; i < body_src_len; i++) {
+        if (i + 2 < body_src_len &&
+            (unsigned char)body_src[i] == 0xE2 &&
+            (unsigned char)body_src[i + 1] == 0x80 &&
+            (unsigned char)body_src[i + 2] == 0x8B)
+        {
+            i += 2;
+            continue;
+        }
+        out[out_idx++] = body_src[i];
+    }
+    out[out_idx] = '\0';
+    ZSTR_LEN(body_str) = out_idx;
 
     /* nofollow applies to inline HTML (links can appear in inline
      * snippets); heading-anchors does not (block markers are suppressed
@@ -383,7 +479,9 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
      * set. */
     int pp = obj->postprocess_mask & MDPARSER_PP_NOFOLLOW_LINKS;
     if (pp) {
-        zend_string *processed = mdparser_html_postprocess(body, body_len, NULL, 0, NULL, pp);
+        zend_string *processed = mdparser_html_postprocess(
+            ZSTR_VAL(body_str), ZSTR_LEN(body_str), NULL, 0, NULL, pp);
+        zend_string_release(body_str);
         if (!processed) {
             mem->free(rendered);
             cmark_node_free(document);
@@ -394,7 +492,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         }
         RETVAL_STR(processed);
     } else {
-        RETVAL_STRINGL(body, body_len);
+        RETVAL_STR(body_str);
     }
 
     mem->free(rendered);

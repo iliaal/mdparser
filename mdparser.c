@@ -66,6 +66,7 @@ PHP_MINIT_FUNCTION(mdparser)
     }
 
     mdparser_options_init_defaults();
+    mdparser_init_ast_strings();
 
     mdparser_exception_register_class();
     mdparser_options_register_class();

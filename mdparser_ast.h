@@ -17,8 +17,10 @@
 
 void mdparser_render_ast(cmark_node *document, int cmark_options, zval *return_value);
 
-/* Called from MSHUTDOWN to release the lazily-populated AST key
- * strings. No-op if toAst was never invoked this process. */
+/* Called from MINIT/MSHUTDOWN to allocate and release the persistent
+ * AST key strings. Init at MINIT (rather than lazily on first toAst)
+ * so a ZTS build can't race two threads through partial population. */
+void mdparser_init_ast_strings(void);
 void mdparser_release_ast_strings(void);
 
 #endif
