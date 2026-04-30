@@ -37,8 +37,58 @@ Heading anchors are positioned by rendering each AST heading
 standalone and locating its exact byte sequence in the document
 HTML, rather than by counting line-start `<hN>` tags. Under
 `unsafe: true`, raw HTML headings written directly in the markdown
-source are therefore left alone and do not consume slugs intended
-for real headings.
+source are normally left alone and do not consume slugs intended
+for real headings — *with one documented limitation:* if a raw HTML
+heading produces bytes identical to a later Markdown heading
+(e.g. `<h1>same</h1>` followed by `# same`), the byte-fingerprint
+search hits the raw heading first, the raw heading absorbs the
+`id`, and the real Markdown heading is left without one. A durable
+fix needs renderer-level heading-id support; until then,
+`unsafe: true` callers should not rely on heading-id stability when
+raw HTML headings can collide with real ones. Pinned in
+`tests/030_anchor_unsafe_collision.phpt`.
+
+### Changed
+
+- cmark allocations now route through a Zend MM-backed `cmark_mem`
+  (`ecalloc` / `erealloc` / `efree`). cmark-side memory is now
+  accounted by `memory_limit`, surfaced by `memory_get_usage()`, and
+  cleaned up by Zend MM on bailout. Out-of-memory under hostile or
+  oversized input goes through PHP's standard `Allowed memory size
+  exhausted` fatal instead of cmark's default-allocator `abort()`.
+- AST key strings (`type`, `children`, `literal`, `level`, ...) are
+  now permanent interned strings created at MINIT via
+  `zend_string_init_interned(..., true)` instead of persistent
+  non-interned `zend_string`s lazy-initialized on the first
+  `toAst()` call. Permanent interned strings skip refcount mutation
+  during `zend_hash_add_new`, so concurrent `toAst()` calls on a
+  ZTS build no longer race the (non-atomic) shared refcount that
+  the previous persistent strings carried.
+- AST node array preallocation bumped from `array_init_size(out, 8)`
+  to 16. The worst-case node (a list with `sourcepos: true`)
+  carries 10 keys, so 8 forced a rehash on every list. 16 lands on
+  the next power-of-two HT bucket size and avoids the rehash for
+  every supported node shape.
+
+### Security
+
+- `Options` objects built via
+  `ReflectionClass::newInstanceWithoutConstructor()` are now
+  rejected at `Parser::__construct()` with
+  `MdParser\Exception`. Previously, reading uninitialized typed
+  properties returned `IS_NULL` to silent property reads, so the
+  parser cached an all-false mask (notably `validateUtf8: false`
+  and `tagfilter: false`) while `$parser->options` still threw
+  on any property access. The constructor now bails before
+  publishing `$options`, so a half-built Options can never reach
+  cached parser state. Regression test in
+  `tests/029_regressions.phpt`.
+- Linux build compiled with `-fvisibility=hidden`. Vendored cmark
+  symbols (`cmark_parser_new`, `cmark_release_plugins`,
+  `CMARK_DEFAULT_MEM_ALLOCATOR`, ...) and wrapper internals no
+  longer appear in `mdparser.so`'s dynamic symbol table; only PHP's
+  required `get_module` is exported. Prevents symbol collisions
+  with other extensions that vendor or link cmark.
 
 ### Fixed
 
