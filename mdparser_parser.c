@@ -72,8 +72,7 @@ void mdparser_parser_register_class(void)
 
 static cmark_parser *mdparser_build_cmark_parser(int cmark_options, int extension_mask)
 {
-    cmark_mem *mem = cmark_get_default_mem_allocator();
-    cmark_parser *parser = cmark_parser_new_with_mem(cmark_options, mem);
+    cmark_parser *parser = cmark_parser_new_with_mem(cmark_options, &mdparser_zend_mem);
     if (!parser) {
         return NULL;
     }
@@ -132,6 +131,17 @@ PHP_METHOD(MdParser_Parser, __construct)
     mdparser_options_read_masks(options_zv,
         &new_cmark_options, &new_extension_mask, &new_postprocess_mask);
 
+    /* read_masks throws if the Options object skipped __construct
+     * (uninitialized typed properties). Bail before publishing
+     * $options so the parser never holds a reference to a
+     * half-constructed Options. */
+    if (EG(exception)) {
+        if (default_owned) {
+            zval_ptr_dtor(&default_options);
+        }
+        RETURN_THROWS();
+    }
+
     zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
 
     if (default_owned) {
@@ -177,7 +187,6 @@ static void mdparser_do_render_string(
     zend_string *source, mdparser_renderer_fn renderer,
     zval *return_value)
 {
-    cmark_mem *mem = cmark_get_default_mem_allocator();
     cmark_parser *parser = mdparser_build_cmark_parser(cmark_options, extension_mask);
     if (!parser) {
         zend_throw_exception(mdparser_exception_ce,
@@ -197,7 +206,7 @@ static void mdparser_do_render_string(
     }
 
     char *rendered = renderer(document, cmark_options,
-        cmark_parser_get_syntax_extensions(parser), mem);
+        cmark_parser_get_syntax_extensions(parser), &mdparser_zend_mem);
 
     if (!rendered) {
         cmark_node_free(document);
@@ -213,7 +222,7 @@ static void mdparser_do_render_string(
             rendered, strlen(rendered), document, cmark_options,
             cmark_parser_get_syntax_extensions(parser), postprocess_mask);
         if (!processed) {
-            mem->free(rendered);
+            mdparser_zend_mem.free(rendered);
             cmark_node_free(document);
             cmark_parser_free(parser);
             zend_throw_exception(mdparser_exception_ce,
@@ -225,7 +234,7 @@ static void mdparser_do_render_string(
         RETVAL_STRING(rendered);
     }
 
-    mem->free(rendered);
+    mdparser_zend_mem.free(rendered);
     cmark_node_free(document);
     cmark_parser_free(parser);
 }
@@ -394,7 +403,6 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     /* If the input ended on a \n, buf already has no trailing newline
      * (we deferred the ZWSP for a non-existent next line). */
 
-    cmark_mem *mem = cmark_get_default_mem_allocator();
     cmark_parser *parser = mdparser_build_cmark_parser(obj->cmark_options, obj->extension_mask);
     if (!parser) {
         efree(buf);
@@ -416,7 +424,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     }
 
     char *rendered = cmark_render_html_with_mem(document, obj->cmark_options,
-        cmark_parser_get_syntax_extensions(parser), mem);
+        cmark_parser_get_syntax_extensions(parser), &mdparser_zend_mem);
 
     if (!rendered) {
         cmark_node_free(document);
@@ -483,7 +491,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
             ZSTR_VAL(body_str), ZSTR_LEN(body_str), NULL, 0, NULL, pp);
         zend_string_release(body_str);
         if (!processed) {
-            mem->free(rendered);
+            mdparser_zend_mem.free(rendered);
             cmark_node_free(document);
             cmark_parser_free(parser);
             zend_throw_exception(mdparser_exception_ce,
@@ -495,7 +503,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         RETVAL_STR(body_str);
     }
 
-    mem->free(rendered);
+    mdparser_zend_mem.free(rendered);
     cmark_node_free(document);
     cmark_parser_free(parser);
 }

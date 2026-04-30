@@ -30,6 +30,38 @@
 
 mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
 
+/* cmark's default allocator wraps system calloc/realloc/free and
+ * abort()s on allocation failure. That is unacceptable for a server
+ * extension: hostile or oversized input can pin memory outside Zend's
+ * memory_limit and tear down the worker on OOM. Routing every cmark
+ * allocation through Zend MM gives us memory_limit accounting, debug
+ * tracking, and a controlled bailout (longjmp via E_ERROR) in place
+ * of abort. Allocations are request-scoped because every call site
+ * lives inside a PHP method invocation; Zend MM cleans them up at
+ * request shutdown if a bailout fires mid-parse. */
+static void *mdparser_zend_calloc(size_t nmemb, size_t size)
+{
+    return ecalloc(nmemb, size);
+}
+
+static void *mdparser_zend_realloc(void *ptr, size_t size)
+{
+    return erealloc(ptr, size);
+}
+
+static void mdparser_zend_free(void *ptr)
+{
+    if (ptr) {
+        efree(ptr);
+    }
+}
+
+cmark_mem mdparser_zend_mem = {
+    mdparser_zend_calloc,
+    mdparser_zend_realloc,
+    mdparser_zend_free,
+};
+
 static int mdparser_resolve_extensions(void)
 {
     static const struct {
@@ -76,7 +108,6 @@ PHP_MINIT_FUNCTION(mdparser)
 
 PHP_MSHUTDOWN_FUNCTION(mdparser)
 {
-    mdparser_release_ast_strings();
     cmark_release_plugins();
     return SUCCESS;
 }

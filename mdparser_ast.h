@@ -17,10 +17,11 @@
 
 void mdparser_render_ast(cmark_node *document, int cmark_options, zval *return_value);
 
-/* Called from MINIT/MSHUTDOWN to allocate and release the persistent
- * AST key strings. Init at MINIT (rather than lazily on first toAst)
- * so a ZTS build can't race two threads through partial population. */
+/* Called from MINIT to populate the permanent interned AST key strings.
+ * Init at MINIT (rather than lazily on first toAst) so a ZTS build
+ * can't race two threads through partial population. Permanent
+ * interned strings are owned by the engine and need no MSHUTDOWN
+ * release. */
 void mdparser_init_ast_strings(void);
-void mdparser_release_ast_strings(void);
 
 #endif

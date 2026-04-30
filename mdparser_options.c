@@ -169,7 +169,26 @@ void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *exte
         prop = zend_read_property(mdparser_options_ce, obj,
             f->name, f->name_len, 1, &rv);
 
-        if (!prop || Z_TYPE_P(prop) != IS_TRUE) {
+        /* Options is final + readonly with typed bool properties; the
+         * only way to land here with anything other than IS_TRUE /
+         * IS_FALSE is to skip __construct (e.g. via
+         * ReflectionClass::newInstanceWithoutConstructor). Silent
+         * reads of an uninit typed property return &EG(uninitialized_zval)
+         * (IS_NULL), so an IS_UNDEF check alone would miss this case.
+         * Treating uninit as false would silently flip the safety
+         * defaults (validateUtf8 / tagfilter) off while $parser->options
+         * remains unreadable. Reject the object outright. */
+        if (UNEXPECTED(!prop ||
+                (Z_TYPE_P(prop) != IS_TRUE && Z_TYPE_P(prop) != IS_FALSE))) {
+            zend_throw_exception_ex(mdparser_exception_ce, 0,
+                "mdparser: Options::$%s is uninitialized; "
+                "Options instances must be constructed via __construct() "
+                "(or one of strict()/github()/permissive())",
+                f->name);
+            return;
+        }
+
+        if (Z_TYPE_P(prop) != IS_TRUE) {
             continue;
         }
 

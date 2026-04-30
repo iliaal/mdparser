@@ -25,15 +25,20 @@
 #include "cmark-gfm-core-extensions.h"
 #include "cmark-gfm-extension_api.h"
 
-/* AST key strings are populated at MINIT (mdparser_init_ast_strings)
- * and released at MSHUTDOWN. They were once lazy-initialized on the
- * first toAst() call to skip the ~4 µs setup for callers that never
- * needed them, but lazy init is not safe under ZTS: two threads
- * entering toAst() concurrently could observe a partially-initialized
- * table. zend_string_init_interned after startup creates request-
- * scoped interned strings which would dangle across requests, so we
- * use persistent non-interned zend_strings; the hash is cached on
- * first use inside zend_hash_add_new. */
+/* AST key strings are populated at MINIT (mdparser_init_ast_strings).
+ * They were once lazy-initialized on the first toAst() call to skip
+ * the ~4 µs setup for callers that never needed them, but lazy init
+ * is not safe under ZTS: two threads entering toAst() concurrently
+ * could observe a partially-initialized table.
+ *
+ * MINIT runs before request startup, so passing permanent=true to
+ * zend_string_init_interned places these in the engine-wide permanent
+ * intern table. Permanent interned strings are flagged IS_STR_INTERNED
+ * and their refcount is left untouched by zend_hash_add_new -- which
+ * is exactly the property we need under ZTS, where two threads insert
+ * AST nodes concurrently and would otherwise race the (non-atomic)
+ * refcount of a shared persistent zend_string. They live for the
+ * lifetime of the engine, so no MSHUTDOWN release is needed. */
 static zend_string *md_str_type;
 static zend_string *md_str_children;
 static zend_string *md_str_literal;
@@ -55,50 +60,24 @@ static zend_string *md_str_end_column;
 
 void mdparser_init_ast_strings(void)
 {
-    md_str_type         = zend_string_init("type",         sizeof("type") - 1,         1);
-    md_str_children     = zend_string_init("children",     sizeof("children") - 1,     1);
-    md_str_literal      = zend_string_init("literal",      sizeof("literal") - 1,      1);
-    md_str_info         = zend_string_init("info",         sizeof("info") - 1,         1);
-    md_str_url          = zend_string_init("url",          sizeof("url") - 1,          1);
-    md_str_title        = zend_string_init("title",        sizeof("title") - 1,        1);
-    md_str_level        = zend_string_init("level",        sizeof("level") - 1,        1);
-    md_str_list_type    = zend_string_init("list_type",    sizeof("list_type") - 1,    1);
-    md_str_list_start   = zend_string_init("list_start",   sizeof("list_start") - 1,   1);
-    md_str_list_tight   = zend_string_init("list_tight",   sizeof("list_tight") - 1,   1);
-    md_str_list_delim   = zend_string_init("list_delim",   sizeof("list_delim") - 1,   1);
-    md_str_alignments   = zend_string_init("alignments",   sizeof("alignments") - 1,   1);
-    md_str_is_header    = zend_string_init("is_header",    sizeof("is_header") - 1,    1);
-    md_str_checked      = zend_string_init("checked",      sizeof("checked") - 1,      1);
-    md_str_start_line   = zend_string_init("start_line",   sizeof("start_line") - 1,   1);
-    md_str_start_column = zend_string_init("start_column", sizeof("start_column") - 1, 1);
-    md_str_end_line     = zend_string_init("end_line",     sizeof("end_line") - 1,     1);
-    md_str_end_column   = zend_string_init("end_column",   sizeof("end_column") - 1,   1);
-}
-
-void mdparser_release_ast_strings(void)
-{
-    if (!md_str_type) {
-        return;
-    }
-    zend_string_release(md_str_type);
-    zend_string_release(md_str_children);
-    zend_string_release(md_str_literal);
-    zend_string_release(md_str_info);
-    zend_string_release(md_str_url);
-    zend_string_release(md_str_title);
-    zend_string_release(md_str_level);
-    zend_string_release(md_str_list_type);
-    zend_string_release(md_str_list_start);
-    zend_string_release(md_str_list_tight);
-    zend_string_release(md_str_list_delim);
-    zend_string_release(md_str_alignments);
-    zend_string_release(md_str_is_header);
-    zend_string_release(md_str_checked);
-    zend_string_release(md_str_start_line);
-    zend_string_release(md_str_start_column);
-    zend_string_release(md_str_end_line);
-    zend_string_release(md_str_end_column);
-    md_str_type = NULL;
+    md_str_type         = zend_string_init_interned("type",         sizeof("type") - 1,         1);
+    md_str_children     = zend_string_init_interned("children",     sizeof("children") - 1,     1);
+    md_str_literal      = zend_string_init_interned("literal",      sizeof("literal") - 1,      1);
+    md_str_info         = zend_string_init_interned("info",         sizeof("info") - 1,         1);
+    md_str_url          = zend_string_init_interned("url",          sizeof("url") - 1,          1);
+    md_str_title        = zend_string_init_interned("title",        sizeof("title") - 1,        1);
+    md_str_level        = zend_string_init_interned("level",        sizeof("level") - 1,        1);
+    md_str_list_type    = zend_string_init_interned("list_type",    sizeof("list_type") - 1,    1);
+    md_str_list_start   = zend_string_init_interned("list_start",   sizeof("list_start") - 1,   1);
+    md_str_list_tight   = zend_string_init_interned("list_tight",   sizeof("list_tight") - 1,   1);
+    md_str_list_delim   = zend_string_init_interned("list_delim",   sizeof("list_delim") - 1,   1);
+    md_str_alignments   = zend_string_init_interned("alignments",   sizeof("alignments") - 1,   1);
+    md_str_is_header    = zend_string_init_interned("is_header",    sizeof("is_header") - 1,    1);
+    md_str_checked      = zend_string_init_interned("checked",      sizeof("checked") - 1,      1);
+    md_str_start_line   = zend_string_init_interned("start_line",   sizeof("start_line") - 1,   1);
+    md_str_start_column = zend_string_init_interned("start_column", sizeof("start_column") - 1, 1);
+    md_str_end_line     = zend_string_init_interned("end_line",     sizeof("end_line") - 1,     1);
+    md_str_end_column   = zend_string_init_interned("end_column",   sizeof("end_column") - 1,   1);
 }
 
 static void mdparser_node_to_array(cmark_node *node, int cmark_options, int depth, zval *out);
@@ -202,10 +181,14 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
         return;
     }
 
-    /* Max observed key count per node is 7 (list: type, list_type,
-     * list_start, list_tight, list_delim, children + optional sourcepos
-     * ×4). array_init_size(8) avoids the first rehash. */
-    array_init_size(out, 8);
+    /* Worst case is a list node with sourcepos enabled: type,
+     * start_line, start_column, end_line, end_column, list_type,
+     * list_start, list_tight, list_delim, children = 10 keys.
+     * array_init_size(16) lands on the next power-of-two HT bucket
+     * size, so even the worst-case node finishes without a rehash;
+     * smaller nodes pay one extra bucket-row of memory which is
+     * negligible against per-array overhead. */
+    array_init_size(out, 16);
 
     /* cmark-gfm's get_type_string switch does not cover footnote node
      * types and returns "<unknown>" for them. Override locally so AST

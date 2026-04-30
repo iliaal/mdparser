@@ -60,7 +60,18 @@ static const void *mdparser_memmem(const void *haystack, size_t haystack_len,
  * `unsafe: true`) would silently consume slugs intended for real
  * headings further down. `doc_offset` is filled in just before
  * apply_transforms by sequential memmem; SIZE_MAX means "not found"
- * and the entry is skipped during apply. */
+ * and the entry is skipped during apply.
+ *
+ * KNOWN LIMITATION (review CR-003): the byte-fingerprint approach
+ * cannot distinguish a Markdown heading from a raw HTML block whose
+ * rendered bytes match exactly. Under `unsafe:true, tagfilter:false`,
+ * input like `<h1>same</h1>\n\n# same\n` produces two `<h1>same</h1>`
+ * substrings; the first (raw HTML) match wins and the real Markdown
+ * heading is left without an id. A durable fix needs renderer-level
+ * heading-id support so node identity carries into output. Until then,
+ * callers in unsafe mode should not rely on heading-id stability when
+ * raw HTML headings can collide with real ones. Regression test:
+ * tests/030_anchor_unsafe_collision.phpt. */
 typedef struct {
     char *slug;
     char *rendered;
@@ -555,16 +566,15 @@ zend_string *mdparser_html_postprocess(
             /* Caller bug: anchors requested without an AST. */
             return NULL;
         }
-        cmark_mem *mem = cmark_get_default_mem_allocator();
-        if (!collect_headings(document, cmark_options, extensions, mem, &headings)) {
-            heading_list_free(&headings, mem);
+        if (!collect_headings(document, cmark_options, extensions,
+                              &mdparser_zend_mem, &headings)) {
+            heading_list_free(&headings, &mdparser_zend_mem);
             return NULL;
         }
         resolve_heading_offsets(html_in, html_len, &headings);
     }
 
     zend_string *out = apply_transforms(html_in, html_len, &headings, pp_mask);
-    cmark_mem *mem = cmark_get_default_mem_allocator();
-    heading_list_free(&headings, mem);
+    heading_list_free(&headings, &mdparser_zend_mem);
     return out;
 }

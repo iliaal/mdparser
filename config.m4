@@ -61,7 +61,15 @@ if test "$PHP_MDPARSER" != "no"; then
   dnl -Werror plus extra strictness. -Wno-unused-parameter silences
   dnl noise from cmark's own callback-style APIs that share the same
   dnl translation-unit flags with our wrapper.
+  dnl
+  dnl -fvisibility=hidden keeps vendored cmark symbols (cmark_parser_new
+  dnl etc.) and our wrapper internals out of the .so's dynamic symbol
+  dnl table. PHP only needs `get_module` exported, and ZEND_GET_MODULE
+  dnl already marks that with ZEND_DLEXPORT (visibility("default")), so
+  dnl the loader still finds it. Prevents collisions if another
+  dnl extension also vendors cmark.
   MDPARSER_CFLAGS="-DCMARK_GFM_STATIC_DEFINE -DCMARK_GFM_EXTENSIONS_STATIC_DEFINE \
+    -fvisibility=hidden \
     -Wall -Wextra -Wno-unused-parameter -Wno-unused-function"
 
   dnl -Wshadow is intentionally NOT enabled; PHP's own headers

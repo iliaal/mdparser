@@ -102,6 +102,11 @@ typedef struct {
 
 extern mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
 
+/* Process-wide cmark_mem backed by Zend MM (ecalloc/erealloc/efree).
+ * Passed to every cmark_*_with_mem call so cmark allocations respect
+ * memory_limit and OOM goes through Zend MM bailout instead of abort. */
+extern cmark_mem mdparser_zend_mem;
+
 /* Default masks, computed once from mdparser_options_fields at MINIT. */
 extern int mdparser_default_cmark_options;
 extern int mdparser_default_extension_mask;

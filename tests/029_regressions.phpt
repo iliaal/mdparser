@@ -1,5 +1,5 @@
 --TEST--
-regressions: constructor re-entry, toInlineHtml multiline, Options defaults parity
+regressions: ctor re-entry, toInlineHtml multiline, Options defaults parity, reflection bypass
 --SKIPIF--
 <?php if (!extension_loaded("mdparser")) print "skip"; ?>
 --FILE--
@@ -99,6 +99,29 @@ if ($mismatches) {
     foreach ($mismatches as $m) echo "  - $m\n";
 }
 
+// ---------------------------------------------------------------------
+// CR-005: An Options object built via Reflection without invoking
+// __construct has uninitialized typed properties. The parser used to
+// silently treat them as false and produce an all-default mask while
+// $parser->options remained unreadable. The constructor must instead
+// reject the object up front so callers cannot land in that
+// half-built state.
+// ---------------------------------------------------------------------
+$rcOptions = new ReflectionClass(MdParser\Options::class);
+$bad = $rcOptions->newInstanceWithoutConstructor();
+$threw = false;
+$msg = "";
+try {
+    new MdParser\Parser($bad);
+} catch (MdParser\Exception $e) {
+    $threw = true;
+    $msg = $e->getMessage();
+}
+check("CR-005: reflection-bypassed Options is rejected", $threw);
+check("CR-005: message names the offending property",
+    str_contains($msg, "uninitialized")
+    && (str_contains($msg, "Options::\$") || str_contains($msg, "Options::$")));
+
 ?>
 --EXPECT--
 OK: CR-001: __construct re-entry threw
@@ -117,3 +140,5 @@ OK: CR-002: empty input stays empty
 OK: CR-002: lone newline stays empty
 OK: CR-004: all 19 ctor parameters present
 OK: CR-004: every ctor default matches property default
+OK: CR-005: reflection-bypassed Options is rejected
+OK: CR-005: message names the offending property
