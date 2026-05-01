@@ -17,6 +17,7 @@
 
 #include "php.h"
 #include "zend_exceptions.h"
+#include "zend_smart_str.h"
 
 #include "php_mdparser.h"
 #include "mdparser_arginfo.h"
@@ -43,6 +44,8 @@ static zend_object *mdparser_parser_create(zend_class_entry *ce)
     obj->cmark_options = mdparser_default_cmark_options;
     obj->extension_mask = mdparser_default_extension_mask;
     obj->postprocess_mask = mdparser_default_postprocess_mask;
+    obj->cmark_parser = NULL;
+    obj->parser_dirty = false;
 
     return &obj->std;
 }
@@ -50,6 +53,10 @@ static zend_object *mdparser_parser_create(zend_class_entry *ce)
 static void mdparser_parser_free(zend_object *object)
 {
     mdparser_parser_obj *obj = mdparser_parser_from_obj(object);
+    if (obj->cmark_parser) {
+        cmark_parser_free(obj->cmark_parser);
+        obj->cmark_parser = NULL;
+    }
     zend_object_std_dtor(&obj->std);
 }
 
@@ -84,6 +91,31 @@ static cmark_parser *mdparser_build_cmark_parser(int cmark_options, int extensio
     }
 
     return parser;
+}
+
+/* Get the per-instance cmark_parser, building it on first use.
+ * cmark_parser_finish calls cmark_parser_reset internally before
+ * returning, so a parser that completed a prior render is already in
+ * a clean state with all extensions still attached. If the prior
+ * render did NOT complete cleanly (cmark_parser_finish returned NULL,
+ * exception thrown between feed and finish, etc.), the parser is
+ * dirty and must be rebuilt -- cmark_parser_reset is static in
+ * vendor/cmark and not callable from here.
+ *
+ * Caller MUST set obj->parser_dirty = true before calling
+ * cmark_parser_feed and clear it only after cmark_parser_finish
+ * returns a non-NULL document. */
+static cmark_parser *mdparser_get_cmark_parser(mdparser_parser_obj *obj)
+{
+    if (obj->cmark_parser && obj->parser_dirty) {
+        cmark_parser_free(obj->cmark_parser);
+        obj->cmark_parser = NULL;
+    }
+    if (!obj->cmark_parser) {
+        obj->cmark_parser = mdparser_build_cmark_parser(
+            obj->cmark_options, obj->extension_mask);
+    }
+    return obj->cmark_parser;
 }
 
 PHP_METHOD(MdParser_Parser, __construct)
@@ -176,41 +208,41 @@ static bool mdparser_check_input_size(size_t source_len)
     return true;
 }
 
-/* Core HTML/XML render path: takes explicit masks (so both instance
- * methods and static shortcuts can call it with either the Parser's
- * cached masks or the module-level defaults). Caller is responsible
- * for ZPP and the input-size cap; this helper owns the cmark lifecycle
- * and writes the result into return_value or throws. `postprocess_mask`
- * is applied only to HTML output; XML callers pass 0. */
+/* Core HTML/XML render path. Caller supplies a cmark_parser (either
+ * from the per-instance cache or freshly built for the static path)
+ * and is responsible for its lifetime; this helper does NOT free the
+ * parser. Caller is also responsible for ZPP and the input-size cap.
+ *
+ * `obj_or_null` is the per-instance Parser object when the parser
+ * came from the cache, or NULL for the static path. We use it to
+ * track parser_dirty across feed/finish: dirty stays set if finish
+ * fails, so the next render builds a fresh parser instead of feeding
+ * dirty state. */
 static void mdparser_do_render_string(
-    int cmark_options, int extension_mask, int postprocess_mask,
+    mdparser_parser_obj *obj_or_null,
+    cmark_parser *parser, int cmark_options, int postprocess_mask,
     zend_string *source, mdparser_renderer_fn renderer,
     zval *return_value)
 {
-    cmark_parser *parser = mdparser_build_cmark_parser(cmark_options, extension_mask);
-    if (!parser) {
-        zend_throw_exception(mdparser_exception_ce,
-            "mdparser: failed to allocate cmark parser", 0);
-        return;
-    }
-
+    if (obj_or_null) obj_or_null->parser_dirty = true;
     cmark_parser_feed(parser, ZSTR_VAL(source), ZSTR_LEN(source));
     cmark_node *document = cmark_parser_finish(parser);
 
     if (!document) {
-        cmark_parser_free(parser);
         zend_throw_exception_ex(mdparser_exception_ce, 0,
             "mdparser: cmark_parser_finish returned null (source length %zu)",
             ZSTR_LEN(source));
         return;
     }
+    /* finish() returned a document, which means cmark_parser_reset
+     * was called internally. Parser is clean again. */
+    if (obj_or_null) obj_or_null->parser_dirty = false;
 
     char *rendered = renderer(document, cmark_options,
         cmark_parser_get_syntax_extensions(parser), &mdparser_zend_mem);
 
     if (!rendered) {
         cmark_node_free(document);
-        cmark_parser_free(parser);
         zend_throw_exception_ex(mdparser_exception_ce, 0,
             "mdparser: cmark renderer returned null (source length %zu)",
             ZSTR_LEN(source));
@@ -218,15 +250,16 @@ static void mdparser_do_render_string(
     }
 
     if (postprocess_mask) {
-        zend_string *processed = mdparser_html_postprocess(
+        int pp_status = 0;
+        zend_string *processed = mdparser_html_postprocess_ex(
             rendered, strlen(rendered), document, cmark_options,
-            cmark_parser_get_syntax_extensions(parser), postprocess_mask);
+            cmark_parser_get_syntax_extensions(parser), postprocess_mask,
+            &pp_status);
         if (!processed) {
             mdparser_zend_mem.free(rendered);
             cmark_node_free(document);
-            cmark_parser_free(parser);
             zend_throw_exception(mdparser_exception_ce,
-                "mdparser: HTML postprocess allocation failure", 0);
+                mdparser_pp_status_message(pp_status), 0);
             return;
         }
         RETVAL_STR(processed);
@@ -236,31 +269,26 @@ static void mdparser_do_render_string(
 
     mdparser_zend_mem.free(rendered);
     cmark_node_free(document);
-    cmark_parser_free(parser);
 }
 
-/* Core AST render path, same factoring as mdparser_do_render_string. */
+/* Core AST render path. Same parser-lifetime + parser_dirty contract
+ * as mdparser_do_render_string. */
 static void mdparser_do_render_ast(
-    int cmark_options, int extension_mask,
+    mdparser_parser_obj *obj_or_null,
+    cmark_parser *parser, int cmark_options,
     zend_string *source, zval *return_value)
 {
-    cmark_parser *parser = mdparser_build_cmark_parser(cmark_options, extension_mask);
-    if (!parser) {
-        zend_throw_exception(mdparser_exception_ce,
-            "mdparser: failed to allocate cmark parser", 0);
-        return;
-    }
-
+    if (obj_or_null) obj_or_null->parser_dirty = true;
     cmark_parser_feed(parser, ZSTR_VAL(source), ZSTR_LEN(source));
     cmark_node *document = cmark_parser_finish(parser);
 
     if (!document) {
-        cmark_parser_free(parser);
         zend_throw_exception_ex(mdparser_exception_ce, 0,
             "mdparser: cmark_parser_finish returned null (source length %zu)",
             ZSTR_LEN(source));
         return;
     }
+    if (obj_or_null) obj_or_null->parser_dirty = false;
 
     /* The walker can throw MdParser\Exception when AST nesting exceeds
      * MDPARSER_MAX_AST_DEPTH. Free the cmark side regardless and let
@@ -270,7 +298,6 @@ static void mdparser_do_render_ast(
     mdparser_render_ast(document, cmark_options, return_value);
 
     cmark_node_free(document);
-    cmark_parser_free(parser);
 }
 
 static void mdparser_render_string_method(INTERNAL_FUNCTION_PARAMETERS,
@@ -287,13 +314,15 @@ static void mdparser_render_string_method(INTERNAL_FUNCTION_PARAMETERS,
     }
 
     mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
-    int pp_mask = html_path ? obj->postprocess_mask : 0;
-    mdparser_do_render_string(obj->cmark_options, obj->extension_mask, pp_mask,
-        source, renderer, return_value);
-
-    if (EG(exception)) {
+    cmark_parser *parser = mdparser_get_cmark_parser(obj);
+    if (!parser) {
+        zend_throw_exception(mdparser_exception_ce,
+            "mdparser: failed to allocate cmark parser", 0);
         RETURN_THROWS();
     }
+    int pp_mask = html_path ? obj->postprocess_mask : 0;
+    mdparser_do_render_string(obj, parser, obj->cmark_options, pp_mask,
+        source, renderer, return_value);
 }
 
 PHP_METHOD(MdParser_Parser, toHtml)
@@ -319,12 +348,13 @@ PHP_METHOD(MdParser_Parser, toAst)
     }
 
     mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
-    mdparser_do_render_ast(obj->cmark_options, obj->extension_mask,
-        source, return_value);
-
-    if (EG(exception)) {
+    cmark_parser *parser = mdparser_get_cmark_parser(obj);
+    if (!parser) {
+        zend_throw_exception(mdparser_exception_ce,
+            "mdparser: failed to allocate cmark parser", 0);
         RETURN_THROWS();
     }
+    mdparser_do_render_ast(obj, parser, obj->cmark_options, source, return_value);
 }
 
 /* Parsedown::line() semantics: render `source` as inline-only HTML
@@ -367,13 +397,18 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
 
     static const char zwsp[3] = { (char)0xE2, (char)0x80, (char)0x8B };
 
-    /* Worst case: every byte gains a 3-byte ZWSP prefix (input that's
-     * all newlines) -- bounded by 4*src_len + 3. */
+    /* Build the normalized buffer incrementally with smart_str. The
+     * worst-case pre-pass bound is 4*src_len + 3 (every byte becomes a
+     * newline that gains a 3-byte ZWSP prefix), which is mathematically
+     * safe under MDPARSER_MAX_INPUT_SIZE = 256 MB on 64-bit size_t.
+     * Pre-allocating the worst-case eagerly, however, can blow past
+     * memory_limit on newline-heavy inputs whose normalized form is
+     * tiny: 40 MB of `\n` would emalloc ~168 MB even though the
+     * normalized buffer is empty. smart_str grows on demand, so the
+     * peak allocation tracks the actual normalized size. */
     const char *src = ZSTR_VAL(source);
     size_t src_len = ZSTR_LEN(source);
-    size_t buf_cap = src_len * 4 + 3;
-    char *buf = emalloc(buf_cap);
-    size_t buf_len = 0;
+    smart_str norm = {0};
     bool need_zwsp = true;
 
     for (size_t i = 0; i < src_len; i++) {
@@ -389,46 +424,48 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
                 /* leading newline, or run of newlines; drop. */
                 continue;
             }
-            buf[buf_len++] = '\n';
+            smart_str_appendc(&norm, '\n');
             need_zwsp = true;
             continue;
         }
         if (need_zwsp) {
-            memcpy(buf + buf_len, zwsp, sizeof(zwsp));
-            buf_len += sizeof(zwsp);
+            smart_str_appendl(&norm, zwsp, sizeof(zwsp));
             need_zwsp = false;
         }
-        buf[buf_len++] = c;
+        smart_str_appendc(&norm, c);
     }
-    /* If the input ended on a \n, buf already has no trailing newline
+    /* If the input ended on a \n, norm already has no trailing newline
      * (we deferred the ZWSP for a non-existent next line). */
 
-    cmark_parser *parser = mdparser_build_cmark_parser(obj->cmark_options, obj->extension_mask);
+    const char *buf = norm.s ? ZSTR_VAL(norm.s) : "";
+    size_t buf_len = norm.s ? ZSTR_LEN(norm.s) : 0;
+
+    cmark_parser *parser = mdparser_get_cmark_parser(obj);
     if (!parser) {
-        efree(buf);
+        smart_str_free(&norm);
         zend_throw_exception(mdparser_exception_ce,
             "mdparser: failed to allocate cmark parser", 0);
         RETURN_THROWS();
     }
 
+    obj->parser_dirty = true;
     cmark_parser_feed(parser, buf, buf_len);
-    efree(buf);
+    smart_str_free(&norm);
     cmark_node *document = cmark_parser_finish(parser);
 
     if (!document) {
-        cmark_parser_free(parser);
         zend_throw_exception_ex(mdparser_exception_ce, 0,
             "mdparser: cmark_parser_finish returned null (source length %zu)",
             ZSTR_LEN(source));
         RETURN_THROWS();
     }
+    obj->parser_dirty = false;
 
     char *rendered = cmark_render_html_with_mem(document, obj->cmark_options,
         cmark_parser_get_syntax_extensions(parser), &mdparser_zend_mem);
 
     if (!rendered) {
         cmark_node_free(document);
-        cmark_parser_free(parser);
         zend_throw_exception_ex(mdparser_exception_ce, 0,
             "mdparser: cmark renderer returned null (source length %zu)",
             ZSTR_LEN(source));
@@ -487,15 +524,16 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
      * set. */
     int pp = obj->postprocess_mask & MDPARSER_PP_NOFOLLOW_LINKS;
     if (pp) {
-        zend_string *processed = mdparser_html_postprocess(
-            ZSTR_VAL(body_str), ZSTR_LEN(body_str), NULL, 0, NULL, pp);
+        int pp_status = 0;
+        zend_string *processed = mdparser_html_postprocess_ex(
+            ZSTR_VAL(body_str), ZSTR_LEN(body_str), NULL, 0, NULL, pp,
+            &pp_status);
         zend_string_release(body_str);
         if (!processed) {
             mdparser_zend_mem.free(rendered);
             cmark_node_free(document);
-            cmark_parser_free(parser);
             zend_throw_exception(mdparser_exception_ce,
-                "mdparser: HTML postprocess allocation failure", 0);
+                mdparser_pp_status_message(pp_status), 0);
             RETURN_THROWS();
         }
         RETVAL_STR(processed);
@@ -505,50 +543,49 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
 
     mdparser_zend_mem.free(rendered);
     cmark_node_free(document);
+}
+
+/* Static-method dispatcher: builds a one-shot cmark_parser, runs the
+ * render, frees. Used by Parser::html / Parser::xml / Parser::ast which
+ * have no $this. The per-instance reuse path is in
+ * mdparser_render_string_method / PHP_METHOD(toAst). */
+static void mdparser_static_render_string(INTERNAL_FUNCTION_PARAMETERS,
+    int postprocess_mask, mdparser_renderer_fn renderer)
+{
+    zend_string *source;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_STR(source)
+    ZEND_PARSE_PARAMETERS_END();
+
+    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
+        RETURN_THROWS();
+    }
+
+    cmark_parser *parser = mdparser_build_cmark_parser(
+        mdparser_default_cmark_options, mdparser_default_extension_mask);
+    if (!parser) {
+        zend_throw_exception(mdparser_exception_ce,
+            "mdparser: failed to allocate cmark parser", 0);
+        RETURN_THROWS();
+    }
+
+    mdparser_do_render_string(NULL, parser, mdparser_default_cmark_options,
+        postprocess_mask, source, renderer, return_value);
+
     cmark_parser_free(parser);
 }
 
 PHP_METHOD(MdParser_Parser, html)
 {
-    zend_string *source;
-
-    ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STR(source)
-    ZEND_PARSE_PARAMETERS_END();
-
-    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
-        RETURN_THROWS();
-    }
-
-    mdparser_do_render_string(
-        mdparser_default_cmark_options, mdparser_default_extension_mask,
-        mdparser_default_postprocess_mask,
-        source, cmark_render_html_with_mem, return_value);
-
-    if (EG(exception)) {
-        RETURN_THROWS();
-    }
+    mdparser_static_render_string(INTERNAL_FUNCTION_PARAM_PASSTHRU,
+        mdparser_default_postprocess_mask, cmark_render_html_with_mem);
 }
 
 PHP_METHOD(MdParser_Parser, xml)
 {
-    zend_string *source;
-
-    ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STR(source)
-    ZEND_PARSE_PARAMETERS_END();
-
-    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
-        RETURN_THROWS();
-    }
-
-    mdparser_do_render_string(
-        mdparser_default_cmark_options, mdparser_default_extension_mask, 0,
-        source, mdparser_render_xml_adapter, return_value);
-
-    if (EG(exception)) {
-        RETURN_THROWS();
-    }
+    mdparser_static_render_string(INTERNAL_FUNCTION_PARAM_PASSTHRU,
+        0, mdparser_render_xml_adapter);
 }
 
 PHP_METHOD(MdParser_Parser, ast)
@@ -563,11 +600,16 @@ PHP_METHOD(MdParser_Parser, ast)
         RETURN_THROWS();
     }
 
-    mdparser_do_render_ast(
-        mdparser_default_cmark_options, mdparser_default_extension_mask,
-        source, return_value);
-
-    if (EG(exception)) {
+    cmark_parser *parser = mdparser_build_cmark_parser(
+        mdparser_default_cmark_options, mdparser_default_extension_mask);
+    if (!parser) {
+        zend_throw_exception(mdparser_exception_ce,
+            "mdparser: failed to allocate cmark parser", 0);
         RETURN_THROWS();
     }
+
+    mdparser_do_render_ast(NULL, parser, mdparser_default_cmark_options,
+        source, return_value);
+
+    cmark_parser_free(parser);
 }

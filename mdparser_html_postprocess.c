@@ -64,20 +64,23 @@ static const void *mdparser_memmem(const void *haystack, size_t haystack_len,
  *
  * KNOWN LIMITATION (review CR-003): the byte-fingerprint approach
  * cannot distinguish a Markdown heading from a raw HTML block whose
- * rendered bytes match exactly. Under `unsafe:true, tagfilter:false`,
- * input like `<h1>same</h1>\n\n# same\n` produces two `<h1>same</h1>`
- * substrings; the first (raw HTML) match wins and the real Markdown
- * heading is left without an id. A durable fix needs renderer-level
- * heading-id support so node identity carries into output. Until then,
- * callers in unsafe mode should not rely on heading-id stability when
- * raw HTML headings can collide with real ones. Regression test:
- * tests/030_anchor_unsafe_collision.phpt. */
+ * rendered bytes match exactly. resolve_heading_offsets now skips
+ * over scan_skip_region territory (comments, CDATA, script/style/
+ * title/textarea/iframe/noscript/xmp/noembed/noframes/plaintext
+ * bodies), so fingerprint matches inside those regions cannot hijack
+ * a slug. But under `unsafe:true, tagfilter:false`, input like
+ * `<h1>same</h1>\n\n# same\n` produces two `<h1>same</h1>` substrings
+ * outside any skip region, and the first (raw HTML) match wins. The
+ * real Markdown heading is left without an id. A durable fix needs
+ * renderer-level heading-id support so node identity carries into
+ * output. Until then, callers in unsafe mode should not rely on
+ * heading-id stability when raw HTML headings can collide with real
+ * ones. Regression test: tests/030_anchor_unsafe_collision.phpt. */
 typedef struct {
     char *slug;
     char *rendered;
     size_t rendered_len;
     size_t doc_offset;
-    int level;
 } mdparser_heading_entry;
 
 typedef struct {
@@ -148,6 +151,16 @@ static bool heading_list_slug_taken(mdparser_heading_list *l, const char *slug, 
     return zend_hash_str_exists(l->slug_index, slug, slug_len);
 }
 
+/* HTML5 "ASCII whitespace" per WHATWG § 4.6: U+0009 TAB, U+000A LF,
+ * U+000C FF, U+000D CR, U+0020 SPACE. Used for tag-name delimiters
+ * and close-tag whitespace tolerance; missing U+000C lets a `\f`
+ * before / after a tag fool the scanner into treating the tag as
+ * closed (or unclosed). https://html.spec.whatwg.org/dev/syntax.html */
+static inline bool mdparser_is_html_space(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
 /* Locale-independent ASCII-only case-insensitive byte compare. strncasecmp
  * honours LC_CTYPE; in tr_TR.UTF-8 the dotless/dotted-I rule makes
  * 'I' != 'i'. We only ever compare against the literal HTML tag names
@@ -170,39 +183,95 @@ static int mdparser_ascii_strncasecmp(const char *a, const char *b, size_t n)
 /* GitHub-style slug:
  *   - lowercase ASCII A-Z -> a-z
  *   - keep ASCII alnum, '-', '_'
- *   - keep all bytes >= 0x80 verbatim (UTF-8 letters/digits survive)
+ *   - valid UTF-8 multi-byte sequences (0xC2..0xF4 leads + the right
+ *     number of 0x80..0xBF continuations) pass through verbatim, so
+ *     `id="日本語"` matches GitHub's behavior and modern browsers
+ *     handle it natively.
+ *   - invalid leading bytes (0x80..0xBF lone continuation, 0xC0/0xC1
+ *     overlong, 0xF5..0xFF, or any truncated sequence) are percent-
+ *     encoded (RFC 3986 fragment encoding). Without this, validateUtf8:false
+ *     callers can land malformed UTF-8 in id="..." attributes; browsers
+ *     handle invalid fragments inconsistently.
  *   - replace any whitespace run with one '-'
  *   - drop other ASCII punctuation
  *   - collapse runs of '-', trim trailing '-'
  *
- * Output is heap-allocated via emalloc; caller owns. */
+ * Output is heap-allocated via emalloc; caller owns. Worst-case
+ * expansion is 3x for all-invalid-byte input. */
 static char *mdparser_slugify(const char *text, size_t len)
 {
-    char *out = emalloc(len + 1);
+    static const char hex[] = "0123456789abcdef";
+    char *out = emalloc(len * 3 + 1);
     size_t o = 0;
     bool prev_dash = true;
 
-    for (size_t i = 0; i < len; i++) {
+    size_t i = 0;
+    while (i < len) {
         unsigned char c = (unsigned char)text[i];
 
-        if (c >= 0x80) {
-            /* Lowercasing non-ASCII without ICU is unsafe; pass through. */
-            out[o++] = (char)c;
-            prev_dash = false;
+        if (c < 0x80) {
+            if (c >= 'A' && c <= 'Z') {
+                out[o++] = (char)(c + ('a' - 'A'));
+                prev_dash = false;
+            } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+                out[o++] = (char)c;
+                prev_dash = false;
+            } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '-') {
+                if (!prev_dash) {
+                    out[o++] = '-';
+                    prev_dash = true;
+                }
+            }
+            i++;
             continue;
         }
 
-        if (c >= 'A' && c <= 'Z') {
-            out[o++] = (char)(c + ('a' - 'A'));
-            prev_dash = false;
-        } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
-            out[o++] = (char)c;
-            prev_dash = false;
-        } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '-') {
-            if (!prev_dash) {
-                out[o++] = '-';
-                prev_dash = true;
+        /* Multi-byte UTF-8 leading byte. Determine expected length and
+         * verify all bytes against RFC 3629:
+         *   - lead byte in valid class (rejects 0xC0/0xC1, 0xF5..0xFF
+         *     and lone 0x80..0xBF outright);
+         *   - second byte tightened per-lead to reject overlong forms
+         *     (0xE0 + 0x80..0x9F = overlong 3-byte; 0xF0 + 0x80..0x8F
+         *     = overlong 4-byte), UTF-16 surrogates (0xED + 0xA0..0xBF
+         *     encodes U+D800..U+DFFF), and out-of-Unicode codepoints
+         *     (0xF4 + 0x90..0xBF encodes > U+10FFFF);
+         *   - remaining continuation bytes must be 0x80..0xBF.
+         * Anything else is percent-encoded one byte at a time so the
+         * id="..." attribute holds only valid UTF-8 representable as
+         * RFC 3986 fragment bytes. */
+        size_t expect = 0;
+        unsigned char min2 = 0x80, max2 = 0xBF;
+        if (c >= 0xC2 && c <= 0xDF)      expect = 2;
+        else if (c == 0xE0)              { expect = 3; min2 = 0xA0; }
+        else if (c >= 0xE1 && c <= 0xEC) expect = 3;
+        else if (c == 0xED)              { expect = 3; max2 = 0x9F; }
+        else if (c >= 0xEE && c <= 0xEF) expect = 3;
+        else if (c == 0xF0)              { expect = 4; min2 = 0x90; }
+        else if (c >= 0xF1 && c <= 0xF3) expect = 4;
+        else if (c == 0xF4)              { expect = 4; max2 = 0x8F; }
+
+        bool valid = expect != 0 && i + expect <= len;
+        if (valid) {
+            unsigned char b2 = (unsigned char)text[i + 1];
+            if (b2 < min2 || b2 > max2) valid = false;
+            for (size_t k = 2; valid && k < expect; k++) {
+                unsigned char cc = (unsigned char)text[i + k];
+                if (cc < 0x80 || cc > 0xBF) { valid = false; break; }
             }
+        }
+
+        if (valid) {
+            for (size_t k = 0; k < expect; k++) {
+                out[o++] = text[i + k];
+            }
+            prev_dash = false;
+            i += expect;
+        } else {
+            out[o++] = '%';
+            out[o++] = hex[(c >> 4) & 0xF];
+            out[o++] = hex[c & 0xF];
+            prev_dash = false;
+            i++;
         }
     }
 
@@ -249,6 +318,11 @@ static char *mdparser_dedupe_slug(mdparser_heading_list *seen, char *slug)
     return empty;
 }
 
+/* Forward declaration: resolve_heading_offsets uses scan_skip_region
+ * (defined later) to step over comments / CDATA / raw-text element
+ * bodies during the heading-fingerprint search. */
+static size_t scan_skip_region(const char *html, size_t i, size_t html_len);
+
 /* ---------- heading text extraction ---------------------------------- */
 
 /* Append the text content of a heading subtree into `b`. Walks TEXT
@@ -286,16 +360,36 @@ static bool collect_heading_text(cmark_node *node, smart_str *b, int depth)
 
 /* ---------- heading list construction -------------------------------- */
 
+/* Failure reasons for collect_headings / mdparser_html_postprocess.
+ * Distinguishing the AST-depth-cap path from cmark allocation failure
+ * lets the caller emit a precise exception message; the wrapper-side
+ * "depth cap" failure is a documented limit, not an OOM, so callers
+ * trying to recover have different remediations. */
+typedef enum {
+    MDPP_OK = 0,
+    MDPP_DEPTH_CAP,
+    MDPP_RENDER_NULL,
+    MDPP_ITER_NULL,
+    MDPP_ALLOC_FAIL,
+} mdparser_pp_status;
+
 /* Walk the document; for each heading node, capture its slug and a
  * standalone HTML rendering. The standalone rendering is later used
- * as a position fingerprint inside the full document HTML. Returns
- * false on alloc failure or depth overflow. `out` is left in a state
- * the caller can pass to heading_list_free regardless. */
+ * as a position fingerprint inside the full document HTML. Sets
+ * *status_out to the specific failure reason on a non-OK return.
+ * `out` is left in a state the caller can pass to heading_list_free
+ * regardless. */
 static bool collect_headings(cmark_node *document, int cmark_options,
-    cmark_llist *extensions, cmark_mem *mem, mdparser_heading_list *out)
+    cmark_llist *extensions, cmark_mem *mem, mdparser_heading_list *out,
+    mdparser_pp_status *status_out)
 {
+    *status_out = MDPP_OK;
+
     cmark_iter *iter = cmark_iter_new(document);
-    if (!iter) return false;
+    if (!iter) {
+        *status_out = MDPP_ITER_NULL;
+        return false;
+    }
 
     cmark_event_type ev;
     while ((ev = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
@@ -307,6 +401,7 @@ static bool collect_headings(cmark_node *document, int cmark_options,
         if (!collect_heading_text(cur, &tb, 0)) {
             smart_str_free(&tb);
             cmark_iter_free(iter);
+            *status_out = MDPP_DEPTH_CAP;
             return false;
         }
 
@@ -322,6 +417,7 @@ static bool collect_headings(cmark_node *document, int cmark_options,
         if (!rendered) {
             efree(slug);
             cmark_iter_free(iter);
+            *status_out = MDPP_RENDER_NULL;
             return false;
         }
 
@@ -330,12 +426,12 @@ static bool collect_headings(cmark_node *document, int cmark_options,
             .rendered = rendered,
             .rendered_len = strlen(rendered),
             .doc_offset = SIZE_MAX,
-            .level = cmark_node_get_heading_level(cur),
         };
         if (!heading_list_push(out, e)) {
             mem->free(rendered);
             efree(slug);
             cmark_iter_free(iter);
+            *status_out = MDPP_ALLOC_FAIL;
             return false;
         }
         /* Record only after the push succeeds so a failed push doesn't
@@ -348,65 +444,128 @@ static bool collect_headings(cmark_node *document, int cmark_options,
 }
 
 /* Resolve each heading entry's doc_offset by sequential memmem in the
- * full document HTML. Each search starts past the prior match to keep
- * source order. Entries whose rendered bytes can't be located keep
- * doc_offset=SIZE_MAX and are silently skipped at apply time; that
- * happens for headings whose body contains state-dependent renderer
- * output (e.g. footnote references inside a heading: the standalone
- * footnote_ix is 0 but the in-document index is whatever counter cmark
- * had reached at that point). */
+ * full document HTML, skipping over scan_skip_region territory so a
+ * fingerprint match inside an HTML comment, CDATA, script/style/title/
+ * textarea/iframe/etc. body cannot hijack the slug intended for a real
+ * Markdown heading. Each search starts past the prior match to keep
+ * source order. Entries whose rendered bytes can't be located outside
+ * any skip region keep doc_offset=SIZE_MAX and are silently skipped at
+ * apply time; that happens for headings whose body contains state-
+ * dependent renderer output (e.g. footnote references inside a
+ * heading: the standalone footnote_ix is 0 but the in-document index
+ * is whatever counter cmark had reached at that point). */
 static void resolve_heading_offsets(const char *html, size_t html_len,
     mdparser_heading_list *headings)
 {
     size_t cursor = 0;
-    for (size_t i = 0; i < headings->count; i++) {
-        mdparser_heading_entry *e = &headings->items[i];
-        if (cursor >= html_len) break;
-        const char *hit = memmem(html + cursor, html_len - cursor,
-            e->rendered, e->rendered_len);
-        if (!hit) continue;
-        e->doc_offset = (size_t)(hit - html);
-        cursor = e->doc_offset + e->rendered_len;
+    for (size_t hi = 0; hi < headings->count; hi++) {
+        mdparser_heading_entry *e = &headings->items[hi];
+        while (cursor < html_len) {
+            /* If the cursor sits at the start of a skip region, jump
+             * over it. */
+            if (html[cursor] == '<') {
+                size_t skip = scan_skip_region(html, cursor, html_len);
+                if (skip != SIZE_MAX) {
+                    cursor = skip;
+                    continue;
+                }
+            }
+
+            /* Find the end of the current "free" segment: the byte
+             * just before the next skip region (or html_len). */
+            size_t seg_end = html_len;
+            for (size_t j = cursor; j < html_len; j++) {
+                if (html[j] != '<') continue;
+                size_t skip = scan_skip_region(html, j, html_len);
+                if (skip != SIZE_MAX) {
+                    seg_end = j;
+                    break;
+                }
+            }
+
+            if (e->rendered_len <= seg_end - cursor) {
+                const char *hit = memmem(html + cursor, seg_end - cursor,
+                    e->rendered, e->rendered_len);
+                if (hit) {
+                    e->doc_offset = (size_t)(hit - html);
+                    cursor = e->doc_offset + e->rendered_len;
+                    goto next_heading;
+                }
+            }
+            cursor = seg_end;
+        }
+next_heading:
+        ;
     }
 }
 
 /* ---------- HTML transformation -------------------------------------- */
 
-/* Find the next match of `<a href="`. cmark always emits this exact
- * sequence (double quotes, no leading whitespace) for every link tag
- * it generates, so a literal-byte scan is precise. */
-static size_t find_anchor_open(const char *html, size_t from, size_t html_len)
+/* If `i` starts a region whose body must be emitted verbatim (raw-text
+ * or escapable-raw-text element body, HTML comment, or CDATA section),
+ * return the byte offset just past the region's terminator. Otherwise
+ * return SIZE_MAX.
+ *
+ * The set of skipped regions matches HTML5 § 13.2.5.4 raw-text and
+ * escapable-raw-text content models (script, style, title, textarea,
+ * iframe, noscript, xmp, noembed, noframes — plaintext has no end tag
+ * and is treated as extending to EOF) plus comments (`<!-- … -->`)
+ * and CDATA (`<![CDATA[ … ]]>`). Without these, attacker-controlled
+ * bytes inside any of these regions (reachable under `unsafe:true,
+ * tagfilter:false`) match the postprocessor's `<a href="` and
+ * `<hN>...</hN>` patterns and either splice attribute injections or
+ * hijack heading-id placement.
+ *
+ * Tag-name match is case-insensitive (raw HTML may be written in any
+ * case). For elements with end tags, the region runs from `<tag…>` to
+ * the first `</tag>`; an unmatched open extends to end-of-input. */
+static size_t scan_skip_region(const char *html, size_t i, size_t html_len)
 {
-    static const char needle[] = "<a href=\"";
-    static const size_t nlen = sizeof(needle) - 1;
-    if (from + nlen > html_len) return SIZE_MAX;
-    const char *hit = memmem(html + from, html_len - from, needle, nlen);
-    return hit ? (size_t)(hit - html) : SIZE_MAX;
-}
+    if (i >= html_len || html[i] != '<') return SIZE_MAX;
 
-/* If `i` is at the start of a raw-text element (`<script>` or
- * `<style>`), return the byte offset just past its matching close
- * tag. Otherwise return SIZE_MAX. Tag-name match is case-insensitive
- * to handle raw HTML written in any case under unsafe:true. The HTML5
- * spec defines these elements as containing raw text that cannot
- * include their own close tag, so the first `</script>` / `</style>`
- * scanning forward terminates the element; an unmatched open extends
- * to end-of-input. The whole skipped region is later emitted verbatim
- * so the postprocess does not splice attributes into JavaScript or
- * CSS that happens to contain the literal substring `<a href="`. */
-static size_t scan_raw_text_element(const char *html, size_t i, size_t html_len)
-{
+    /* HTML comment: <!-- ... -->. Per HTML5 the comment body cannot
+     * contain `--` itself, but lenient/legacy parsers accept it; we
+     * just skip to the first `-->`. An unterminated comment extends
+     * to EOF. */
+    if (i + 4 <= html_len && memcmp(html + i, "<!--", 4) == 0) {
+        for (size_t j = i + 4; j + 3 <= html_len; j++) {
+            if (html[j] == '-' && html[j + 1] == '-' && html[j + 2] == '>') {
+                return j + 3;
+            }
+        }
+        return html_len;
+    }
+
+    /* CDATA section: <![CDATA[ ... ]]>. Reachable under unsafe:true
+     * + tagfilter:false from authored XHTML/SVG content. */
+    if (i + 9 <= html_len && memcmp(html + i, "<![CDATA[", 9) == 0) {
+        for (size_t j = i + 9; j + 3 <= html_len; j++) {
+            if (html[j] == ']' && html[j + 1] == ']' && html[j + 2] == '>') {
+                return j + 3;
+            }
+        }
+        return html_len;
+    }
+
+    /* Raw-text / escapable-raw-text elements. Each entry is just the
+     * tag name; we build the close-tag match in-flight so we can
+     * tolerate whitespace before the `>` (HTML5 § 13.2.5.10 allows
+     * `</title >`, `</script\n>`, etc.). plaintext has no end tag and
+     * is handled as a special case below. */
     static const struct {
         const char *name;
         size_t name_len;
-        const char *close;
-        size_t close_len;
     } tags[] = {
-        { "script", 6, "</script>", 9 },
-        { "style",  5, "</style>",  8 },
+        { "script",   6 },
+        { "style",    5 },
+        { "title",    5 },
+        { "textarea", 8 },
+        { "iframe",   6 },
+        { "noscript", 8 },
+        { "xmp",      3 },
+        { "noembed",  7 },
+        { "noframes", 8 },
     };
-
-    if (i >= html_len || html[i] != '<') return SIZE_MAX;
 
     for (size_t t = 0; t < sizeof(tags) / sizeof(tags[0]); t++) {
         size_t end = i + 1 + tags[t].name_len;
@@ -414,40 +573,139 @@ static size_t scan_raw_text_element(const char *html, size_t i, size_t html_len)
         if (mdparser_ascii_strncasecmp(html + i + 1, tags[t].name, tags[t].name_len) != 0) continue;
 
         char delim = html[end];
-        if (delim != '>' && delim != ' ' && delim != '\t' &&
-            delim != '\n' && delim != '\r' && delim != '/') continue;
+        if (delim != '>' && delim != '/' && !mdparser_is_html_space(delim)) continue;
 
-        /* Locate the close tag. memmem is case-sensitive so we walk
-         * manually with strncasecmp on each candidate `<`. */
-        for (size_t j = end; j + tags[t].close_len <= html_len; j++) {
-            if (html[j] == '<' &&
-                mdparser_ascii_strncasecmp(html + j, tags[t].close, tags[t].close_len) == 0)
-            {
-                return j + tags[t].close_len;
+        /* Walk past the opening tag's `>` with quote awareness, so a
+         * `</title>`-shaped substring inside an attribute value of
+         * the OPENING tag does not prematurely terminate the skip
+         * region. e.g. `<title alt="</title>">real</title>` should
+         * skip up to the second `</title>`. */
+        size_t body_start = end;
+        {
+            char q = 0;
+            while (body_start < html_len) {
+                char c = html[body_start];
+                if (q) {
+                    if (c == q) q = 0;
+                    body_start++;
+                    continue;
+                }
+                if (c == '"' || c == '\'') { q = c; body_start++; continue; }
+                if (c == '>') { body_start++; break; }
+                body_start++;
+            }
+            if (body_start >= html_len) return html_len;
+        }
+
+        /* Scan for `</tagname` followed by zero or more whitespace
+         * (space/tab/CR/LF) then `>`. Tag-name match is ASCII case-
+         * insensitive. Anything else is just text inside the body. */
+        for (size_t j = body_start; j + tags[t].name_len + 3 <= html_len; j++) {
+            if (html[j] != '<' || html[j + 1] != '/') continue;
+            if (mdparser_ascii_strncasecmp(html + j + 2, tags[t].name, tags[t].name_len) != 0) continue;
+            size_t k = j + 2 + tags[t].name_len;
+            while (k < html_len) {
+                char c = html[k];
+                if (c == '>') return k + 1;
+                if (mdparser_is_html_space(c)) { k++; continue; }
+                break;
+            }
+            /* Saw `</tagname` but no terminating `>` (or stray
+             * non-whitespace). Keep scanning for another `</tagname`
+             * candidate. */
+        }
+        return html_len;
+    }
+
+    /* <plaintext>: opens an everything-is-text region that has no
+     * close tag and runs to EOF. Match permissively (any delimiter
+     * after the tag name). */
+    {
+        static const char name[] = "plaintext";
+        static const size_t name_len = sizeof(name) - 1;
+        size_t end = i + 1 + name_len;
+        if (end < html_len &&
+            mdparser_ascii_strncasecmp(html + i + 1, name, name_len) == 0)
+        {
+            char delim = html[end];
+            if (delim == '>' || delim == '/' || mdparser_is_html_space(delim)) {
+                return html_len;
             }
         }
-        return html_len; /* unmatched open: skip the rest */
     }
+
     return SIZE_MAX;
+}
+
+/* Given `i` at a `<`, advance to the byte just past the matching `>`
+ * of the open tag, treating bytes inside single- or double-quoted
+ * attribute values as literal (so `>` inside an attribute does not
+ * terminate the tag).
+ *
+ * Used by apply_transforms to skip past any tag whose interior is
+ * not a postprocess injection target. Without this, raw HTML like
+ * `<div title='<a href="x">y</a>'>` (reachable under `unsafe:true`)
+ * would have the inner `<a href="` matched and rewritten, splicing
+ * attributes out of the surrounding `<div>`.
+ *
+ * Returns SIZE_MAX if `i` does not start a tag (i.e. the next byte
+ * after `<` is not in the tag-name / `!` / `?` / `/` start set), so
+ * the caller can advance by one. Returns html_len on an unterminated
+ * tag (handed to the caller to stop the walk). */
+static size_t scan_tag_close(const char *html, size_t i, size_t html_len)
+{
+    if (i >= html_len || html[i] != '<') return SIZE_MAX;
+    if (i + 1 >= html_len) return SIZE_MAX;
+    char c2 = html[i + 1];
+    bool tag_start = (c2 >= 'a' && c2 <= 'z') ||
+                     (c2 >= 'A' && c2 <= 'Z') ||
+                     c2 == '/' || c2 == '!' || c2 == '?';
+    if (!tag_start) return SIZE_MAX;
+
+    char quote = 0;
+    for (size_t j = i + 1; j < html_len; j++) {
+        char c = html[j];
+        if (quote) {
+            if (c == quote) quote = 0;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            quote = c;
+            continue;
+        }
+        if (c == '>') {
+            return j + 1;
+        }
+    }
+    return html_len;
 }
 
 /* Apply both postprocess transforms in one linear pass.
  *
  * The hot loop tracks a run of bytes (`run_start..i`) that are emitted
  * verbatim. memchr jumps from `<` to `<` so non-tag bytes never enter
- * the per-byte path. At each `<` the loop tries (in order): raw-text
- * skip, heading injection, nofollow injection. A match flushes the
- * pending run, emits the rewritten bytes, and reopens a new run; a
- * miss advances `i` by one and continues.
+ * the per-byte path. At each `<` we (in order):
+ *   1. Skip past raw-text / escapable-raw-text element bodies, HTML
+ *      comments, and CDATA via scan_skip_region.
+ *   2. If the position matches a heading's doc_offset, inject the id.
+ *   3. If the bytes are `<a href="` and not a fragment, inject rel.
+ *   4. Otherwise advance past the entire tag (handling quoted
+ *      attribute values) so subsequent `<` searches do not land
+ *      inside an attribute value -- protects against attacker-
+ *      controlled raw HTML like `<div title='<a href="x">'>` where
+ *      the inner `<a href="` would otherwise be rewritten and splice
+ *      attributes out of the outer tag.
  *
  * Heading anchor positions are pre-computed in
- * `headings->items[k].doc_offset`. Nofollow positions are the literal
- * `<a href="` byte sequence located via memmem. */
+ * `headings->items[k].doc_offset` (resolve_heading_offsets, which
+ * also skips regions). */
 static zend_string *apply_transforms(const char *html, size_t html_len,
     mdparser_heading_list *headings, int pp_mask)
 {
     static const char rel_inject[] = "rel=\"nofollow noopener noreferrer\" ";
     static const size_t rel_inject_len = sizeof(rel_inject) - 1;
+    static const char anchor_open[] = "<a href=\"";
+    static const size_t anchor_open_len = sizeof(anchor_open) - 1;
 
     smart_str out = {0};
     smart_str_alloc(&out, html_len + html_len / 4 + 64, 0);
@@ -465,26 +723,22 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
         }
     }
 
-    size_t next_anchor = want_nofollow ? find_anchor_open(html, 0, html_len) : SIZE_MAX;
-
     while (i < html_len) {
         const char *next_lt = memchr(html + i, '<', html_len - i);
         if (!next_lt) break;
         i = (size_t)(next_lt - html);
 
-        /* Raw-text elements (<script>, <style>) are emitted verbatim;
-         * advance past the matching close without flushing so the
-         * region stays inside the current run. */
-        size_t raw_skip = scan_raw_text_element(html, i, html_len);
+        /* Skip-region: script/style/title/textarea/iframe/noscript/
+         * xmp/noembed/noframes/plaintext bodies, HTML comments, and
+         * CDATA. Their interior is emitted verbatim and is not a
+         * valid injection site under any pp_mask. */
+        size_t raw_skip = scan_skip_region(html, i, html_len);
         if (raw_skip != SIZE_MAX) {
             while (want_anchors && heading_ix < headings->count &&
                    headings->items[heading_ix].doc_offset != SIZE_MAX &&
                    headings->items[heading_ix].doc_offset < raw_skip)
             {
                 heading_ix++;
-            }
-            if (want_nofollow && next_anchor < raw_skip) {
-                next_anchor = find_anchor_open(html, raw_skip, html_len);
             }
             i = raw_skip;
             continue;
@@ -503,8 +757,8 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
                 smart_str_appendl(&out, html + run_start, i - run_start);
             }
             smart_str_appendl(&out, html + i, 3);
-            size_t s_len = strlen(e->slug);
-            if (s_len) {
+            if (e->slug && e->slug[0]) {
+                size_t s_len = strlen(e->slug);
                 smart_str_appendl(&out, " id=\"", 5);
                 smart_str_appendl(&out, e->slug, s_len);
                 smart_str_appendc(&out, '"');
@@ -518,11 +772,14 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
             continue;
         }
 
-        if (want_nofollow && i == next_anchor) {
+        if (want_nofollow && i + anchor_open_len <= html_len &&
+            memcmp(html + i, anchor_open, anchor_open_len) == 0)
+        {
             /* Fragment anchors (href="#...") get no rel injection:
              * footnote refs and backrefs jump within the same
              * document, where nofollow is meaningless. */
-            bool is_fragment = (i + 9 < html_len && html[i + 9] == '#');
+            bool is_fragment = (i + anchor_open_len < html_len &&
+                                html[i + anchor_open_len] == '#');
             if (!is_fragment) {
                 if (i > run_start) {
                     smart_str_appendl(&out, html + run_start, i - run_start);
@@ -531,13 +788,21 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
                 smart_str_appendl(&out, rel_inject, rel_inject_len);
                 i += 3;
                 run_start = i;
-                next_anchor = find_anchor_open(html, i, html_len);
                 continue;
             }
-            next_anchor = find_anchor_open(html, i + 9, html_len);
         }
 
-        i++;
+        /* Advance past the rest of this tag, treating quoted attribute
+         * values as literal so a `<` (or `>`) inside an attribute does
+         * not pull the next iteration into mid-attribute bytes. */
+        size_t tag_end = scan_tag_close(html, i, html_len);
+        if (tag_end == SIZE_MAX) {
+            i++;
+        } else if (tag_end >= html_len) {
+            break;
+        } else {
+            i = tag_end;
+        }
     }
 
     if (html_len > run_start) {
@@ -550,25 +815,33 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
 
 /* ---------- public entry point --------------------------------------- */
 
-zend_string *mdparser_html_postprocess(
+/* Failure-reason out-parameter variant. status_out is set to MDPP_OK on
+ * success, or to one of the discriminated failure reasons. The legacy
+ * variant (no status_out) is the public ABI; callers that want a
+ * specific exception message use this variant directly. */
+zend_string *mdparser_html_postprocess_ex(
     const char *html_in, size_t html_len,
     cmark_node *document, int cmark_options,
-    cmark_llist *extensions, int pp_mask)
+    cmark_llist *extensions, int pp_mask,
+    int *status_out)
 {
-    if (pp_mask == 0) {
-        return zend_string_init(html_in, html_len, 0);
-    }
+    /* All call sites short-circuit on pp_mask==0 before invoking us;
+     * leaving the trivial-copy branch in would mask caller bugs. */
+    ZEND_ASSERT(pp_mask != 0);
 
+    mdparser_pp_status status = MDPP_OK;
     mdparser_heading_list headings = {0};
 
     if (pp_mask & MDPARSER_PP_HEADING_ANCHORS) {
         if (!document) {
             /* Caller bug: anchors requested without an AST. */
+            *status_out = (int)MDPP_ALLOC_FAIL;
             return NULL;
         }
         if (!collect_headings(document, cmark_options, extensions,
-                              &mdparser_zend_mem, &headings)) {
+                              &mdparser_zend_mem, &headings, &status)) {
             heading_list_free(&headings, &mdparser_zend_mem);
+            *status_out = (int)status;
             return NULL;
         }
         resolve_heading_offsets(html_in, html_len, &headings);
@@ -576,5 +849,33 @@ zend_string *mdparser_html_postprocess(
 
     zend_string *out = apply_transforms(html_in, html_len, &headings, pp_mask);
     heading_list_free(&headings, &mdparser_zend_mem);
+    *status_out = (int)MDPP_OK;
     return out;
+}
+
+zend_string *mdparser_html_postprocess(
+    const char *html_in, size_t html_len,
+    cmark_node *document, int cmark_options,
+    cmark_llist *extensions, int pp_mask)
+{
+    int status;
+    return mdparser_html_postprocess_ex(html_in, html_len, document,
+        cmark_options, extensions, pp_mask, &status);
+}
+
+const char *mdparser_pp_status_message(int status)
+{
+    switch ((mdparser_pp_status)status) {
+        case MDPP_OK:
+            return NULL;
+        case MDPP_DEPTH_CAP:
+            return "mdparser: heading text exceeds maximum AST nesting depth";
+        case MDPP_RENDER_NULL:
+            return "mdparser: cmark heading render returned null during postprocess";
+        case MDPP_ITER_NULL:
+            return "mdparser: cmark_iter_new returned null during postprocess";
+        case MDPP_ALLOC_FAIL:
+        default:
+            return "mdparser: HTML postprocess allocation failure";
+    }
 }

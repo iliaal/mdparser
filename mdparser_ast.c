@@ -58,6 +58,46 @@ static zend_string *md_str_start_column;
 static zend_string *md_str_end_line;
 static zend_string *md_str_end_column;
 
+/* Static value strings used as the "type" / list_type / list_delim /
+ * table_align fields. The set is closed (~25 names); interning at
+ * MINIT eliminates ~1 emalloc + memcpy per AST node on toAst. */
+static zend_string *md_v_document;
+static zend_string *md_v_block_quote;
+static zend_string *md_v_list;
+static zend_string *md_v_item;
+static zend_string *md_v_code_block;
+static zend_string *md_v_html_block;
+static zend_string *md_v_custom_block;
+static zend_string *md_v_paragraph;
+static zend_string *md_v_heading;
+static zend_string *md_v_thematic_break;
+static zend_string *md_v_text;
+static zend_string *md_v_softbreak;
+static zend_string *md_v_linebreak;
+static zend_string *md_v_code;
+static zend_string *md_v_html_inline;
+static zend_string *md_v_custom_inline;
+static zend_string *md_v_emph;
+static zend_string *md_v_strong;
+static zend_string *md_v_link;
+static zend_string *md_v_image;
+static zend_string *md_v_footnote_reference;
+static zend_string *md_v_footnote_definition;
+static zend_string *md_v_table;
+static zend_string *md_v_table_row;
+static zend_string *md_v_table_cell;
+static zend_string *md_v_strikethrough;
+static zend_string *md_v_tasklist;
+static zend_string *md_v_unknown;
+static zend_string *md_v_bullet;
+static zend_string *md_v_ordered;
+static zend_string *md_v_period;
+static zend_string *md_v_paren;
+static zend_string *md_v_left;
+static zend_string *md_v_center;
+static zend_string *md_v_right;
+static zend_string *md_v_none;
+
 void mdparser_init_ast_strings(void)
 {
     md_str_type         = zend_string_init_interned("type",         sizeof("type") - 1,         1);
@@ -78,6 +118,84 @@ void mdparser_init_ast_strings(void)
     md_str_start_column = zend_string_init_interned("start_column", sizeof("start_column") - 1, 1);
     md_str_end_line     = zend_string_init_interned("end_line",     sizeof("end_line") - 1,     1);
     md_str_end_column   = zend_string_init_interned("end_column",   sizeof("end_column") - 1,   1);
+
+#define INTERN_V(name, lit) name = zend_string_init_interned(lit, sizeof(lit) - 1, 1)
+    INTERN_V(md_v_document,             "document");
+    INTERN_V(md_v_block_quote,          "block_quote");
+    INTERN_V(md_v_list,                 "list");
+    INTERN_V(md_v_item,                 "item");
+    INTERN_V(md_v_code_block,           "code_block");
+    INTERN_V(md_v_html_block,           "html_block");
+    INTERN_V(md_v_custom_block,         "custom_block");
+    INTERN_V(md_v_paragraph,            "paragraph");
+    INTERN_V(md_v_heading,              "heading");
+    INTERN_V(md_v_thematic_break,       "thematic_break");
+    INTERN_V(md_v_text,                 "text");
+    INTERN_V(md_v_softbreak,            "softbreak");
+    INTERN_V(md_v_linebreak,            "linebreak");
+    INTERN_V(md_v_code,                 "code");
+    INTERN_V(md_v_html_inline,          "html_inline");
+    INTERN_V(md_v_custom_inline,        "custom_inline");
+    INTERN_V(md_v_emph,                 "emph");
+    INTERN_V(md_v_strong,               "strong");
+    INTERN_V(md_v_link,                 "link");
+    INTERN_V(md_v_image,                "image");
+    INTERN_V(md_v_footnote_reference,   "footnote_reference");
+    INTERN_V(md_v_footnote_definition,  "footnote_definition");
+    INTERN_V(md_v_table,                "table");
+    INTERN_V(md_v_table_row,            "table_row");
+    INTERN_V(md_v_table_cell,           "table_cell");
+    INTERN_V(md_v_strikethrough,        "strikethrough");
+    INTERN_V(md_v_tasklist,             "tasklist");
+    INTERN_V(md_v_unknown,              "<unknown>");
+    INTERN_V(md_v_bullet,               "bullet");
+    INTERN_V(md_v_ordered,              "ordered");
+    INTERN_V(md_v_period,               "period");
+    INTERN_V(md_v_paren,                "paren");
+    INTERN_V(md_v_left,                 "left");
+    INTERN_V(md_v_center,               "center");
+    INTERN_V(md_v_right,                "right");
+    INTERN_V(md_v_none,                 "none");
+#undef INTERN_V
+}
+
+/* Map a cmark node-type string (with footnote-name overrides) to its
+ * pre-interned zend_string. Returns NULL for any string outside the
+ * pre-interned set so the caller can fall back to a per-call alloc;
+ * defensive for future cmark releases that introduce new types. */
+static zend_string *mdparser_type_interned(const char *s, cmark_node_type ntype)
+{
+    if (ntype == CMARK_NODE_FOOTNOTE_REFERENCE) return md_v_footnote_reference;
+    if (ntype == CMARK_NODE_FOOTNOTE_DEFINITION) return md_v_footnote_definition;
+    if (!s) return md_v_unknown;
+    /* Ordered roughly by frequency for the common documents. */
+    if (strcmp(s, "text") == 0)                return md_v_text;
+    if (strcmp(s, "paragraph") == 0)           return md_v_paragraph;
+    if (strcmp(s, "softbreak") == 0)           return md_v_softbreak;
+    if (strcmp(s, "code") == 0)                return md_v_code;
+    if (strcmp(s, "emph") == 0)                return md_v_emph;
+    if (strcmp(s, "strong") == 0)              return md_v_strong;
+    if (strcmp(s, "link") == 0)                return md_v_link;
+    if (strcmp(s, "image") == 0)               return md_v_image;
+    if (strcmp(s, "linebreak") == 0)           return md_v_linebreak;
+    if (strcmp(s, "heading") == 0)             return md_v_heading;
+    if (strcmp(s, "list") == 0)                return md_v_list;
+    if (strcmp(s, "item") == 0)                return md_v_item;
+    if (strcmp(s, "code_block") == 0)          return md_v_code_block;
+    if (strcmp(s, "html_block") == 0)          return md_v_html_block;
+    if (strcmp(s, "html_inline") == 0)         return md_v_html_inline;
+    if (strcmp(s, "block_quote") == 0)         return md_v_block_quote;
+    if (strcmp(s, "thematic_break") == 0)      return md_v_thematic_break;
+    if (strcmp(s, "document") == 0)            return md_v_document;
+    if (strcmp(s, "table") == 0)               return md_v_table;
+    if (strcmp(s, "table_row") == 0)           return md_v_table_row;
+    if (strcmp(s, "table_cell") == 0)          return md_v_table_cell;
+    if (strcmp(s, "strikethrough") == 0)       return md_v_strikethrough;
+    if (strcmp(s, "tasklist") == 0)            return md_v_tasklist;
+    if (strcmp(s, "custom_block") == 0)        return md_v_custom_block;
+    if (strcmp(s, "custom_inline") == 0)       return md_v_custom_inline;
+    if (strcmp(s, "<unknown>") == 0)           return md_v_unknown;
+    return NULL;
 }
 
 static void mdparser_node_to_array(cmark_node *node, int cmark_options, int depth, zval *out);
@@ -91,6 +209,17 @@ static inline void md_add_string(zval *arr, zend_string *key, const char *value)
     } else {
         ZVAL_EMPTY_STRING(&tmp);
     }
+    zend_hash_add_new(Z_ARRVAL_P(arr), key, &tmp);
+}
+
+/* Insert a pre-interned value string into the array. The interned
+ * string is permanent (engine-owned) so we copy the pointer into the
+ * zval without bumping the refcount; ZVAL_INTERNED_STR sets the right
+ * type flags. */
+static inline void md_add_interned(zval *arr, zend_string *key, zend_string *value)
+{
+    zval tmp;
+    ZVAL_INTERNED_STR(&tmp, value);
     zend_hash_add_new(Z_ARRVAL_P(arr), key, &tmp);
 }
 
@@ -142,31 +271,31 @@ static void mdparser_add_children(cmark_node *parent, int cmark_options, int dep
     md_add_zval(parent_arr, md_str_children, &children);
 }
 
-static const char *mdparser_list_type_string(cmark_list_type t)
+static zend_string *mdparser_list_type_interned(cmark_list_type t)
 {
     switch (t) {
-        case CMARK_BULLET_LIST:  return "bullet";
-        case CMARK_ORDERED_LIST: return "ordered";
-        default:                 return "none";
+        case CMARK_BULLET_LIST:  return md_v_bullet;
+        case CMARK_ORDERED_LIST: return md_v_ordered;
+        default:                 return md_v_none;
     }
 }
 
-static const char *mdparser_list_delim_string(cmark_delim_type d)
+static zend_string *mdparser_list_delim_interned(cmark_delim_type d)
 {
     switch (d) {
-        case CMARK_PERIOD_DELIM: return "period";
-        case CMARK_PAREN_DELIM:  return "paren";
-        default:                 return "none";
+        case CMARK_PERIOD_DELIM: return md_v_period;
+        case CMARK_PAREN_DELIM:  return md_v_paren;
+        default:                 return md_v_none;
     }
 }
 
-static const char *mdparser_table_align_string(uint8_t align)
+static zend_string *mdparser_table_align_interned(uint8_t align)
 {
     switch (align) {
-        case 'l': return "left";
-        case 'c': return "center";
-        case 'r': return "right";
-        default:  return "none";
+        case 'l': return md_v_left;
+        case 'c': return md_v_center;
+        case 'r': return md_v_right;
+        default:  return md_v_none;
     }
 }
 
@@ -191,8 +320,9 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
     array_init_size(out, 16);
 
     /* cmark-gfm's get_type_string switch does not cover footnote node
-     * types and returns "<unknown>" for them. Override locally so AST
-     * consumers get stable, documented names. */
+     * types and returns "<unknown>" for them. mdparser_type_interned
+     * applies the override and returns a permanent interned string;
+     * fallback to per-call allocation for unrecognized types. */
     const char *type_string = cmark_node_get_type_string(node);
     cmark_node_type ntype = cmark_node_get_type(node);
     if (ntype == CMARK_NODE_FOOTNOTE_REFERENCE) {
@@ -200,7 +330,12 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
     } else if (ntype == CMARK_NODE_FOOTNOTE_DEFINITION) {
         type_string = "footnote_definition";
     }
-    md_add_string(out, md_str_type, type_string);
+    zend_string *type_interned = mdparser_type_interned(type_string, ntype);
+    if (type_interned) {
+        md_add_interned(out, md_str_type, type_interned);
+    } else {
+        md_add_string(out, md_str_type, type_string);
+    }
 
     if (cmark_options & CMARK_OPT_SOURCEPOS) {
         mdparser_add_sourcepos(node, out);
@@ -218,8 +353,10 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
             zval alignments_arr;
             array_init_size(&alignments_arr, n_columns);
             for (uint16_t i = 0; i < n_columns; i++) {
-                add_next_index_string(&alignments_arr,
-                    mdparser_table_align_string(alignments ? alignments[i] : 0));
+                zval av;
+                ZVAL_INTERNED_STR(&av,
+                    mdparser_table_align_interned(alignments ? alignments[i] : 0));
+                zend_hash_next_index_insert_new(Z_ARRVAL(alignments_arr), &av);
             }
             md_add_zval(out, md_str_alignments, &alignments_arr);
         } else if (strcmp(type_string, "table_row") == 0) {
@@ -253,12 +390,12 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
             break;
 
         case CMARK_NODE_LIST:
-            md_add_string(out, md_str_list_type,
-                mdparser_list_type_string(cmark_node_get_list_type(node)));
+            md_add_interned(out, md_str_list_type,
+                mdparser_list_type_interned(cmark_node_get_list_type(node)));
             md_add_long(out, md_str_list_start, cmark_node_get_list_start(node));
             md_add_bool(out, md_str_list_tight, cmark_node_get_list_tight(node));
-            md_add_string(out, md_str_list_delim,
-                mdparser_list_delim_string(cmark_node_get_list_delim(node)));
+            md_add_interned(out, md_str_list_delim,
+                mdparser_list_delim_interned(cmark_node_get_list_delim(node)));
             mdparser_add_children(node, cmark_options, depth, out);
             break;
 

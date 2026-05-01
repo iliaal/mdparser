@@ -51,9 +51,10 @@ static void *mdparser_zend_realloc(void *ptr, size_t size)
 
 static void mdparser_zend_free(void *ptr)
 {
-    if (ptr) {
-        efree(ptr);
-    }
+    /* efree handles NULL safely in modern Zend MM (zend_mm_free_heap
+     * page-offset check; verified against php-src). cmark's free
+     * callback contract also says NULL is never passed. No guard. */
+    efree(ptr);
 }
 
 cmark_mem mdparser_zend_mem = {
@@ -109,6 +110,12 @@ PHP_MINIT_FUNCTION(mdparser)
 PHP_MSHUTDOWN_FUNCTION(mdparser)
 {
     cmark_release_plugins();
+    /* cmark_release_plugins frees the syntax_extension structs the
+     * cached pointers reference. Zero the cache so a hypothetical
+     * re-MINIT (embedded SAPI / test harness) starts clean instead of
+     * dereferencing freed memory before mdparser_resolve_extensions
+     * reseats the array. */
+    memset(mdparser_cached_extensions, 0, sizeof(mdparser_cached_extensions));
     return SUCCESS;
 }
 

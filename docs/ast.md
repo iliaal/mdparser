@@ -12,6 +12,23 @@ tree via its public accessor API (`cmark_node_get_literal`, etc.), so
 there's no string parsing or reflection overhead — it's roughly as fast
 as `toHtml`.
 
+> **Security: the AST is unsanitized.** Link / image `url` fields and
+> `html_block` / `html_inline` `literal` fields are preserved
+> byte-for-byte. `Options::unsafe`, `Options::tagfilter`, and the
+> URL-scheme defenses apply to the rendering paths (`toHtml` /
+> `toXml` / `toInlineHtml`), NOT to `toAst`. If you build HTML out of
+> the AST yourself, you own the sanitization: apply a URL scheme
+> allowlist (`http`, `https`, `mailto`, `tel`, …) before emitting
+> `href`, and run HTML through a sanitizer before emitting raw
+> `html_block` / `html_inline` literal text.
+>
+> Examples of what survives in the AST:
+> - `[click](javascript:alert(1))` → `link` node with
+>   `url => "javascript:alert(1)"`.
+> - `<script>alert(1)</script>` → `html_block` with the literal text.
+> - `<b onclick="x">y</b>` → an `html_inline` carrying the attribute
+>   verbatim.
+
 ## Top-level structure
 
 ```php

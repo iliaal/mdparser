@@ -97,6 +97,14 @@ final class Parser
 
     public function toXml(string $source): string {}
 
+    /**
+     * Returns a structural representation of the markdown source as
+     * a nested array. Link URLs and raw HTML literals are preserved
+     * verbatim -- the `unsafe`, `tagfilter`, and URL-scheme defenses
+     * apply to the rendering paths (`toHtml` / `toXml` / `toInlineHtml`),
+     * NOT to `toAst`. Consumers that emit HTML from the AST must
+     * apply their own URL scheme allowlist and HTML sanitization.
+     */
     public function toAst(string $source): array {}
 
     /**
@@ -108,6 +116,12 @@ final class Parser
      * migrating from those libraries have a drop-in path for
      * rendering short strings (chat messages, table cell contents,
      * user display names) without the surrounding paragraph tags.
+     *
+     * `headingAnchors` is silently a no-op for this method (no headings
+     * are ever emitted in inline mode); `nofollowLinks` still applies.
+     * On empty or whitespace-only input the return value is the empty
+     * string. Literal U+200B (zero-width space) bytes in the source
+     * are stripped as collateral of the per-line sentinel mechanism.
      */
     public function toInlineHtml(string $source): string {}
 

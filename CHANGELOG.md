@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- HTML postprocess no longer splices into raw-HTML attribute
+  values, HTML comments, CDATA, or escapable-raw-text element
+  bodies. Under `unsafe: true, tagfilter: false, nofollowLinks: true`,
+  attacker-authored bytes inside `<title>`, `<textarea>`, `<iframe>`,
+  `<noscript>`, `<xmp>`, `<noembed>`, `<noframes>`, `<plaintext>`,
+  `<!-- … -->`, `<![CDATA[ … ]]>`, or quoted attribute values like
+  `<div title='<a href="x">…'>` previously matched the
+  postprocessor's `<a href="` pattern and rewrote bytes inside
+  those regions, producing malformed HTML that could splice
+  attributes onto the surrounding tag. The skip-region scanner now
+  covers all HTML5 raw-text / escapable-raw-text elements + comments
+  + CDATA, and apply_transforms walks tag-by-tag (with quoted-
+  attribute awareness) so positions inside attribute values are
+  never visited as tag-starts. Same logic applies to the
+  heading-anchor fingerprint search in `resolve_heading_offsets`,
+  closing the comment / CDATA / textarea slug-hijack vector. Pinned
+  in `tests/031_postprocess_attribute_safety.phpt`.
+- Heading slugs now percent-encode invalid UTF-8 byte sequences
+  (lone continuation bytes, overlong leads, truncated multi-byte
+  sequences) instead of letting them land verbatim in `id="…"`.
+  Valid UTF-8 multi-byte sequences (e.g. `日本語`) still pass
+  through. Reachable when callers turn off `validateUtf8`.
+- `Parser::toInlineHtml()` no longer pre-allocates `4 * src_len + 3`
+  for the normalized scratch buffer. Newline-heavy input well below
+  the documented 256 MB cap previously fataled on the scratch
+  allocation under tight `memory_limit` (40 MB of `\n` allocated
+  ~168 MB even though the normalized buffer was empty). The scratch
+  buffer now grows on demand via `smart_str` and tracks the actual
+  normalized size. Pinned in
+  `tests/037_toinlinehtml_memory_limit.phpt`.
+- Windows release workflow pins `php/php-windows-builder/*`
+  references to a commit SHA instead of the mutable `@v1` tag, so
+  a moved or compromised tag cannot push DLLs into a release with
+  `contents: write`.
+
+### Changed
+
+- `Parser` now caches a single cmark_parser per instance and reuses
+  it across `toHtml` / `toXml` / `toAst` / `toInlineHtml` calls.
+  `cmark_parser_finish` resets the parser internally on every
+  successful render, so the cached parser holds no state from prior
+  input -- no link reference definitions, no inline subject
+  leftovers, no buffered partial input. After a render that did
+  not complete cleanly the parser is rebuilt rather than reused.
+  Pinned in `tests/033_parser_reuse_isolation.phpt`.
+- AST node-type values, list type / delim values, and table
+  alignment values are now permanent interned strings created at
+  MINIT, eliminating ~1 emalloc + memcpy per AST node on `toAst()`.
+- HTML postprocess failure messages distinguish AST depth-cap
+  (heading text exceeded `MDPARSER_MAX_AST_DEPTH`) from cmark
+  iterator/render allocation failure, instead of collapsing all
+  three reasons into the generic "HTML postprocess allocation
+  failure" string.
+
 ### Added
 
 - `MdParser\Options::headingAnchors` — when true, every rendered

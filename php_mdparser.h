@@ -53,6 +53,22 @@ typedef struct _mdparser_parser_obj {
     int cmark_options;
     int extension_mask;
     int postprocess_mask;
+    /* Cached cmark_parser, built lazily on first render. Reused across
+     * subsequent renders because cmark_parser_finish calls
+     * cmark_parser_reset internally before returning, leaving the
+     * parser in a clean state with the same extension list attached.
+     *
+     * cmark_parser_reset is static in vendor/cmark/src/blocks.c so we
+     * cannot call it from outside; we rely on _finish's internal
+     * reset for the happy path, and rebuild from scratch after any
+     * render that did not complete cleanly (parser_dirty flag).
+     *
+     * Isolation invariant: after every render the parser holds no
+     * state from prior input -- no link reference definitions, no
+     * inline subject leftovers, no buffered partial input. Verified
+     * via tests/033_parser_reuse_isolation.phpt. */
+    cmark_parser *cmark_parser;
+    bool parser_dirty;
     zend_object std;
 } mdparser_parser_obj;
 
@@ -68,12 +84,6 @@ static inline mdparser_parser_obj *mdparser_parser_from_obj(zend_object *obj) {
 #define MDPARSER_EXT_TASKLIST      (1 << 2)
 #define MDPARSER_EXT_AUTOLINK      (1 << 3)
 #define MDPARSER_EXT_TAGFILTER     (1 << 4)
-#define MDPARSER_EXT_ALL ( \
-    MDPARSER_EXT_TABLES | \
-    MDPARSER_EXT_STRIKETHROUGH | \
-    MDPARSER_EXT_TASKLIST | \
-    MDPARSER_EXT_AUTOLINK | \
-    MDPARSER_EXT_TAGFILTER)
 
 #define MDPARSER_EXT_COUNT 5
 

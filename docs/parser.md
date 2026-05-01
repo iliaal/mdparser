@@ -129,6 +129,15 @@ Parses `$source` and returns a nested PHP array representation of the
 document tree. See `docs/ast.md` for the full shape — every node type
 has a documented set of fields.
 
+> **Security note: AST output is not sanitized.** Link / image URLs and
+> raw HTML literals are preserved byte-for-byte. The `unsafe`,
+> `tagfilter`, and URL-scheme defenses operate on the rendering paths
+> (`toHtml`, `toXml`, `toInlineHtml`); `toAst` is a structural view
+> and applies none of them. A consumer that emits HTML from the AST
+> must apply its own URL scheme allowlist and HTML sanitization. For
+> example, a `link` node's `url` field can hold `javascript:alert(1)`,
+> and an `html_block` node's `literal` can hold a literal `<script>`.
+
 ```php
 $parser = new Parser();
 $ast = $parser->toAst("# Hi\n\n- one\n- two");

@@ -104,6 +104,15 @@ static const mdparser_options_field mdparser_options_fields[] = {
 #define MDPARSER_OPTIONS_FIELD_COUNT \
     (sizeof(mdparser_options_fields) / sizeof(mdparser_options_fields[0]))
 
+/* If a new option is inserted in either the enum or the field table
+ * without updating its sibling, the preset factories silently target
+ * the wrong bit. A misaligned MDOPT_UNSAFE would flip the XSS safety
+ * default for permissive() / strict() / github(); pin the alignment
+ * at compile time. */
+_Static_assert(MDOPT_COUNT_ == MDPARSER_OPTIONS_FIELD_COUNT,
+    "MDOPT_* enum and mdparser_options_fields[] are out of sync; "
+    "every option must appear in both, in the same order.");
+
 void mdparser_options_init_defaults(void)
 {
     int c = 0;
@@ -129,12 +138,14 @@ void mdparser_options_init_defaults(void)
     mdparser_default_postprocess_mask = p;
 }
 
-/* Write a 17-bool value vector into a freshly-allocated Options
- * object's properties. Used by __construct and by the static preset
- * factories. Safe to call only on an object whose properties are
- * still in their post-object_init_ex (IS_UNDEF) state, because
- * readonly enforcement allows first-writes within the declaring
- * class scope but rejects any subsequent assignment. */
+/* Write the value vector into a freshly-allocated Options object's
+ * properties (one bool per MDOPT_* index, sized via
+ * MDPARSER_OPTIONS_FIELD_COUNT so additions don't drift this
+ * signature). Used by __construct and by the static preset factories.
+ * Safe to call only on an object whose properties are still in their
+ * post-object_init_ex (IS_UNDEF) state, because readonly enforcement
+ * allows first-writes within the declaring class scope but rejects
+ * any subsequent assignment. */
 static void mdparser_options_populate_object(zend_object *this_obj,
     const bool values[MDPARSER_OPTIONS_FIELD_COUNT])
 {

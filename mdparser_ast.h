@@ -7,6 +7,8 @@
   | available through the world-wide-web at the following url:          |
   | http://www.php.net/license/3_01.txt                                 |
   +----------------------------------------------------------------------+
+  | Author: Ilia Alshanetsky <ilia@ilia.ws>                              |
+  +----------------------------------------------------------------------+
 */
 
 #ifndef PHP_MDPARSER_AST_H
@@ -15,13 +17,12 @@
 #include "php.h"
 #include "cmark-gfm.h"
 
+/* Render the cmark document tree as a nested PHP array into return_value.
+ * Throws MdParser\Exception on AST nesting beyond MDPARSER_MAX_AST_DEPTH. */
 void mdparser_render_ast(cmark_node *document, int cmark_options, zval *return_value);
 
-/* Called from MINIT to populate the permanent interned AST key strings.
- * Init at MINIT (rather than lazily on first toAst) so a ZTS build
- * can't race two threads through partial population. Permanent
- * interned strings are owned by the engine and need no MSHUTDOWN
- * release. */
+/* Populate the permanent interned key/value strings used by the AST
+ * walker. Called from MINIT. */
 void mdparser_init_ast_strings(void);
 
 #endif

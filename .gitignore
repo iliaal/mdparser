@@ -67,3 +67,4 @@ tests/**/*.php.out
 .codex
 AGENTS.md
 CLAUDE.md
+.review/
