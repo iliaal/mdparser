@@ -105,7 +105,7 @@ actively-maintained pure-PHP option with a plug-in extension system.
 # Run just the spec conformance test
 make test TESTS=tests/005_commonmark_spec.phpt
 
-# Run the full suite (12 tests, ~1.5 seconds)
+# Run the full suite (27 tests, ~3 seconds)
 make test
 ```
 

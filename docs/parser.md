@@ -3,9 +3,11 @@
 `final class MdParser\Parser`
 
 The main entry point. Holds a precomputed cmark options bitmask plus an
-extension mask, then offers three rendering methods. Options are parsed
-once at construction time so parse-time is pure native work with no
-per-call option walking.
+extension mask, then offers four rendering methods (`toHtml`, `toXml`,
+`toAst`, `toInlineHtml`) and three static shortcuts that render with
+the default Options. The cached cmark_parser is reused across calls
+on the same instance. Options are parsed once at construction time so
+parse-time is pure native work with no per-call option walking.
 
 ## Synopsis
 
@@ -17,9 +19,15 @@ final class Parser
     public readonly Options $options;
 
     public function __construct(?Options $options = null);
+
     public function toHtml(string $source): string;
     public function toXml(string $source): string;
     public function toAst(string $source): array;
+    public function toInlineHtml(string $source): string;
+
+    public static function html(string $source): string;
+    public static function xml(string $source): string;
+    public static function ast(string $source): array;
 }
 ```
 

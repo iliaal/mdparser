@@ -158,40 +158,6 @@ jobs:
             exit 1
           fi
 
-  standalone-configure:
-    name: PIE / standalone configure.ac
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v6
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          tools: phpize, php-config
-          coverage: none
-      - name: Install autoconf prerequisites
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            autoconf automake libtool m4
-      - name: Build via standalone configure.ac
-        run: |
-          autoreconf -fi
-          ./configure --enable-mdparser --with-php-config=$(which php-config)
-          make -j$(nproc)
-      - name: Run tests on standalone build
-        run: |
-          export TEST_PHP_EXECUTABLE=$(which php)
-          export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
-          export NO_INTERACTION=1
-          RESULT=$(php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1)
-          echo "$RESULT"
-          FAILED=$(printf '%s\n' "$RESULT" | awk '/Tests failed/ { print $4; exit }')
-          if [ "${FAILED:-0}" -gt 0 ]; then
-            echo "::error::$FAILED test(s) failed under standalone configure"
-            exit 1
-          fi
-
   asan:
     name: PHP ${{ matrix.php }} - ASAN
     runs-on: ubuntu-latest

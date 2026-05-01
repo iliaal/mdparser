@@ -323,6 +323,65 @@ static char *mdparser_dedupe_slug(mdparser_heading_list *seen, char *slug)
  * bodies during the heading-fingerprint search. */
 static size_t scan_skip_region(const char *html, size_t i, size_t html_len);
 
+/* Sorted, non-overlapping byte ranges covering scan_skip_region
+ * territory in the rendered document. Built once per postprocess
+ * call so resolve_heading_offsets does not re-walk the document
+ * for every heading (was O(N*M); now O(M) precompute + O(N) seek). */
+typedef struct {
+    size_t start;
+    size_t end;
+} mdparser_skip_range;
+
+typedef struct {
+    mdparser_skip_range *items;
+    size_t count;
+    size_t cap;
+} mdparser_skip_list;
+
+static bool skip_list_push(mdparser_skip_list *l, size_t start, size_t end)
+{
+    if (l->count == l->cap) {
+        size_t new_cap = l->cap ? l->cap * 2 : 16;
+        mdparser_skip_range *next = safe_erealloc(l->items, sizeof(*next), new_cap, 0);
+        if (!next) return false;
+        l->items = next;
+        l->cap = new_cap;
+    }
+    l->items[l->count].start = start;
+    l->items[l->count].end = end;
+    l->count++;
+    return true;
+}
+
+static void skip_list_free(mdparser_skip_list *l)
+{
+    if (l->items) efree(l->items);
+    l->items = NULL;
+    l->count = 0;
+    l->cap = 0;
+}
+
+/* Walk the rendered HTML once, recording every scan_skip_region range
+ * in source order. Returns false on allocation failure. */
+static bool compute_skip_list(const char *html, size_t html_len,
+    mdparser_skip_list *out)
+{
+    size_t i = 0;
+    while (i < html_len) {
+        const char *next = memchr(html + i, '<', html_len - i);
+        if (!next) break;
+        i = (size_t)(next - html);
+        size_t end = scan_skip_region(html, i, html_len);
+        if (end != SIZE_MAX) {
+            if (!skip_list_push(out, i, end)) return false;
+            i = (end > i) ? end : i + 1;
+        } else {
+            i++;
+        }
+    }
+    return true;
+}
+
 /* ---------- heading text extraction ---------------------------------- */
 
 /* Append the text content of a heading subtree into `b`. Walks TEXT
@@ -453,35 +512,44 @@ static bool collect_headings(cmark_node *document, int cmark_options,
  * apply time; that happens for headings whose body contains state-
  * dependent renderer output (e.g. footnote references inside a
  * heading: the standalone footnote_ix is 0 but the in-document index
- * is whatever counter cmark had reached at that point). */
+ * is whatever counter cmark had reached at that point).
+ *
+ * Skip ranges are pre-computed once into `skips` (sorted by start),
+ * so resolution is O(N + M) total instead of O(N*M) in the previous
+ * walk-from-cursor-for-each-heading version. */
 static void resolve_heading_offsets(const char *html, size_t html_len,
-    mdparser_heading_list *headings)
+    const mdparser_skip_list *skips, mdparser_heading_list *headings)
 {
     size_t cursor = 0;
+    size_t region_ix = 0;
+
     for (size_t hi = 0; hi < headings->count; hi++) {
         mdparser_heading_entry *e = &headings->items[hi];
+
         while (cursor < html_len) {
-            /* If the cursor sits at the start of a skip region, jump
-             * over it. */
-            if (html[cursor] == '<') {
-                size_t skip = scan_skip_region(html, cursor, html_len);
-                if (skip != SIZE_MAX) {
-                    cursor = skip;
-                    continue;
-                }
+            /* Drop regions that ended before the cursor (can happen
+             * after a successful heading match advanced cursor past
+             * them). */
+            while (region_ix < skips->count &&
+                   skips->items[region_ix].end <= cursor) {
+                region_ix++;
             }
 
-            /* Find the end of the current "free" segment: the byte
-             * just before the next skip region (or html_len). */
-            size_t seg_end = html_len;
-            for (size_t j = cursor; j < html_len; j++) {
-                if (html[j] != '<') continue;
-                size_t skip = scan_skip_region(html, j, html_len);
-                if (skip != SIZE_MAX) {
-                    seg_end = j;
-                    break;
-                }
+            /* If cursor is inside the current region, jump past it. */
+            if (region_ix < skips->count &&
+                skips->items[region_ix].start <= cursor &&
+                cursor < skips->items[region_ix].end)
+            {
+                cursor = skips->items[region_ix].end;
+                region_ix++;
+                continue;
             }
+
+            /* Segment runs from cursor to the next region's start
+             * (or html_len if no region remains). */
+            size_t seg_end = (region_ix < skips->count)
+                ? skips->items[region_ix].start
+                : html_len;
 
             if (e->rendered_len <= seg_end - cursor) {
                 const char *hit = memmem(html + cursor, seg_end - cursor,
@@ -844,7 +912,17 @@ zend_string *mdparser_html_postprocess_ex(
             *status_out = (int)status;
             return NULL;
         }
-        resolve_heading_offsets(html_in, html_len, &headings);
+        /* Pre-compute skip ranges once so resolve_heading_offsets
+         * does not re-scan the document for every heading. */
+        mdparser_skip_list skips = {0};
+        if (!compute_skip_list(html_in, html_len, &skips)) {
+            skip_list_free(&skips);
+            heading_list_free(&headings, &mdparser_zend_mem);
+            *status_out = (int)MDPP_ALLOC_FAIL;
+            return NULL;
+        }
+        resolve_heading_offsets(html_in, html_len, &skips, &headings);
+        skip_list_free(&skips);
     }
 
     zend_string *out = apply_transforms(html_in, html_len, &headings, pp_mask);
