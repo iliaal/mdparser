@@ -36,11 +36,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ubuntu-latest (24.04 x86_64), ubuntu-24.04-arm (arm64),
+        # ubuntu-24.04 (x86_64), ubuntu-24.04-arm (arm64),
         # macos-13 (Intel x86_64), macos-14 (Apple Silicon arm64).
-        # Pinned over `*-latest` to avoid silent runner shifts.
+        # Pinned over `*-latest` to avoid silent runner shifts that
+        # would change the toolchain / glibc baseline on published
+        # release assets without a repo diff.
         os:
-          - ubuntu-latest
+          - ubuntu-24.04
           - ubuntu-24.04-arm
           - macos-13
           - macos-14
