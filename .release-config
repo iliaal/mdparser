@@ -11,3 +11,4 @@ build_matrix:
 configure_base: "--enable-mdparser --enable-mdparser-dev"
 smoke_test: scripts/pie-smoke.sh
 windows_ci: true
+linux_prebuilt: true

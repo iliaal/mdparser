@@ -1,0 +1,64 @@
+name: Release Linux & macOS binaries
+
+# Triggered when a GitHub Release is published. Builds .so binaries for
+# Linux glibc (x86_64 + arm64) and macOS (x86_64 + arm64) at PHP 8.4
+# and 8.5 (NTS only -- ZTS lives in the Windows lane), uploads each as
+# a release asset via php/pie-ext-binary-builder using PIE's
+# pre-packaged-binary naming convention.
+#
+# 8.3 is intentionally absent: PIE's composer-default fallback
+# source-builds for any PHP version not covered by a prebuilt, so 8.3
+# users still get an install path -- just one that requires a build
+# toolchain. Drop the 8.4 lane when 8.4 hits actual EOL.
+#
+# Linux musl (Alpine) is intentionally absent -- shivammathur/setup-php
+# in Alpine containers needs more setup, and Alpine users get install
+# via PIE's composer-default source-build fallback in the meantime.
+#
+# composer.json declares
+#   "download-url-method": ["pre-packaged-binary", "composer-default"]
+# in the php-ext block, so PIE prefers the prebuilt asset and falls
+# back to source-build when no asset matches.
+#
+# Third-party actions are pinned to commit SHAs because this job has
+# contents:write -- a moved tag would inherit the release-write token.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: ${{ matrix.os }} php ${{ matrix.php }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-latest (24.04 x86_64), ubuntu-24.04-arm (arm64),
+        # macos-13 (Intel x86_64), macos-14 (Apple Silicon arm64).
+        # Pinned over `*-latest` to avoid silent runner shifts.
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-13
+          - macos-14
+        php: ['8.4', '8.5']
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Build and upload prebuilt binary
+        uses: php/pie-ext-binary-builder@e35d497ffaac8ded7f05c62597d4387d849644d7 # 0.0.3
+        with:
+          release-tag: ${{ github.event.release.tag_name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          configure-flags: '--enable-mdparser'
