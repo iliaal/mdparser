@@ -588,6 +588,14 @@ next_heading:
  * Tag-name match is case-insensitive (raw HTML may be written in any
  * case). For elements with end tags, the region runs from `<tag…>` to
  * the first `</tag>`; an unmatched open extends to end-of-input. */
+#if defined(_MSC_VER) && _MSC_VER < 1930
+/* MSVC 14.29.x (VS 2019 16.11) ICEs (C1001) at /Ox compiling this
+ * function on PHP 8.3 x86; newer toolsets used for PHP 8.4 / 8.5
+ * compile it cleanly, as do gcc/clang. Disable optimization narrowly
+ * for the affected compiler range; the function is not on a hot path
+ * (called once per heading during postprocess-skip-range build). */
+#pragma optimize("", off)
+#endif
 static size_t scan_skip_region(const char *html, size_t i, size_t html_len)
 {
     if (i >= html_len || html[i] != '<') return SIZE_MAX;
@@ -705,6 +713,9 @@ static size_t scan_skip_region(const char *html, size_t i, size_t html_len)
 
     return SIZE_MAX;
 }
+#if defined(_MSC_VER) && _MSC_VER < 1930
+#pragma optimize("", on)
+#endif
 
 /* Given `i` at a `<`, advance to the byte just past the matching `>`
  * of the open tag, treating bytes inside single- or double-quoted
