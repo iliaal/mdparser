@@ -1,7 +1,7 @@
 --TEST--
 Options::nofollowLinks injects rel="nofollow noopener noreferrer" on anchors
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

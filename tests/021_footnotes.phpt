@@ -1,7 +1,7 @@
 --TEST--
 footnotes: CMARK_OPT_FOOTNOTES renders references and backrefs
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

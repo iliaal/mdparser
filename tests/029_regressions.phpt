@@ -1,7 +1,7 @@
 --TEST--
 regressions: ctor re-entry, toInlineHtml multiline, Options defaults parity, reflection bypass
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

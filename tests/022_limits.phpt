@@ -1,7 +1,7 @@
 --TEST--
 limits: AST depth cap and input size cap both throw MdParser\Exception
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

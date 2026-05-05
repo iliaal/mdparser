@@ -1,7 +1,7 @@
 --TEST--
 mdparser smoke: module loads, Parser class exists, toHtml round-trips
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip mdparser not loaded"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

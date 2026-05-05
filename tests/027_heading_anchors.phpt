@@ -1,7 +1,7 @@
 --TEST--
 Options::headingAnchors injects GitHub-style id slugs on headings
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

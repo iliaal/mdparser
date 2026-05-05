@@ -1,7 +1,7 @@
 --TEST--
 MdParser\Exception: final class extending RuntimeException
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

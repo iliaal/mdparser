@@ -1,8 +1,9 @@
 --TEST--
 parity: mdparser vs Parsedown on Parsedown's own fixture corpus
+--EXTENSIONS--
+mdparser
 --SKIPIF--
 <?php
-if (!extension_loaded("mdparser")) print "skip mdparser not loaded";
 if (!is_dir(__DIR__ . "/parity/parsedown/fixtures")) print "skip no parsedown fixtures";
 ?>
 --FILE--

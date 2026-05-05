@@ -1,7 +1,7 @@
 --TEST--
 helpers: static Parser::html/xml/ast shortcuts and toInlineHtml
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

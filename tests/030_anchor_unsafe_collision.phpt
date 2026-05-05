@@ -1,7 +1,7 @@
 --TEST--
 headingAnchors: byte-fingerprint collision when raw HTML matches a Markdown heading (CR-003)
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

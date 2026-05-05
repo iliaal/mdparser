@@ -1,7 +1,7 @@
 --TEST--
 MdParser\Parser::toXml: CommonMark XML output
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 $p = new MdParser\Parser();

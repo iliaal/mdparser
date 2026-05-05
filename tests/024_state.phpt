@@ -1,7 +1,7 @@
 --TEST--
 state: serialize/clone blocks, $parser->options readback, reuse hygiene
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

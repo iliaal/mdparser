@@ -1,8 +1,9 @@
 --TEST--
 parity: mdparser vs michelf/php-markdown Gruber 1.0.3 fixtures
+--EXTENSIONS--
+mdparser
 --SKIPIF--
 <?php
-if (!extension_loaded("mdparser")) print "skip mdparser not loaded";
 if (!is_dir(__DIR__ . "/parity/michelf/fixtures")) print "skip no michelf fixtures";
 ?>
 --FILE--

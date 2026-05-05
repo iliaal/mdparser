@@ -1,7 +1,7 @@
 --TEST--
 security: safe mode strips dangerous URLs and raw HTML (XSS regression gate)
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

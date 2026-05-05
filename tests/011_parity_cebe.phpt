@@ -1,8 +1,9 @@
 --TEST--
 parity: mdparser vs cebe/markdown GFM fixture corpus
+--EXTENSIONS--
+mdparser
 --SKIPIF--
 <?php
-if (!extension_loaded("mdparser")) print "skip mdparser not loaded";
 if (!is_dir(__DIR__ . "/parity/cebe/fixtures")) print "skip no cebe fixtures";
 ?>
 --FILE--

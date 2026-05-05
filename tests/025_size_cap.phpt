@@ -1,8 +1,9 @@
 --TEST--
 size cap: inputs over MDPARSER_MAX_INPUT_SIZE (256 MB) throw MdParser\Exception
+--EXTENSIONS--
+mdparser
 --SKIPIF--
 <?php
-if (!extension_loaded("mdparser")) print "skip";
 // 257 MB input + PHP overhead needs headroom; skip on tight memory_limit hosts.
 if (PHP_INT_SIZE < 8) print "skip 32-bit unable to allocate 257 MB string";
 ?>

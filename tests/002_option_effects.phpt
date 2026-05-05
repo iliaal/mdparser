@@ -1,7 +1,7 @@
 --TEST--
 MdParser\Parser: options change rendered HTML
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

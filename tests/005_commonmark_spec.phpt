@@ -1,8 +1,9 @@
 --TEST--
 CommonMark 0.31 spec conformance (all examples from spec.txt)
+--EXTENSIONS--
+mdparser
 --SKIPIF--
 <?php
-if (!extension_loaded("mdparser")) print "skip mdparser not loaded";
 if (!file_exists(__DIR__ . "/fixtures/commonmark-spec.txt")) print "skip spec.txt not present";
 ?>
 --FILE--

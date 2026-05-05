@@ -1,7 +1,7 @@
 --TEST--
 MdParser\Options presets: strict(), github(), permissive()
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 

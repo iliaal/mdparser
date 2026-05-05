@@ -1,7 +1,7 @@
 --TEST--
 MdParser\Parser::toAst: nested-array AST output
---SKIPIF--
-<?php if (!extension_loaded("mdparser")) print "skip"; ?>
+--EXTENSIONS--
+mdparser
 --FILE--
 <?php
 
