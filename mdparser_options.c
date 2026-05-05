@@ -108,10 +108,13 @@ static const mdparser_options_field mdparser_options_fields[] = {
  * without updating its sibling, the preset factories silently target
  * the wrong bit. A misaligned MDOPT_UNSAFE would flip the XSS safety
  * default for permissive() / strict() / github(); pin the alignment
- * at compile time. */
-_Static_assert(MDOPT_COUNT_ == MDPARSER_OPTIONS_FIELD_COUNT,
-    "MDOPT_* enum and mdparser_options_fields[] are out of sync; "
-    "every option must appear in both, in the same order.");
+ * at compile time.
+ *
+ * MSVC-cl in default C mode rejects _Static_assert (C11) without
+ * /std:c11, and the PHP Windows build harness doesn't pass that flag,
+ * so use the portable negative-array-size idiom instead. */
+typedef char mdparser_options_field_count_assert[
+    (MDOPT_COUNT_ == MDPARSER_OPTIONS_FIELD_COUNT) ? 1 : -1];
 
 void mdparser_options_init_defaults(void)
 {
