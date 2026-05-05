@@ -321,15 +321,11 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
 
     /* cmark-gfm's get_type_string switch does not cover footnote node
      * types and returns "<unknown>" for them. mdparser_type_interned
-     * applies the override and returns a permanent interned string;
-     * fallback to per-call allocation for unrecognized types. */
+     * resolves footnote types from `ntype` directly and returns the
+     * pre-interned string; fallback to per-call allocation for
+     * unrecognized types. */
     const char *type_string = cmark_node_get_type_string(node);
     cmark_node_type ntype = cmark_node_get_type(node);
-    if (ntype == CMARK_NODE_FOOTNOTE_REFERENCE) {
-        type_string = "footnote_reference";
-    } else if (ntype == CMARK_NODE_FOOTNOTE_DEFINITION) {
-        type_string = "footnote_definition";
-    }
     zend_string *type_interned = mdparser_type_interned(type_string, ntype);
     if (type_interned) {
         md_add_interned(out, md_str_type, type_interned);

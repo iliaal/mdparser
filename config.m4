@@ -58,9 +58,11 @@ if test "$PHP_MDPARSER" != "no"; then
 
   dnl -Wall -Wextra are on by default so wrapper regressions get caught
   dnl in every local build; --enable-mdparser-dev upgrades warnings to
-  dnl -Werror plus extra strictness. -Wno-unused-parameter silences
-  dnl noise from cmark's own callback-style APIs that share the same
-  dnl translation-unit flags with our wrapper.
+  dnl -Werror plus extra strictness. -Wno-unused-parameter and
+  dnl -Wno-unused-function silence noise from cmark's own callback-style
+  dnl APIs and from cmark static helpers that aren't reachable in our
+  dnl build configuration; both share the translation-unit flags with
+  dnl our wrapper.
   dnl
   dnl -fvisibility=hidden keeps vendored cmark symbols (cmark_parser_new
   dnl etc.) and our wrapper internals out of the .so's dynamic symbol

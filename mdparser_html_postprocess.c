@@ -288,9 +288,10 @@ static char *mdparser_slugify(const char *text, size_t len)
  * heading_list_index_slug once it knows the slug will actually be kept
  * (so a push that fails later doesn't leave a phantom entry).
  *
- * Returns NULL on the (practically unreachable) case of exhausting
- * MDPARSER_DEDUPE_MAX_RETRIES; caller should treat as "drop the id"
- * and continue. The original `slug` is freed in that path too. */
+ * Returns an empty heap string on the (practically unreachable) case
+ * of exhausting MDPARSER_DEDUPE_MAX_RETRIES; the caller's existing
+ * empty-slug path then drops the id attribute. The original `slug` is
+ * freed in that path too. */
 static char *mdparser_dedupe_slug(mdparser_heading_list *seen, char *slug)
 {
     if (slug[0] == '\0') return slug;
