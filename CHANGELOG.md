@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-06
+
+### Added
+
+- `MdParser\Options::headingAnchors`: when true, every rendered
+  `<hN>` gets an `id` attribute holding a GitHub-style slug of the
+  heading's text. Slugs lowercase ASCII, replace whitespace runs with
+  a single `-`, drop other ASCII punctuation, preserve UTF-8
+  multibyte bytes, and dedupe collisions with `-1`, `-2`, ...
+  Headings whose text slugifies to nothing (pure punctuation) emit
+  `<hN>` with no id rather than `id=""`. Coexists with `sourcepos`:
+  the `id` lands before `data-sourcepos`.
+- `MdParser\Options::nofollowLinks`: when true, every emitted
+  `<a href="...">` gets `rel="nofollow noopener noreferrer"` injected
+  for inline links, reference links, and autolinks. Applies to
+  `toHtml()` and `toInlineHtml()`. Anchors inside fenced or inline
+  code are left untouched because cmark escapes them before reaching
+  the postprocess step. In-document fragment anchors (`href="#..."`,
+  i.e. footnote references and backrefs) are intentionally skipped.
+  Raw `<script>` / `<style>` regions under `unsafe: true` are emitted
+  verbatim so anchor-shaped substrings inside JavaScript or CSS are
+  not corrupted.
+- Linux and macOS prebuilt binaries are now attached to every
+  GitHub release (x86_64 + arm64 glibc Linux, x86_64 + arm64
+  macOS, PHP 8.4 and 8.5, NTS). PIE picks the matching `.so` first
+  and only falls back to a source build for combinations not
+  covered by an asset (e.g. PHP 8.3, Alpine/musl, ZTS).
+  `composer.json` declares
+  `download-url-method: ["pre-packaged-binary", "composer-default"]`
+  to opt into the prebuilt path.
+
+Both new HTML-postprocess flags default to `false`. They are pure
+HTML post-passes; XML and AST output are unaffected. The static
+`Parser::html()` / `Parser::xml()` shortcuts use the module defaults
+and so do not apply either transform.
+
+Heading anchors are positioned by rendering each AST heading
+standalone and locating its exact byte sequence in the document
+HTML, rather than by counting line-start `<hN>` tags. Under
+`unsafe: true`, raw HTML headings written directly in the markdown
+source are normally left alone and do not consume slugs intended
+for real headings. One documented limitation: if a raw HTML
+heading produces bytes identical to a later Markdown heading
+(e.g. `<h1>same</h1>` followed by `# same`), the byte-fingerprint
+search hits the raw heading first, the raw heading absorbs the
+`id`, and the real Markdown heading is left without one. A durable
+fix needs renderer-level heading-id support; until then,
+`unsafe: true` callers should not rely on heading-id stability when
+raw HTML headings can collide with real ones. Pinned in
+`tests/030_anchor_unsafe_collision.phpt`.
+
+### Changed
+
+- `Parser` now caches a single cmark_parser per instance and reuses
+  it across `toHtml` / `toXml` / `toAst` / `toInlineHtml` calls.
+  `cmark_parser_finish` resets the parser internally on every
+  successful render, so the cached parser holds no state from prior
+  input: no link reference definitions, no inline subject
+  leftovers, no buffered partial input. After a render that did
+  not complete cleanly the parser is rebuilt rather than reused.
+  Pinned in `tests/033_parser_reuse_isolation.phpt`.
+- cmark allocations now route through a Zend MM-backed `cmark_mem`
+  (`ecalloc` / `erealloc` / `efree`). cmark-side memory is now
+  accounted by `memory_limit`, surfaced by `memory_get_usage()`, and
+  cleaned up by Zend MM on bailout. Out-of-memory under hostile or
+  oversized input goes through PHP's standard `Allowed memory size
+  exhausted` fatal instead of cmark's default-allocator `abort()`.
+- AST node-type values, list type / delim values, and table
+  alignment values are now permanent interned strings created at
+  MINIT, eliminating ~1 emalloc + memcpy per AST node on `toAst()`.
+- AST key strings (`type`, `children`, `literal`, `level`, ...) are
+  now permanent interned strings created at MINIT via
+  `zend_string_init_interned(..., true)` instead of persistent
+  non-interned `zend_string`s lazy-initialized on the first
+  `toAst()` call. Permanent interned strings skip refcount mutation
+  during `zend_hash_add_new`, so concurrent `toAst()` calls on a
+  ZTS build no longer race the (non-atomic) shared refcount that
+  the previous persistent strings carried.
+- AST node array preallocation bumped from `array_init_size(out, 8)`
+  to 16. The worst-case node (a list with `sourcepos: true`)
+  carries 10 keys, so 8 forced a rehash on every list. 16 lands on
+  the next power-of-two HT bucket size and avoids the rehash for
+  every supported node shape.
+- HTML postprocess failure messages distinguish AST depth-cap
+  (heading text exceeded `MDPARSER_MAX_AST_DEPTH`) from cmark
+  iterator/render allocation failure, instead of collapsing all
+  three reasons into the generic "HTML postprocess allocation
+  failure" string.
+
+### Fixed
+
+- `Parser::toInlineHtml()` no longer lets block-level markers (`#`,
+  `-`, `>`, `1.`, four-space indent, fenced/HTML blocks, thematic
+  breaks) fire on lines after the first. The source-rewrite step
+  now normalizes `\r\n` and lone `\r` to `\n`, collapses runs of
+  newlines, drops leading/trailing newlines, and inserts a U+200B
+  sentinel at the start of every physical line; the output stripper
+  removes the wrapper plus every per-line sentinel. Multi-line input
+  is therefore guaranteed to render as inline content.
+- PHP 8.6 compatibility: replaced `XtOffsetOf` with `offsetof`
+  throughout the wrapper. php-src master removed the `XtOffsetOf`
+  portability macro from `zend_portability.h`; `offsetof` from
+  `<stddef.h>` is the documented replacement and works on every
+  PHP version mdparser supports.
+- `config.w32` now lists `mdparser_html_postprocess.c` so Windows
+  builds link successfully.
+
 ### Security
 
 - HTML postprocess no longer splices into raw-HTML attribute
@@ -39,95 +146,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   buffer now grows on demand via `smart_str` and tracks the actual
   normalized size. Pinned in
   `tests/037_toinlinehtml_memory_limit.phpt`.
-- Windows release workflow pins `php/php-windows-builder/*`
-  references to a commit SHA instead of the mutable `@v1` tag, so
-  a moved or compromised tag cannot push DLLs into a release with
-  `contents: write`.
-
-### Changed
-
-- `Parser` now caches a single cmark_parser per instance and reuses
-  it across `toHtml` / `toXml` / `toAst` / `toInlineHtml` calls.
-  `cmark_parser_finish` resets the parser internally on every
-  successful render, so the cached parser holds no state from prior
-  input -- no link reference definitions, no inline subject
-  leftovers, no buffered partial input. After a render that did
-  not complete cleanly the parser is rebuilt rather than reused.
-  Pinned in `tests/033_parser_reuse_isolation.phpt`.
-- AST node-type values, list type / delim values, and table
-  alignment values are now permanent interned strings created at
-  MINIT, eliminating ~1 emalloc + memcpy per AST node on `toAst()`.
-- HTML postprocess failure messages distinguish AST depth-cap
-  (heading text exceeded `MDPARSER_MAX_AST_DEPTH`) from cmark
-  iterator/render allocation failure, instead of collapsing all
-  three reasons into the generic "HTML postprocess allocation
-  failure" string.
-
-### Added
-
-- `MdParser\Options::headingAnchors` — when true, every rendered
-  `<hN>` gets an `id` attribute holding a GitHub-style slug of the
-  heading's text. Slugs lowercase ASCII, replace whitespace runs with
-  a single `-`, drop other ASCII punctuation, preserve UTF-8
-  multibyte bytes, and dedupe collisions with `-1`, `-2`, ...
-  Headings whose text slugifies to nothing (pure punctuation) emit
-  `<hN>` with no id rather than `id=""`. Coexists with `sourcepos`:
-  the `id` lands before `data-sourcepos`.
-- `MdParser\Options::nofollowLinks` — when true, every emitted
-  `<a href="...">` gets `rel="nofollow noopener noreferrer"` injected
-  for inline links, reference links, and autolinks. Applies to
-  `toHtml()` and `toInlineHtml()`. Anchors inside fenced or inline
-  code are left untouched because cmark escapes them before reaching
-  the postprocess step. In-document fragment anchors (`href="#..."`,
-  i.e. footnote references and backrefs) are intentionally skipped.
-  Raw `<script>` / `<style>` regions under `unsafe: true` are emitted
-  verbatim so anchor-shaped substrings inside JavaScript or CSS are
-  not corrupted.
-
-Both flags default to `false`. They are pure HTML post-passes; XML
-and AST output are unaffected. The static `Parser::html()` /
-`Parser::xml()` shortcuts use the module defaults and so do not
-apply either transform.
-
-Heading anchors are positioned by rendering each AST heading
-standalone and locating its exact byte sequence in the document
-HTML, rather than by counting line-start `<hN>` tags. Under
-`unsafe: true`, raw HTML headings written directly in the markdown
-source are normally left alone and do not consume slugs intended
-for real headings — *with one documented limitation:* if a raw HTML
-heading produces bytes identical to a later Markdown heading
-(e.g. `<h1>same</h1>` followed by `# same`), the byte-fingerprint
-search hits the raw heading first, the raw heading absorbs the
-`id`, and the real Markdown heading is left without one. A durable
-fix needs renderer-level heading-id support; until then,
-`unsafe: true` callers should not rely on heading-id stability when
-raw HTML headings can collide with real ones. Pinned in
-`tests/030_anchor_unsafe_collision.phpt`.
-
-### Changed
-
-- cmark allocations now route through a Zend MM-backed `cmark_mem`
-  (`ecalloc` / `erealloc` / `efree`). cmark-side memory is now
-  accounted by `memory_limit`, surfaced by `memory_get_usage()`, and
-  cleaned up by Zend MM on bailout. Out-of-memory under hostile or
-  oversized input goes through PHP's standard `Allowed memory size
-  exhausted` fatal instead of cmark's default-allocator `abort()`.
-- AST key strings (`type`, `children`, `literal`, `level`, ...) are
-  now permanent interned strings created at MINIT via
-  `zend_string_init_interned(..., true)` instead of persistent
-  non-interned `zend_string`s lazy-initialized on the first
-  `toAst()` call. Permanent interned strings skip refcount mutation
-  during `zend_hash_add_new`, so concurrent `toAst()` calls on a
-  ZTS build no longer race the (non-atomic) shared refcount that
-  the previous persistent strings carried.
-- AST node array preallocation bumped from `array_init_size(out, 8)`
-  to 16. The worst-case node (a list with `sourcepos: true`)
-  carries 10 keys, so 8 forced a rehash on every list. 16 lands on
-  the next power-of-two HT bucket size and avoids the rehash for
-  every supported node shape.
-
-### Security
-
 - `Options` objects built via
   `ReflectionClass::newInstanceWithoutConstructor()` are now
   rejected at `Parser::__construct()` with
@@ -145,11 +163,10 @@ raw HTML headings can collide with real ones. Pinned in
   longer appear in `mdparser.so`'s dynamic symbol table; only PHP's
   required `get_module` is exported. Prevents symbol collisions
   with other extensions that vendor or link cmark.
-
-### Fixed
-
-- `config.w32` now lists `mdparser_html_postprocess.c` so Windows
-  builds link successfully.
+- Windows release workflow pins `php/php-windows-builder/*`
+  references to a commit SHA instead of the mutable `@v1` tag, so
+  a moved or compromised tag cannot push DLLs into a release with
+  `contents: write`.
 
 ## [0.2.0] - 2026-04-11
 
@@ -374,6 +391,7 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.2.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/iliaal/mdparser/releases/tag/0.3.0
 [0.2.0]: https://github.com/iliaal/mdparser/releases/tag/0.2.0
 [0.1.0]: https://github.com/iliaal/mdparser/releases/tag/0.1.0
