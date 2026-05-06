@@ -3,7 +3,7 @@
 [![Tests](https://github.com/iliaal/mdparser/actions/workflows/tests.yml/badge.svg)](https://github.com/iliaal/mdparser/actions/workflows/tests.yml)
 [![Windows Build](https://github.com/iliaal/mdparser/actions/workflows/windows.yml/badge.svg)](https://github.com/iliaal/mdparser/actions/workflows/windows.yml)
 [![Version](https://img.shields.io/github/v/release/iliaal/mdparser)](https://github.com/iliaal/mdparser/releases)
-[![License: PHP-3.01](https://img.shields.io/badge/License-PHP--3.01-green.svg)](http://www.php.net/license/3_01.txt)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-green.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Follow @iliaa](https://img.shields.io/badge/Follow-@iliaa-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/follow?screen_name=iliaa)
 
 ![mdparser: 15-30× faster than pure-PHP](images/mdparser-hero.jpg)
@@ -157,7 +157,7 @@ Full background, design rationale, and benchmark methodology in the launch post:
 
 ## License
 
-- Wrapper code (`mdparser*.c`, `php_mdparser.h`) under the PHP License 3.01.
+- Wrapper code (`mdparser*.c`, `php_mdparser.h`) under BSD 3-Clause.
 - Embedded cmark-gfm sources under BSD-2-Clause, MIT, and related permissive licenses. See `LICENSE` for aggregated notices.
 
 ---
