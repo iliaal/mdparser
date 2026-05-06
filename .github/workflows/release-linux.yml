@@ -1,17 +1,23 @@
 name: Release Linux & macOS binaries
 
 # Triggered when a GitHub Release is published. Builds .so binaries for
-# Linux glibc (x86_64 + arm64) and macOS (x86_64 + arm64) at PHP 8.4
-# and 8.5 (NTS only -- ZTS lives in the Windows lane), uploads each as
-# a release asset via php/pie-ext-binary-builder using PIE's
-# pre-packaged-binary naming convention.
+# Linux glibc (x86_64 + arm64) and macOS arm64 at PHP 8.4 and 8.5 (NTS
+# only, ZTS lives in the Windows lane), uploads each as a release asset
+# via php/pie-ext-binary-builder using PIE's pre-packaged-binary naming
+# convention.
 #
 # 8.3 is intentionally absent: PIE's composer-default fallback
 # source-builds for any PHP version not covered by a prebuilt, so 8.3
-# users still get an install path -- just one that requires a build
-# toolchain. Drop the 8.4 lane when 8.4 hits actual EOL.
+# users still get an install path; it just requires a build toolchain.
+# Drop the 8.4 lane when 8.4 hits actual EOL.
 #
-# Linux musl (Alpine) is intentionally absent -- shivammathur/setup-php
+# macOS Intel (macos-13) is intentionally absent: GitHub's Intel runner
+# pool is too contended to ship reliably (jobs queue 30+ min on busy
+# days, blocking release closeout), and macOS 26 drops Intel support
+# anyway. Intel-Mac users source-build via PIE's composer-default
+# fallback, same path PHP 8.3 users already take.
+#
+# Linux musl (Alpine) is intentionally absent: shivammathur/setup-php
 # in Alpine containers needs more setup, and Alpine users get install
 # via PIE's composer-default source-build fallback in the meantime.
 #
@@ -37,14 +43,13 @@ jobs:
       fail-fast: false
       matrix:
         # ubuntu-24.04 (x86_64), ubuntu-24.04-arm (arm64),
-        # macos-13 (Intel x86_64), macos-14 (Apple Silicon arm64).
-        # Pinned over `*-latest` to avoid silent runner shifts that
-        # would change the toolchain / glibc baseline on published
-        # release assets without a repo diff.
+        # macos-14 (Apple Silicon arm64). Pinned over `*-latest` to
+        # avoid silent runner shifts that would change the toolchain /
+        # glibc baseline on published release assets without a repo
+        # diff.
         os:
           - ubuntu-24.04
           - ubuntu-24.04-arm
-          - macos-13
           - macos-14
         php: ['8.4', '8.5']
     steps:
