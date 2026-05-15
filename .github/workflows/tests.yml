@@ -167,7 +167,14 @@ jobs:
         php: ['8.4']
 
     env:
-      ASAN_OPTIONS: exitcode=139:verify_asan_link_order=0:detect_odr_violation=0
+      # detect_leaks=1 pinned explicitly. LSan's default is on under
+      # Linux ASan; pinning prevents a future ASAN_OPTIONS edit from
+      # silently flipping it. Narrow known-good leaks (vendored
+      # MINIT singletons etc.) go in .github/lsan-suppressions.txt;
+      # prefer that over blanket detect_leaks=0. See
+      # ~/ai/wiki/debugging/asan-php-extension.md.
+      ASAN_OPTIONS: exitcode=139:verify_asan_link_order=0:detect_odr_violation=0:detect_leaks=1
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt:print_suppressions=0
       UBSAN_OPTIONS: print_stacktrace=1
       USE_ZEND_ALLOC: 0
       USE_TRACKED_ALLOC: 1
