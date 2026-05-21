@@ -13,12 +13,18 @@ echo
 
 echo "---- 1. System build tools ----"
 apt-get update -qq >/dev/null
-# PIE 1.4 on a bare php:8.x-cli image needs four extras beyond what
+# PIE 1.4 on a bare php:8.x-cli image needs five extras beyond what
 # phpize expects: git (PIE clones source via git clone, not a tarball),
 # bison and libtoolize (PIE's build-tools check insists on both even
-# though phpize itself doesn't), and ca-certificates (for the HTTPS
-# clone from github).
-apt-get install -y -qq git ca-certificates bison libtool-bin >/dev/null
+# though phpize itself doesn't), ca-certificates (for the HTTPS clone
+# from github), and `unzip` — composer shells out to /usr/bin/unzip
+# when extracting the prebuilt-binary zip PIE sets via setDistUrl().
+# If unzip is missing, composer silently falls back to PHP's ZipArchive
+# which lays out the file at a path PIE's prePackagedBinary check
+# doesn't look at, and install fails with ExtensionBinaryNotFound even
+# though the zip downloaded fine. `php:8.x-cli` Debian images do not
+# ship unzip. See ~/ai/wiki/debugging/php-ext-release-traps.md.
+apt-get install -y -qq git ca-certificates bison libtool-bin unzip >/dev/null
 git --version
 bison --version | head -1
 libtoolize --version | head -1 || echo "libtoolize not found"
@@ -47,50 +53,24 @@ ls -la /usr/local/bin/pie
 pie --version 2>&1 | head -3
 echo
 
-echo "---- 5. pie install ----"
+echo "---- 5. pie install (against Packagist, real-user path) ----"
+# Smoke runs from /release-ext after the tag is published, so Packagist
+# already serves the new version. This is the canonical user install:
+# `pie install iliaal/mdparser` resolves to the freshly-tagged release,
+# picks up the prebuilt zip when a matching <php-ver, arch, libc> lane
+# exists on the release, and falls back to source-build otherwise. The
+# manual phpize+make+install fallback in Step 6 below covers the
+# source-build path that PIE's composer-default lane exercises.
 PIE_OK=0
-
-# Prepare a working dir with a composer.json that declares /tmp/src as a
-# path-type repository. PIE's -d flag passes through to composer, so
-# composer resolves iliaal/mdparser from the local path instead of
-# Packagist.
-mkdir -p /tmp/piework
-cat > /tmp/piework/composer.json <<'JSON'
-{
-    "name": "iliaal/pie-smoke",
-    "repositories": [
-        { "type": "path", "url": "/tmp/src", "options": { "symlink": false } }
-    ],
-    "minimum-stability": "dev",
-    "prefer-stable": true
-}
-JSON
-
-echo "   [A] pie install -d /tmp/piework iliaal/mdparser"
+echo "   pie install iliaal/mdparser"
 pie install \
-    -d /tmp/piework \
     --with-php-config=/usr/local/bin/php-config \
     --auto-install-build-tools \
-    iliaal/mdparser 2>&1 \
-    | tee /tmp/pie-A.out | tail -40 || true
+    iliaal/mdparser 2>&1 | tee /tmp/pie.out | tail -25 || true
 
 if php -m | grep -qi mdparser; then
     PIE_OK=1
-    echo "   [A] RESULT: success"
-fi
-
-# Path B: plain Packagist lookup (expected to fail until iliaal/mdparser
-# is registered on packagist.org). Kept for completeness.
-if [ "$PIE_OK" = "0" ]; then
-    echo
-    echo "   [B] pie install iliaal/mdparser  (plain Packagist lookup)"
-    pie install \
-        --with-php-config=/usr/local/bin/php-config \
-        iliaal/mdparser 2>&1 | tee /tmp/pie-B.out | tail -20 || true
-    if php -m | grep -qi mdparser; then
-        PIE_OK=1
-        echo "   [B] RESULT: success"
-    fi
+    echo "   PIE install: success"
 fi
 
 echo "   overall PIE result: PIE_OK=$PIE_OK"
