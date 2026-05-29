@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `headingAnchors`: under `unsafe: true` with `tagfilter: false`, a
+  heading whose standalone fingerprint matched inside a tag attribute
+  value in raw HTML could freeze the anchor pass's heading cursor,
+  silently stripping the `id` from every heading after the collision.
+  The cursor now resyncs before each match attempt, so a stepped-over
+  fingerprint no longer cascades. Regression test:
+  `tests/038_anchor_attr_fingerprint.phpt`.
+
 ## [0.3.0] - 2026-05-06
 
 ### Added

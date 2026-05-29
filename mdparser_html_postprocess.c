@@ -807,6 +807,21 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
         if (!next_lt) break;
         i = (size_t)(next_lt - html);
 
+        /* Resync the heading cursor before every match attempt. A
+         * heading whose doc_offset was stepped over by a prior
+         * scan_tag_close jump -- its fingerprint landed inside a tag,
+         * e.g. a quoted attribute value of a non-raw-text element --
+         * would otherwise freeze heading_ix here, and the equality
+         * test below could never fire again, silently stripping the id
+         * from every later heading. Drop entries now behind i (or
+         * unresolvable) so the cursor always points at the next
+         * heading at or ahead of the current position. */
+        while (want_anchors && heading_ix < headings->count &&
+               (headings->items[heading_ix].doc_offset == SIZE_MAX ||
+                headings->items[heading_ix].doc_offset < i)) {
+            heading_ix++;
+        }
+
         /* Skip-region: script/style/title/textarea/iframe/noscript/
          * xmp/noembed/noframes/plaintext bodies, HTML comments, and
          * CDATA. Their interior is emitted verbatim and is not a
