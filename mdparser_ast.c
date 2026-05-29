@@ -158,42 +158,63 @@ void mdparser_init_ast_strings(void)
 #undef INTERN_V
 }
 
-/* Map a cmark node-type string (with footnote-name overrides) to its
- * pre-interned zend_string. Returns NULL for any string outside the
- * pre-interned set so the caller can fall back to a per-call alloc;
- * defensive for future cmark releases that introduce new types. */
-static zend_string *mdparser_type_interned(const char *s, cmark_node_type ntype)
+/* Map a cmark node to its pre-interned type zend_string. Core node
+ * types are compile-time enum constants and resolve through a switch on
+ * `ntype` -- a jump table, no strcmp on the common path.
+ *
+ * Extension nodes are matched by name instead, because an extension's
+ * type STRING is authoritative: table/table_row/table_cell/
+ * strikethrough get fresh runtime type values (above the core range
+ * via cmark_syntax_extension_add_node), but tasklist reuses
+ * CMARK_NODE_ITEM and only overrides the string, so switching on its
+ * ntype would mislabel it "item". `is_extension` (the node carries a
+ * syntax_extension) selects the name path; footnotes are a core
+ * CMARK_OPT_FOOTNOTES feature with no extension attached, so they stay
+ * on the switch.
+ *
+ * Returns NULL for anything outside the pre-interned set so the caller
+ * can fall back to a per-call alloc -- defensive for future cmark
+ * releases that introduce new types. */
+static zend_string *mdparser_type_interned(const char *s, cmark_node_type ntype,
+                                           bool is_extension)
 {
-    if (ntype == CMARK_NODE_FOOTNOTE_REFERENCE) return md_v_footnote_reference;
-    if (ntype == CMARK_NODE_FOOTNOTE_DEFINITION) return md_v_footnote_definition;
+    if (!is_extension) {
+        switch (ntype) {
+            case CMARK_NODE_TEXT:                return md_v_text;
+            case CMARK_NODE_PARAGRAPH:           return md_v_paragraph;
+            case CMARK_NODE_SOFTBREAK:           return md_v_softbreak;
+            case CMARK_NODE_CODE:                return md_v_code;
+            case CMARK_NODE_EMPH:                return md_v_emph;
+            case CMARK_NODE_STRONG:              return md_v_strong;
+            case CMARK_NODE_LINK:                return md_v_link;
+            case CMARK_NODE_IMAGE:               return md_v_image;
+            case CMARK_NODE_LINEBREAK:           return md_v_linebreak;
+            case CMARK_NODE_HEADING:             return md_v_heading;
+            case CMARK_NODE_LIST:                return md_v_list;
+            case CMARK_NODE_ITEM:                return md_v_item;
+            case CMARK_NODE_CODE_BLOCK:          return md_v_code_block;
+            case CMARK_NODE_HTML_BLOCK:          return md_v_html_block;
+            case CMARK_NODE_HTML_INLINE:         return md_v_html_inline;
+            case CMARK_NODE_BLOCK_QUOTE:         return md_v_block_quote;
+            case CMARK_NODE_THEMATIC_BREAK:      return md_v_thematic_break;
+            case CMARK_NODE_DOCUMENT:            return md_v_document;
+            case CMARK_NODE_CUSTOM_BLOCK:        return md_v_custom_block;
+            case CMARK_NODE_CUSTOM_INLINE:       return md_v_custom_inline;
+            case CMARK_NODE_FOOTNOTE_REFERENCE:  return md_v_footnote_reference;
+            case CMARK_NODE_FOOTNOTE_DEFINITION: return md_v_footnote_definition;
+            default:                             break;
+        }
+    }
+
+    /* GFM extension node types (and any future core type not yet in the
+     * switch): matched by the authoritative type string. */
     if (!s) return md_v_unknown;
-    /* Ordered roughly by frequency for the common documents. */
-    if (strcmp(s, "text") == 0)                return md_v_text;
-    if (strcmp(s, "paragraph") == 0)           return md_v_paragraph;
-    if (strcmp(s, "softbreak") == 0)           return md_v_softbreak;
-    if (strcmp(s, "code") == 0)                return md_v_code;
-    if (strcmp(s, "emph") == 0)                return md_v_emph;
-    if (strcmp(s, "strong") == 0)              return md_v_strong;
-    if (strcmp(s, "link") == 0)                return md_v_link;
-    if (strcmp(s, "image") == 0)               return md_v_image;
-    if (strcmp(s, "linebreak") == 0)           return md_v_linebreak;
-    if (strcmp(s, "heading") == 0)             return md_v_heading;
-    if (strcmp(s, "list") == 0)                return md_v_list;
-    if (strcmp(s, "item") == 0)                return md_v_item;
-    if (strcmp(s, "code_block") == 0)          return md_v_code_block;
-    if (strcmp(s, "html_block") == 0)          return md_v_html_block;
-    if (strcmp(s, "html_inline") == 0)         return md_v_html_inline;
-    if (strcmp(s, "block_quote") == 0)         return md_v_block_quote;
-    if (strcmp(s, "thematic_break") == 0)      return md_v_thematic_break;
-    if (strcmp(s, "document") == 0)            return md_v_document;
-    if (strcmp(s, "table") == 0)               return md_v_table;
-    if (strcmp(s, "table_row") == 0)           return md_v_table_row;
-    if (strcmp(s, "table_cell") == 0)          return md_v_table_cell;
-    if (strcmp(s, "strikethrough") == 0)       return md_v_strikethrough;
-    if (strcmp(s, "tasklist") == 0)            return md_v_tasklist;
-    if (strcmp(s, "custom_block") == 0)        return md_v_custom_block;
-    if (strcmp(s, "custom_inline") == 0)       return md_v_custom_inline;
-    if (strcmp(s, "<unknown>") == 0)           return md_v_unknown;
+    if (strcmp(s, "table") == 0)         return md_v_table;
+    if (strcmp(s, "table_row") == 0)     return md_v_table_row;
+    if (strcmp(s, "table_cell") == 0)    return md_v_table_cell;
+    if (strcmp(s, "strikethrough") == 0) return md_v_strikethrough;
+    if (strcmp(s, "tasklist") == 0)      return md_v_tasklist;
+    if (strcmp(s, "<unknown>") == 0)     return md_v_unknown;
     return NULL;
 }
 
@@ -323,9 +344,16 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
      * resolves footnote types from `ntype` directly and returns the
      * pre-interned string; fallback to per-call allocation for
      * unrecognized types. */
+    /* cmark-gfm sets a non-NULL syntax_extension pointer on nodes an
+     * extension created or claimed. It is authoritative both for the
+     * type name (tasklist reuses CMARK_NODE_ITEM and only overrides the
+     * string) and for the extension-specific field block below, so
+     * compute it once. */
+    bool is_extension = cmark_node_get_syntax_extension(node) != NULL;
+
     const char *type_string = cmark_node_get_type_string(node);
     cmark_node_type ntype = cmark_node_get_type(node);
-    zend_string *type_interned = mdparser_type_interned(type_string, ntype);
+    zend_string *type_interned = mdparser_type_interned(type_string, ntype, is_extension);
     if (type_interned) {
         md_add_interned(out, md_str_type, type_interned);
     } else {
@@ -336,11 +364,7 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
         mdparser_add_sourcepos(node, out);
     }
 
-    /* Fast-path extension detection: cmark-gfm sets a non-NULL
-     * syntax_extension pointer on nodes created by an extension.
-     * Replaces the previous 6-way strcmp chain against the type
-     * string in the common (non-extension) case. */
-    if (cmark_node_get_syntax_extension(node) != NULL) {
+    if (is_extension) {
         if (strcmp(type_string, "table") == 0) {
             uint16_t n_columns = cmark_gfm_extensions_get_table_columns(node);
             uint8_t *alignments = cmark_gfm_extensions_get_table_alignments(node);
