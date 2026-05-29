@@ -795,27 +795,21 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
     bool want_anchors = (pp_mask & MDPARSER_PP_HEADING_ANCHORS) != 0;
     bool want_nofollow = (pp_mask & MDPARSER_PP_NOFOLLOW_LINKS) != 0;
 
-    if (want_anchors) {
-        while (heading_ix < headings->count &&
-               headings->items[heading_ix].doc_offset == SIZE_MAX) {
-            heading_ix++;
-        }
-    }
-
     while (i < html_len) {
         const char *next_lt = memchr(html + i, '<', html_len - i);
         if (!next_lt) break;
         i = (size_t)(next_lt - html);
 
-        /* Resync the heading cursor before every match attempt. A
-         * heading whose doc_offset was stepped over by a prior
-         * scan_tag_close jump -- its fingerprint landed inside a tag,
-         * e.g. a quoted attribute value of a non-raw-text element --
-         * would otherwise freeze heading_ix here, and the equality
-         * test below could never fire again, silently stripping the id
-         * from every later heading. Drop entries now behind i (or
-         * unresolvable) so the cursor always points at the next
-         * heading at or ahead of the current position. */
+        /* Single point of heading-cursor maintenance: before every
+         * match attempt, drop entries that are unresolvable (doc_offset
+         * == SIZE_MAX) or already behind i. "Behind i" covers headings
+         * stepped over by a prior scan_tag_close jump (fingerprint
+         * landed inside a tag, e.g. a quoted attribute value) and by the
+         * skip-region jump below; without this the equality test could
+         * never fire again and every later heading would silently lose
+         * its id. Because all advancement lives here, the skip-region
+         * path only has to move i -- the next iteration reconciles the
+         * cursor. */
         while (want_anchors && heading_ix < headings->count &&
                (headings->items[heading_ix].doc_offset == SIZE_MAX ||
                 headings->items[heading_ix].doc_offset < i)) {
@@ -828,12 +822,8 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
          * valid injection site under any pp_mask. */
         size_t raw_skip = scan_skip_region(html, i, html_len);
         if (raw_skip != SIZE_MAX) {
-            while (want_anchors && heading_ix < headings->count &&
-                   headings->items[heading_ix].doc_offset != SIZE_MAX &&
-                   headings->items[heading_ix].doc_offset < raw_skip)
-            {
-                heading_ix++;
-            }
+            /* Jump the region; any heading whose doc_offset fell inside
+             * it is dropped by the top-of-loop resync next iteration. */
             i = raw_skip;
             continue;
         }
