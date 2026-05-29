@@ -309,14 +309,14 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
         return;
     }
 
-    /* Worst case is a list node with sourcepos enabled: type,
-     * start_line, start_column, end_line, end_column, list_type,
-     * list_start, list_tight, list_delim, children = 10 keys.
-     * array_init_size(16) lands on the next power-of-two HT bucket
-     * size, so even the worst-case node finishes without a rehash;
-     * smaller nodes pay one extra bucket-row of memory which is
-     * negligible against per-array overhead. */
-    array_init_size(out, 16);
+    /* With sourcepos the worst-case node is a list: type, the four
+     * sourcepos fields, list_type/list_start/list_tight/list_delim,
+     * children = 10 keys, which needs a 16-bucket HT to avoid a rehash.
+     * Without sourcepos the worst case is 6 keys (the list fields plus
+     * children), so 8 buckets suffice -- and most nodes (text, emph,
+     * paragraph) carry only 2-3 keys, so dropping the floor to 8 saves
+     * a bucket row each on the common path. */
+    array_init_size(out, (cmark_options & CMARK_OPT_SOURCEPOS) ? 16 : 8);
 
     /* cmark-gfm's get_type_string switch does not cover footnote node
      * types and returns "<unknown>" for them. mdparser_type_interned
@@ -366,7 +366,7 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
         return;
     }
 
-    switch (cmark_node_get_type(node)) {
+    switch (ntype) {
         case CMARK_NODE_HEADING:
             md_add_long(out, md_str_level, cmark_node_get_heading_level(node));
             mdparser_add_children(node, cmark_options, depth, out);

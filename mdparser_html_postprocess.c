@@ -419,7 +419,7 @@ static bool collect_heading_text(cmark_node *node, smart_str *b, int depth)
 
 /* ---------- heading list construction -------------------------------- */
 
-/* Failure reasons for collect_headings / mdparser_html_postprocess.
+/* Failure reasons for collect_headings / mdparser_html_postprocess_ex.
  * Distinguishing the AST-depth-cap path from cmark allocation failure
  * lets the caller emit a precise exception message; the wrapper-side
  * "depth cap" failure is a documented limit, not an OOM, so callers
@@ -909,10 +909,9 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
 
 /* ---------- public entry point --------------------------------------- */
 
-/* Failure-reason out-parameter variant. status_out is set to MDPP_OK on
- * success, or to one of the discriminated failure reasons. The legacy
- * variant (no status_out) is the public ABI; callers that want a
- * specific exception message use this variant directly. */
+/* status_out is set to MDPP_OK on success, or to one of the
+ * discriminated failure reasons; callers map it to a specific
+ * exception message via mdparser_pp_status_message. */
 zend_string *mdparser_html_postprocess_ex(
     const char *html_in, size_t html_len,
     cmark_node *document, int cmark_options,
@@ -955,16 +954,6 @@ zend_string *mdparser_html_postprocess_ex(
     heading_list_free(&headings, &mdparser_zend_mem);
     *status_out = (int)MDPP_OK;
     return out;
-}
-
-zend_string *mdparser_html_postprocess(
-    const char *html_in, size_t html_len,
-    cmark_node *document, int cmark_options,
-    cmark_llist *extensions, int pp_mask)
-{
-    int status;
-    return mdparser_html_postprocess_ex(html_in, html_len, document,
-        cmark_options, extensions, pp_mask, &status);
 }
 
 const char *mdparser_pp_status_message(int status)

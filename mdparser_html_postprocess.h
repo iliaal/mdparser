@@ -37,17 +37,12 @@
  * `document` may be NULL when `MDPARSER_PP_HEADING_ANCHORS` is not in
  * pp_mask (e.g. nofollow-only callers like toInlineHtml). Passing
  * NULL with `MDPARSER_PP_HEADING_ANCHORS` set is a caller bug and
- * returns NULL. */
-zend_string *mdparser_html_postprocess(
-    const char *html_in, size_t html_len,
-    cmark_node *document, int cmark_options,
-    cmark_llist *extensions, int pp_mask);
-
-/* Variant that reports the specific failure reason via *status_out
- * (see mdparser_pp_status_message). On NULL return the caller can map
- * status to a precise exception message instead of the catch-all
- * "HTML postprocess allocation failure". On success status_out is set
- * to 0. */
+ * returns NULL.
+ *
+ * status_out is set to MDPP_OK on success, or to a discriminated
+ * failure reason (see mdparser_pp_status_message) on NULL return, so
+ * the caller can map it to a precise exception message instead of a
+ * catch-all. */
 zend_string *mdparser_html_postprocess_ex(
     const char *html_in, size_t html_len,
     cmark_node *document, int cmark_options,

@@ -51,6 +51,7 @@ tests/**/*.exp
 tests/**/*.log
 tests/**/*.sh
 tests/**/*.php.out
+tests/**/*.php
 
 # editors
 .vscode/
