@@ -460,7 +460,14 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     }
     obj->parser_dirty = false;
 
-    char *rendered = cmark_render_html_with_mem(document, obj->cmark_options,
+    /* Render without sourcepos. The wrapper-strip below matches an exact
+     * `<p>\xE2\x80\x8B` prefix; a `data-sourcepos` attribute on the <p>
+     * (emitted when the instance was built with Options(sourcepos:true))
+     * would fail that match and fall back to returning the full HTML,
+     * leaking the <p> wrapper into the supposedly wrapper-free inline
+     * output. sourcepos is meaningless for stripped inline content. */
+    int inline_options = obj->cmark_options & ~CMARK_OPT_SOURCEPOS;
+    char *rendered = cmark_render_html_with_mem(document, inline_options,
         cmark_parser_get_syntax_extensions(parser), &mdparser_zend_mem);
 
     if (!rendered) {
