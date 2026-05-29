@@ -50,9 +50,17 @@ static void *mdparser_zend_realloc(void *ptr, size_t size)
 
 static void mdparser_zend_free(void *ptr)
 {
-    /* efree handles NULL safely in modern Zend MM (zend_mm_free_heap
-     * page-offset check; verified against php-src). cmark's free
-     * callback contract also says NULL is never passed. No guard. */
+    /* Match the libc free() contract that cmark_mem free callbacks are
+     * written against: free(NULL) is a no-op. cmark's default allocator
+     * is plain free(), so vendored cmark code is not guaranteed to guard
+     * every mem->free() against NULL, and a future cherry-pick could add
+     * one that doesn't. efree(NULL) happens to be safe in the current
+     * Zend allocator too (zend_mm_free_heap returns early on a NULL
+     * pointer), but guarding here keeps the callback correct on its own
+     * terms instead of leaning on that internal detail. */
+    if (!ptr) {
+        return;
+    }
     efree(ptr);
 }
 
