@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The cursor now resyncs before each match attempt, so a stepped-over
   fingerprint no longer cascades. Regression test:
   `tests/038_anchor_attr_fingerprint.phpt`.
+- `headingAnchors`: a heading whose fingerprint could not be located
+  (e.g. its own body contains an inline raw-text element, so the
+  fingerprint straddles a skip region carved from itself) ran the shared
+  offset-resolution cursor to end-of-document, silently stripping the
+  `id` from every later heading. The cursor is now restored on a miss,
+  so one unresolvable heading no longer cascades. Regression test:
+  `tests/039_anchor_offset_cascade.phpt`.
+- Postprocess (`nofollowLinks` / `headingAnchors`): an unterminated raw
+  tag (e.g. an unbalanced quote in raw HTML under `unsafe: true`) made
+  the rewrite loop abandon all remaining transforms, dropping `rel` and
+  `id` injection for the rest of the document. The loop now treats the
+  stray `<` as a literal and keeps scanning. Regression test:
+  `tests/041_postprocess_unterminated_tag.phpt`.
+- `toInlineHtml`: a Parser built with `sourcepos: true` emitted a
+  `data-sourcepos` attribute on the `<p>` wrapper, defeating the
+  wrapper-strip and leaking `<p ...>` into the otherwise wrapper-free
+  inline output. The inline render now masks `sourcepos` off. Regression
+  test: `tests/040_inline_sourcepos.phpt`.
 
 ## [0.3.0] - 2026-05-06
 

@@ -23,30 +23,9 @@
 
 #include <string.h>
 
-/* memmem is a GNU/BSD extension; MSVC's libc does not provide it. Use a
- * portable two-loop fallback on Windows. The needle lengths we pass are
- * either short literals ("<a href=\"", "</script>"...) or a single
- * heading's rendered HTML, so a naive scan is acceptable. */
-#ifdef _WIN32
-static const void *mdparser_memmem(const void *haystack, size_t haystack_len,
-    const void *needle, size_t needle_len)
-{
-    if (needle_len == 0) return haystack;
-    if (needle_len > haystack_len) return NULL;
-    const char *h = (const char *)haystack;
-    const char *n = (const char *)needle;
-    const char *end = h + (haystack_len - needle_len) + 1;
-    char first = n[0];
-    for (const char *p = h; p < end; p++) {
-        const char *cand = (const char *)memchr(p, first, (size_t)(end - p));
-        if (!cand) return NULL;
-        if (memcmp(cand, n, needle_len) == 0) return cand;
-        p = cand;
-    }
-    return NULL;
-}
-#define memmem mdparser_memmem
-#endif
+/* Substring search uses zend_memnstr (Zend/zend_operators.h, via php.h):
+ * cross-platform, no libc memmem dependency (MSVC lacks it), and its
+ * last-byte-prefilter fast path beats a naive scan. */
 
 /* ---------- heading entry list -------------------------------------- */
 
@@ -512,7 +491,16 @@ static bool collect_headings(cmark_node *document, int cmark_options,
  * apply time; that happens for headings whose body contains state-
  * dependent renderer output (e.g. footnote references inside a
  * heading: the standalone footnote_ix is 0 but the in-document index
- * is whatever counter cmark had reached at that point).
+ * is whatever counter cmark had reached at that point) and for a
+ * heading whose own body contains an inline raw-text element, whose
+ * fingerprint then straddles a skip range carved from itself.
+ *
+ * A miss must NOT poison later headings: the search cursor is shared
+ * to enforce source order, but an exhaustive no-match run would leave
+ * it (and region_ix) at end-of-document, so every subsequent heading
+ * would see an empty search range and silently lose its id. Save the
+ * search origin per heading and restore it on a miss so the next
+ * heading resumes from the same point.
  *
  * Skip ranges are pre-computed once into `skips` (sorted by start),
  * so resolution is O(N + M) total instead of O(N*M) in the previous
@@ -525,6 +513,9 @@ static void resolve_heading_offsets(const char *html, size_t html_len,
 
     for (size_t hi = 0; hi < headings->count; hi++) {
         mdparser_heading_entry *e = &headings->items[hi];
+        size_t saved_cursor = cursor;
+        size_t saved_region_ix = region_ix;
+        bool found = false;
 
         while (cursor < html_len) {
             /* Drop regions that ended before the cursor (can happen
@@ -552,18 +543,22 @@ static void resolve_heading_offsets(const char *html, size_t html_len,
                 : html_len;
 
             if (e->rendered_len <= seg_end - cursor) {
-                const char *hit = memmem(html + cursor, seg_end - cursor,
-                    e->rendered, e->rendered_len);
+                const char *hit = zend_memnstr(html + cursor, e->rendered,
+                    e->rendered_len, html + seg_end);
                 if (hit) {
                     e->doc_offset = (size_t)(hit - html);
                     cursor = e->doc_offset + e->rendered_len;
-                    goto next_heading;
+                    found = true;
+                    break;
                 }
             }
             cursor = seg_end;
         }
-next_heading:
-        ;
+
+        if (!found) {
+            cursor = saved_cursor;
+            region_ix = saved_region_ix;
+        }
     }
 }
 
@@ -880,12 +875,17 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
          * values as literal so a `<` (or `>`) inside an attribute does
          * not pull the next iteration into mid-attribute bytes. */
         size_t tag_end = scan_tag_close(html, i, html_len);
-        if (tag_end == SIZE_MAX) {
-            i++;
-        } else if (tag_end >= html_len) {
-            break;
-        } else {
+        if (tag_end < html_len) {
             i = tag_end;
+        } else {
+            /* tag_end == SIZE_MAX (the `<` does not start a tag) or
+             * == html_len (an unterminated tag, e.g. an unbalanced
+             * quote in raw HTML under unsafe). Either way, treat this
+             * `<` as a literal byte and keep scanning. Breaking here
+             * instead would abandon nofollow / heading-anchor injection
+             * for the entire remainder of the document on one malformed
+             * tag. */
+            i++;
         }
     }
 
