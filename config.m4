@@ -54,7 +54,7 @@ if test "$PHP_MDPARSER" != "no"; then
     $CMARK_EXT_DIR/tagfilter.c \
     $CMARK_EXT_DIR/ext_scanners.c"
 
-  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_ast.c mdparser_html_postprocess.c"
+  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_ast.c mdparser_html_postprocess.c mdparser_arena.c"
 
   dnl -Wall -Wextra are on by default so wrapper regressions get caught
   dnl in every local build; --enable-mdparser-dev upgrades warnings to
@@ -70,7 +70,13 @@ if test "$PHP_MDPARSER" != "no"; then
   dnl already marks that with ZEND_DLEXPORT (visibility("default")), so
   dnl the loader still finds it. Prevents collisions if another
   dnl extension also vendors cmark.
+  dnl MDPARSER_ARENA routes cmark allocation through a per-call Zend-backed
+  dnl bump arena with a free-list (mdparser_arena.c) instead of per-node
+  dnl emalloc/efree. ~8-14% faster parse; peak RSS runs higher but stays
+  dnl emalloc-backed so memory_limit still bounds it. Build with
+  dnl -UMDPARSER_ARENA to fall back to the cached-parser + direct-emalloc path.
   MDPARSER_CFLAGS="-DCMARK_GFM_STATIC_DEFINE -DCMARK_GFM_EXTENSIONS_STATIC_DEFINE \
+    -DMDPARSER_ARENA \
     -fvisibility=hidden \
     -Wall -Wextra -Wno-unused-parameter -Wno-unused-function"
 
