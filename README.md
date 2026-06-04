@@ -150,7 +150,7 @@ Companion native PHP extensions for high-throughput PHP workloads:
 
 - **[php_excel](https://github.com/iliaal/php_excel)**: native Excel I/O. 7-10× faster than PhpSpreadsheet, full XLS/XLSX with formulas, formatting, and styling. Powered by LibXL.
 - **[php_clickhouse](https://github.com/iliaal/php_clickhouse)**: native ClickHouse client speaking the wire protocol directly. Picks up where SeasClick left off.
-- **[fastchart](https://github.com/iliaal/fastchart)**: native chart-rendering extension. 19 chart types behind one fluent OO API; composes with caller-owned `\GdImage` canvases.
+- **[fastchart](https://github.com/iliaal/fastchart)**: native chart-rendering extension. 26 chart types behind one fluent OO API, SVG-canonical with PNG/JPG/WebP output (no libgd dependency).
 
 ## 📚 Read more
 
