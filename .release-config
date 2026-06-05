@@ -5,6 +5,7 @@ version_macro: PHP_MDPARSER_VERSION
 version_file: php_mdparser.h
 repo: iliaal/mdparser
 build_matrix:
+  - PHP-8.2
   - PHP-8.3
   - PHP-8.4
   - PHP-8.5

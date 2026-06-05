@@ -64,7 +64,12 @@ void mdparser_parser_register_class(void)
 {
     mdparser_parser_ce = register_class_MdParser_Parser();
     mdparser_parser_ce->create_object = mdparser_parser_create;
+#if PHP_VERSION_ID >= 80300
+    /* default_object_handlers is 8.3+. On 8.2 the per-object
+     * obj->std.handlers assignment in mdparser_parser_create() is the
+     * correct mechanism. */
     mdparser_parser_ce->default_object_handlers = &mdparser_parser_handlers;
+#endif
     /* Parser caches a mask/extension_mask pair that default serialization
      * never captures, so unserialize() would silently yield a parser
      * running on defaults regardless of the constructed Options. Block
