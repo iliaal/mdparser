@@ -8,7 +8,7 @@
 
 ![mdparser: 15-30× faster than pure-PHP](images/mdparser-hero.jpg)
 
-Native C CommonMark + GitHub Flavored Markdown parser for PHP. 15-30× faster than pure-PHP alternatives (Parsedown, cebe, michelf) with full CommonMark 0.31 compliance: 652/652 spec examples pass. GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.3 minimum, OO API with `final` classes and `readonly` options.
+Native C CommonMark + GitHub Flavored Markdown parser for PHP. 15-30× faster than pure-PHP alternatives (Parsedown, cebe, michelf) with full CommonMark 0.31 compliance: 652/652 spec examples pass. GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.2 minimum, OO API with `final` classes and `readonly` options.
 
 ## 📦 Install
 
