@@ -17,11 +17,19 @@ static int core_extensions_registration(cmark_plugin *plugin) {
   return 1;
 }
 
-void cmark_gfm_core_extensions_ensure_registered(void) {
-  static int registered = 0;
+/* mdparser local modification (see vendor/VENDOR.md): hoisted out of
+ * ensure_registered so the guard can be reset when the host releases
+ * the registry via cmark_release_plugins(); otherwise registration can
+ * never re-run in the same process image. */
+static int core_extensions_registered = 0;
 
-  if (!registered) {
+void cmark_gfm_core_extensions_ensure_registered(void) {
+  if (!core_extensions_registered) {
     cmark_register_plugin(core_extensions_registration);
-    registered = 1;
+    core_extensions_registered = 1;
   }
+}
+
+void cmark_gfm_core_extensions_reset_registered(void) {
+  core_extensions_registered = 0;
 }

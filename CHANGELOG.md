@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Module lifecycle: a second MINIT after MSHUTDOWN in the same process
+  (embedded SAPI cycle, a dlclose that doesn't unload) failed with
+  E_CORE_ERROR because cmark's one-shot registration guards survived
+  `cmark_release_plugins()`. The vendored guards are now resettable and
+  the extension-create functions idempotent. Regression test:
+  `tests/043_mshutdown_reminit_registry.phpt`.
 - `headingAnchors`: a skip-region opener (`<!--`, `<script>`, ...) inside
   a quoted attribute value of raw HTML under `unsafe: true` fabricated a
   skip range to end-of-document, silently stripping the `id` from every

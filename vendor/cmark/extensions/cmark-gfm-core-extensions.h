@@ -13,6 +13,13 @@ extern "C" {
 CMARK_GFM_EXPORT
 void cmark_gfm_core_extensions_ensure_registered(void);
 
+/** mdparser local modification (see vendor/VENDOR.md): resets the
+ * ensure_registered guard. Call after cmark_release_plugins() so a
+ * later ensure_registered re-populates the registry.
+ */
+CMARK_GFM_EXPORT
+void cmark_gfm_core_extensions_reset_registered(void);
+
 CMARK_GFM_EXPORT
 uint16_t cmark_gfm_extensions_get_table_columns(cmark_node *node);
 

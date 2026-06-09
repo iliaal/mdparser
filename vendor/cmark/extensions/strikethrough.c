@@ -152,7 +152,11 @@ cmark_syntax_extension *create_strikethrough_extension(void) {
   cmark_syntax_extension_set_man_render_func(ext, man_render);
   cmark_syntax_extension_set_html_render_func(ext, html_render);
   cmark_syntax_extension_set_plaintext_render_func(ext, plaintext_render);
-  CMARK_NODE_STRIKETHROUGH = cmark_syntax_extension_add_node(1);
+  /* mdparser local modification (see vendor/VENDOR.md): keep the
+   * node-type id assigned on first registration when the extension is
+   * re-created after cmark_release_plugins(). */
+  if (!CMARK_NODE_STRIKETHROUGH)
+    CMARK_NODE_STRIKETHROUGH = cmark_syntax_extension_add_node(1);
 
   cmark_syntax_extension_set_match_inline_func(ext, match);
   cmark_syntax_extension_set_inline_from_delim_func(ext, insert);

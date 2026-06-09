@@ -853,7 +853,13 @@ static int escape(cmark_syntax_extension *self, cmark_node *node, int c) {
 cmark_syntax_extension *create_table_extension(void) {
   cmark_syntax_extension *self = cmark_syntax_extension_new("table");
 
-  cmark_register_node_flag(&CMARK_NODE__TABLE_VISITED);
+  /* mdparser local modification (see vendor/VENDOR.md): the flag bit
+   * and node-type ids are process-global; keep the values assigned on
+   * first registration when the extension is re-created after
+   * cmark_release_plugins(). Unguarded, the flag re-register aborts
+   * and the node-type counter creeps one triple per cycle. */
+  if (!CMARK_NODE__TABLE_VISITED)
+    cmark_register_node_flag(&CMARK_NODE__TABLE_VISITED);
   cmark_syntax_extension_set_match_block_func(self, matches);
   cmark_syntax_extension_set_open_block_func(self, try_opening_table_block);
   cmark_syntax_extension_set_get_type_string_func(self, get_type_string);
@@ -868,9 +874,11 @@ cmark_syntax_extension *create_table_extension(void) {
   cmark_syntax_extension_set_opaque_alloc_func(self, opaque_alloc);
   cmark_syntax_extension_set_opaque_free_func(self, opaque_free);
   cmark_syntax_extension_set_commonmark_escape_func(self, escape);
-  CMARK_NODE_TABLE = cmark_syntax_extension_add_node(0);
-  CMARK_NODE_TABLE_ROW = cmark_syntax_extension_add_node(0);
-  CMARK_NODE_TABLE_CELL = cmark_syntax_extension_add_node(0);
+  if (!CMARK_NODE_TABLE) {
+    CMARK_NODE_TABLE = cmark_syntax_extension_add_node(0);
+    CMARK_NODE_TABLE_ROW = cmark_syntax_extension_add_node(0);
+    CMARK_NODE_TABLE_CELL = cmark_syntax_extension_add_node(0);
+  }
 
   return self;
 }

@@ -117,11 +117,19 @@ PHP_MINIT_FUNCTION(mdparser)
 PHP_MSHUTDOWN_FUNCTION(mdparser)
 {
     cmark_release_plugins();
+    /* ensure_registered's guard latches after the first registration
+     * and survives cmark_release_plugins. Without resetting it, a
+     * re-MINIT in the same process image (embedded SAPI cycle, a
+     * dlclose that doesn't unload) runs ensure_registered as a no-op
+     * against the now-empty registry and module startup fails with
+     * E_CORE_ERROR. The reset hook is a local vendor modification
+     * (vendor/VENDOR.md). Regression test:
+     * tests/043_mshutdown_reminit_registry.phpt. */
+    cmark_gfm_core_extensions_reset_registered();
     /* cmark_release_plugins frees the syntax_extension structs the
-     * cached pointers reference. Zero the cache so a hypothetical
-     * re-MINIT (embedded SAPI / test harness) starts clean instead of
-     * dereferencing freed memory before mdparser_resolve_extensions
-     * reseats the array. */
+     * cached pointers reference. Zero the cache so a re-MINIT starts
+     * clean instead of dereferencing freed memory before
+     * mdparser_resolve_extensions reseats the array. */
     memset(mdparser_cached_extensions, 0, sizeof(mdparser_cached_extensions));
     return SUCCESS;
 }

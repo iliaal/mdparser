@@ -147,3 +147,31 @@ conformance test passes `false`.
 When refreshing to a future cmark version, these cherry-picks need to
 be re-applied manually. Every one has a `/* cmark upstream <commit>,
 adapted... */` comment near the change site so you can find them.
+
+### Module-lifecycle additions (no upstream equivalent)
+
+- `extensions/core-extensions.c` + `extensions/cmark-gfm-core-extensions.h`:
+  hoisted `ensure_registered`'s function-local `static int registered`
+  guard to file scope and added
+  `cmark_gfm_core_extensions_reset_registered(void)`. The guard latches
+  after the first registration and survives `cmark_release_plugins()`,
+  so a host that releases the registry at module shutdown (our
+  PHP_MSHUTDOWN) could never re-register on a second MINIT in the same
+  process image — `cmark_find_syntax_extension("table")` returned NULL
+  and startup failed. PHP_MSHUTDOWN now calls the reset hook right
+  after `cmark_release_plugins()`.
+- `extensions/table.c` + `extensions/strikethrough.c`: made
+  `create_table_extension` / `create_strikethrough_extension`
+  idempotent across registration cycles. `CMARK_NODE__TABLE_VISITED`
+  and the `CMARK_NODE_TABLE`/`_ROW`/`_CELL`/`_STRIKETHROUGH` node-type
+  ids are process globals that survive `cmark_release_plugins()`;
+  re-running registration unguarded aborts in
+  `cmark_register_node_flag` (double flag init) and burns fresh
+  node-type ids from the shared counter each cycle. Both now keep the
+  first-registration values.
+
+All change sites carry an `mdparser local modification` comment.
+Regression test: `tests/043_mshutdown_reminit_registry.phpt` (drives
+the real `zm_shutdown_mdparser` + re-registration in a harness linked
+against the build-tree objects; asserts the registry is usable and the
+node-type ids are stable across the cycle).
