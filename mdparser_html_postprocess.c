@@ -340,8 +340,20 @@ static void skip_list_free(mdparser_skip_list *l)
     l->cap = 0;
 }
 
+/* Forward declaration: compute_skip_list advances over non-region tags
+ * with the same quote-aware scanner apply_transforms uses (defined
+ * later), so both walks share one notion of "tag interior". */
+static size_t scan_tag_close(const char *html, size_t i, size_t html_len);
+
 /* Walk the rendered HTML once, recording every scan_skip_region range
- * in source order. Returns false on allocation failure. */
+ * in source order. Returns false on allocation failure.
+ *
+ * A `<` that does not open a skip region is advanced past with
+ * scan_tag_close, not byte-by-byte: a region opener like `<!--` or
+ * `<script>` sitting inside a quoted attribute value of an ordinary
+ * tag (reachable under unsafe) is not a real opener, and treating it
+ * as one fabricates a skip range that usually has no closer and so
+ * swallows every heading fingerprint to end-of-document. */
 static bool compute_skip_list(const char *html, size_t html_len,
     mdparser_skip_list *out)
 {
@@ -354,9 +366,10 @@ static bool compute_skip_list(const char *html, size_t html_len,
         if (end != SIZE_MAX) {
             if (!skip_list_push(out, i, end)) return false;
             i = (end > i) ? end : i + 1;
-        } else {
-            i++;
+            continue;
         }
+        size_t tag_end = scan_tag_close(html, i, html_len);
+        i = (tag_end != SIZE_MAX && tag_end > i) ? tag_end : i + 1;
     }
     return true;
 }

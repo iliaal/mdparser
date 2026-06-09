@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `headingAnchors`: a skip-region opener (`<!--`, `<script>`, ...) inside
+  a quoted attribute value of raw HTML under `unsafe: true` fabricated a
+  skip range to end-of-document, silently stripping the `id` from every
+  later heading. Regression test: `tests/042_anchor_skiplist_attr_opener.phpt`.
 - `headingAnchors`: under `unsafe: true` with `tagfilter: false`, a
   heading whose standalone fingerprint matched inside a tag attribute
   value in raw HTML could freeze the anchor pass's heading cursor,
