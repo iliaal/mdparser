@@ -4,7 +4,11 @@ MSHUTDOWN then re-MINIT must leave the cmark extension registry usable
 mdparser
 --SKIPIF--
 <?php
-if (substr(PHP_OS, 0, 3) === 'WIN') die('skip needs cc + build-tree objects');
+/* The harness link relies on GNU ld's --unresolved-symbols=ignore-all;
+ * macOS ld64 rejects the flag and its -undefined dynamic_lookup
+ * equivalent binds eagerly under chained fixups, so the technique is
+ * ELF/GNU-ld only. */
+if (PHP_OS !== 'Linux') die('skip GNU ld + build-tree objects required');
 if (!is_file(dirname(__DIR__) . '/.libs/mdparser.o')) die('skip build-tree .libs objects not present');
 $cc = trim((string)shell_exec('command -v cc 2>/dev/null'));
 if ($cc === '') die('skip no cc in PATH');
