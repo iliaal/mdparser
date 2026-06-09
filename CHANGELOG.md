@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `nofollowLinks`: a skip-region opener (`<!--`, `<script>`, ...) inside an
+  `href` value in raw HTML under `unsafe: true` fabricated a skip range to
+  end-of-document, silently stripping `rel="nofollow"` from every later
+  link and `id` from every later heading. Regression test:
+  `tests/044_nofollow_attr_opener.phpt`.
+- `headingAnchors`: an unterminated raw tag truncated the precomputed
+  skip list while the apply pass kept honoring later skip regions; the
+  desync silently dropped the `id` of a heading whose fingerprint also
+  appeared in such a region. Regression test:
+  `tests/045_skiplist_unterminated_tag.phpt`.
 - Module lifecycle: a second MINIT after MSHUTDOWN in the same process
   (embedded SAPI cycle, a dlclose that doesn't unload) failed with
   E_CORE_ERROR because cmark's one-shot registration guards survived

@@ -368,8 +368,14 @@ static bool compute_skip_list(const char *html, size_t html_len,
             i = (end > i) ? end : i + 1;
             continue;
         }
+        /* html_len means an unterminated tag: advance one byte and keep
+         * scanning, exactly like apply_transforms' literal-byte path.
+         * Jumping to end-of-document instead would leave every later
+         * skip region unrecorded while apply_transforms still honors
+         * them, and the desynced skip list lets a heading fingerprint
+         * resolve inside a region the apply pass then skips. */
         size_t tag_end = scan_tag_close(html, i, html_len);
-        i = (tag_end != SIZE_MAX && tag_end > i) ? tag_end : i + 1;
+        i = (tag_end != SIZE_MAX && tag_end < html_len) ? tag_end : i + 1;
     }
     return true;
 }
@@ -878,8 +884,17 @@ static zend_string *apply_transforms(const char *html, size_t html_len,
                 }
                 smart_str_appendl(&out, "<a ", 3);
                 smart_str_appendl(&out, rel_inject, rel_inject_len);
-                i += 3;
-                run_start = i;
+                /* Jump the rest of the anchor tag with the quote-aware
+                 * scanner. Advancing only past "<a " leaves the cursor
+                 * inside the href value, where an embedded region
+                 * opener (`<!--`, `<script>`) fabricates a skip region
+                 * running to end-of-document. The attribute bytes still
+                 * flush verbatim from run_start; an unterminated tag
+                 * (html_len) falls back to the old +3 advance and the
+                 * loop's literal-byte handling. */
+                size_t a_end = scan_tag_close(html, i, html_len);
+                run_start = i + 3;
+                i = (a_end != SIZE_MAX && a_end < html_len) ? a_end : i + 3;
                 continue;
             }
         }
