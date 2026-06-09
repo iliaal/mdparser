@@ -69,3 +69,6 @@ tests/**/*.php
 AGENTS.md
 CLAUDE.md
 .review/
+
+# CodeSage local index and review state
+.codesage/
