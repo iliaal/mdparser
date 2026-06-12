@@ -68,6 +68,7 @@ typedef struct {
     /* Index of slug strings already used, for O(1) collision detection
      * during dedupe. NULL until the first push; lazily allocated. */
     HashTable *slug_index;
+    HashTable *slug_next_suffix;
 } mdparser_heading_list;
 
 /* Dedupe retry cap: after this many "-N" attempts on the same base
@@ -104,6 +105,11 @@ static void heading_list_free(mdparser_heading_list *l, cmark_mem *mem)
         FREE_HASHTABLE(l->slug_index);
         l->slug_index = NULL;
     }
+    if (l->slug_next_suffix) {
+        zend_hash_destroy(l->slug_next_suffix);
+        FREE_HASHTABLE(l->slug_next_suffix);
+        l->slug_next_suffix = NULL;
+    }
     l->items = NULL;
     l->count = 0;
     l->cap = 0;
@@ -127,6 +133,31 @@ static bool heading_list_slug_taken(mdparser_heading_list *l, const char *slug, 
 {
     if (!l->slug_index) return false;
     return zend_hash_str_exists(l->slug_index, slug, slug_len);
+}
+
+static unsigned long heading_list_next_suffix(mdparser_heading_list *l,
+    const char *slug, size_t slug_len)
+{
+    if (!l->slug_next_suffix) return 1;
+
+    zval *zv = zend_hash_str_find(l->slug_next_suffix, slug, slug_len);
+    if (!zv || Z_TYPE_P(zv) != IS_LONG || Z_LVAL_P(zv) < 1) {
+        return 1;
+    }
+    return (unsigned long)Z_LVAL_P(zv);
+}
+
+static void heading_list_set_next_suffix(mdparser_heading_list *l,
+    const char *slug, size_t slug_len, unsigned long next)
+{
+    if (!l->slug_next_suffix) {
+        ALLOC_HASHTABLE(l->slug_next_suffix);
+        zend_hash_init(l->slug_next_suffix, 16, NULL, ZVAL_PTR_DTOR, 0);
+    }
+
+    zval value;
+    ZVAL_LONG(&value, (zend_long)next);
+    zend_hash_str_update(l->slug_next_suffix, slug, slug_len, &value);
 }
 
 /* HTML5 "ASCII whitespace" per WHATWG § 4.6: U+0009 TAB, U+000A LF,
@@ -280,10 +311,12 @@ static char *mdparser_dedupe_slug(mdparser_heading_list *seen, char *slug)
 
     size_t base_len = strlen(slug);
     char *candidate = emalloc(base_len + 24);
-    for (unsigned long n = 1; n <= MDPARSER_DEDUPE_MAX_RETRIES; n++) {
+    unsigned long start = heading_list_next_suffix(seen, slug, base_len);
+    for (unsigned long n = start; n <= MDPARSER_DEDUPE_MAX_RETRIES; n++) {
         int written = snprintf(candidate, base_len + 24, "%s-%lu", slug, n);
         if (written < 0 || (size_t)written >= base_len + 24) continue;
         if (!heading_list_slug_taken(seen, candidate, (size_t)written)) {
+            heading_list_set_next_suffix(seen, slug, base_len, n + 1);
             efree(slug);
             return candidate;
         }
@@ -378,6 +411,30 @@ static bool compute_skip_list(const char *html, size_t html_len,
         i = (tag_end != SIZE_MAX && tag_end < html_len) ? tag_end : i + 1;
     }
     return true;
+}
+
+/* Standalone heading fingerprints that contain their own skip region
+ * cannot be found by resolve_heading_offsets: in the full document,
+ * that body is excluded from searchable segments. Detect those misses
+ * up front so repeated headings like `# <script>x</script>` do not
+ * each rescan the same document tail before restoring the cursor. */
+static bool heading_fingerprint_crosses_skip_region(const mdparser_heading_entry *e)
+{
+    size_t i = 0;
+    while (i < e->rendered_len) {
+        const char *next = memchr(e->rendered + i, '<', e->rendered_len - i);
+        if (!next) break;
+        i = (size_t)(next - e->rendered);
+
+        size_t end = scan_skip_region(e->rendered, i, e->rendered_len);
+        if (end != SIZE_MAX) {
+            return true;
+        }
+
+        size_t tag_end = scan_tag_close(e->rendered, i, e->rendered_len);
+        i = (tag_end != SIZE_MAX && tag_end < e->rendered_len) ? tag_end : i + 1;
+    }
+    return false;
 }
 
 /* ---------- heading text extraction ---------------------------------- */
@@ -510,9 +567,10 @@ static bool collect_headings(cmark_node *document, int cmark_options,
  * apply time; that happens for headings whose body contains state-
  * dependent renderer output (e.g. footnote references inside a
  * heading: the standalone footnote_ix is 0 but the in-document index
- * is whatever counter cmark had reached at that point) and for a
- * heading whose own body contains an inline raw-text element, whose
- * fingerprint then straddles a skip range carved from itself.
+ * is whatever counter cmark had reached at that point). A heading
+ * whose own body contains a raw-text/comment/CDATA region is known
+ * unresolvable before the search starts because its fingerprint
+ * straddles a skip range carved from itself.
  *
  * A miss must NOT poison later headings: the search cursor is shared
  * to enforce source order, but an exhaustive no-match run would leave
@@ -532,6 +590,10 @@ static void resolve_heading_offsets(const char *html, size_t html_len,
 
     for (size_t hi = 0; hi < headings->count; hi++) {
         mdparser_heading_entry *e = &headings->items[hi];
+        if (heading_fingerprint_crosses_skip_region(e)) {
+            continue;
+        }
+
         size_t saved_cursor = cursor;
         size_t saved_region_ix = region_ix;
         bool found = false;

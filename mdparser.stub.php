@@ -95,15 +95,22 @@ final class Parser
 
     public function toHtml(string $source): string {}
 
+    /**
+     * Returns CommonMark XML for the parsed document. This is a
+     * structural representation, not sanitized HTML: raw HTML nodes are
+     * XML-escaped but their source literals are preserved for consumers
+     * that transform the XML further.
+     */
     public function toXml(string $source): string {}
 
     /**
      * Returns a structural representation of the markdown source as
      * a nested array. Link URLs and raw HTML literals are preserved
      * verbatim -- the `unsafe`, `tagfilter`, and URL-scheme defenses
-     * apply to the rendering paths (`toHtml` / `toXml` / `toInlineHtml`),
-     * NOT to `toAst`. Consumers that emit HTML from the AST must
-     * apply their own URL scheme allowlist and HTML sanitization.
+     * apply to the HTML rendering paths (`toHtml` / `toInlineHtml`),
+     * NOT to `toXml` or `toAst`. Consumers that emit HTML from XML or
+     * the AST must apply their own URL scheme allowlist and HTML
+     * sanitization.
      */
     public function toAst(string $source): array {}
 
@@ -135,7 +142,8 @@ final class Parser
 
     /**
      * Static shortcut: parse `$source` with the default Options and
-     * return CommonMark XML.
+     * return CommonMark XML. Like `toXml()`, this preserves raw HTML
+     * node literals as escaped XML text.
      */
     public static function xml(string $source): string {}
 

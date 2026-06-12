@@ -28,6 +28,12 @@ $h = $p->toHtml("# Foo\n## Foo\n### Foo\n");
 check("dedup -1", str_contains($h, '<h2 id="foo-1">Foo</h2>'));
 check("dedup -2", str_contains($h, '<h3 id="foo-2">Foo</h3>'));
 
+// dedup skips authored suffixes and handles many duplicates
+$h = $p->toHtml("# x\n# x-1\n# x\n");
+check("dedup skips already-used suffix", str_contains($h, '<h1 id="x-2">x</h1>'));
+$h = $p->toHtml(str_repeat("# Repeat\n", 150));
+check("dedup many duplicates reaches final suffix", str_contains($h, 'id="repeat-149"'));
+
 // formatting in headings: emph/strong/code stripped from slug, rendered in body
 $h = $p->toHtml("## Hello, **bold** `code` *italic*\n");
 check("formatting stripped from slug",
@@ -102,6 +108,8 @@ OK: flag readable on Options
 OK: default false on default Options
 OK: dedup -1
 OK: dedup -2
+OK: dedup skips already-used suffix
+OK: dedup many duplicates reaches final suffix
 OK: formatting stripped from slug
 OK: formatting preserved in body
 OK: punctuation dropped, spaces collapsed
