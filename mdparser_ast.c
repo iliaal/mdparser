@@ -83,6 +83,7 @@ static zend_string *md_v_image;
 static zend_string *md_v_footnote_reference;
 static zend_string *md_v_footnote_definition;
 static zend_string *md_v_table;
+static zend_string *md_v_table_header;
 static zend_string *md_v_table_row;
 static zend_string *md_v_table_cell;
 static zend_string *md_v_strikethrough;
@@ -142,6 +143,7 @@ void mdparser_init_ast_strings(void)
     INTERN_V(md_v_footnote_reference,   "footnote_reference");
     INTERN_V(md_v_footnote_definition,  "footnote_definition");
     INTERN_V(md_v_table,                "table");
+    INTERN_V(md_v_table_header,         "table_header");
     INTERN_V(md_v_table_row,            "table_row");
     INTERN_V(md_v_table_cell,           "table_cell");
     INTERN_V(md_v_strikethrough,        "strikethrough");
@@ -163,9 +165,9 @@ void mdparser_init_ast_strings(void)
  * `ntype` -- a jump table, no strcmp on the common path.
  *
  * Extension nodes are matched by name instead, because an extension's
- * type STRING is authoritative: table/table_row/table_cell/
- * strikethrough get fresh runtime type values (above the core range
- * via cmark_syntax_extension_add_node), but tasklist reuses
+ * type STRING is authoritative: table/table_header/table_row/
+ * table_cell/strikethrough get fresh runtime type values (above the
+ * core range via cmark_syntax_extension_add_node), but tasklist reuses
  * CMARK_NODE_ITEM and only overrides the string, so switching on its
  * ntype would mislabel it "item". `is_extension` (the node carries a
  * syntax_extension) selects the name path; footnotes are a core
@@ -210,6 +212,7 @@ static zend_string *mdparser_type_interned(const char *s, cmark_node_type ntype,
      * switch): matched by the authoritative type string. */
     if (!s) return md_v_unknown;
     if (strcmp(s, "table") == 0)         return md_v_table;
+    if (strcmp(s, "table_header") == 0)  return md_v_table_header;
     if (strcmp(s, "table_row") == 0)     return md_v_table_row;
     if (strcmp(s, "table_cell") == 0)    return md_v_table_cell;
     if (strcmp(s, "strikethrough") == 0) return md_v_strikethrough;
@@ -378,7 +381,8 @@ static void mdparser_node_to_array(cmark_node *node, int cmark_options, int dept
                 zend_hash_next_index_insert_new(Z_ARRVAL(alignments_arr), &av);
             }
             md_add_zval(out, md_str_alignments, &alignments_arr);
-        } else if (strcmp(type_string, "table_row") == 0) {
+        } else if (strcmp(type_string, "table_header") == 0 ||
+                   strcmp(type_string, "table_row") == 0) {
             md_add_bool(out, md_str_is_header,
                 cmark_gfm_extensions_get_table_row_is_header(node) ? 1 : 0);
         } else if (strcmp(type_string, "tasklist") == 0) {

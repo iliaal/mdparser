@@ -32,7 +32,9 @@ struct mdparser_arena_chunk {
 #define MDP_DEFAULT_CHUNK (256u * 1024u)
 #define MDP_SMALL_MAX (MDP_SMALL_CLASSES * MDP_ALIGN)  /* 4096 */
 
-#define CHUNK_DATA(c) ((unsigned char *)(c) + sizeof(mdparser_arena_chunk))
+#define MDP_CHUNK_HEADER_SIZE \
+    ((sizeof(mdparser_arena_chunk) + (MDP_ALIGN - 1)) & ~((size_t)MDP_ALIGN - 1))
+#define CHUNK_DATA(c) ((unsigned char *)(c) + MDP_CHUNK_HEADER_SIZE)
 
 /* The 16-byte header stores the block's reserved (aligned) payload capacity:
  * free() reads it to pick a reuse bin, realloc() reads it to decide
@@ -66,7 +68,7 @@ void mdparser_arena_destroy(mdparser_arena *a) {
 
 static mdparser_arena_chunk *mdp_new_chunk(mdparser_arena *a, size_t need) {
     size_t cap = need > MDP_DEFAULT_CHUNK ? need : MDP_DEFAULT_CHUNK;
-    mdparser_arena_chunk *c = emalloc(sizeof(mdparser_arena_chunk) + cap);
+    mdparser_arena_chunk *c = emalloc(MDP_CHUNK_HEADER_SIZE + cap);
     c->prev = a->head;
     c->size = cap;
     c->used = 0;

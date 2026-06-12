@@ -458,7 +458,7 @@ PHP_METHOD(MdParser_Parser, toAst)
  *     but doing it here lets us know exactly where line breaks are);
  *   - runs of \n are collapsed to one (blank lines would otherwise
  *     end the paragraph and start a new one);
- *   - leading and trailing \n are dropped;
+ *   - leading, trailing, and whitespace-only physical lines are dropped;
  *   - ZWSP is prepended at the start, and after every retained \n.
  *
  * cmark sees a single paragraph whose every line begins with ZWSP, so
@@ -497,6 +497,8 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     size_t src_len = ZSTR_LEN(source);
     smart_str norm = {0};
     bool need_zwsp = true;
+    size_t pending_indent_start = 0;
+    size_t pending_indent_len = 0;
 
     for (size_t i = 0; i < src_len; i++) {
         char c = src[i];
@@ -507,6 +509,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
             c = '\n';
         }
         if (c == '\n') {
+            pending_indent_len = 0;
             if (need_zwsp) {
                 /* leading newline, or run of newlines; drop. */
                 continue;
@@ -515,8 +518,19 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
             need_zwsp = true;
             continue;
         }
+        if (need_zwsp && (c == ' ' || c == '\t')) {
+            if (pending_indent_len == 0) {
+                pending_indent_start = i;
+            }
+            pending_indent_len++;
+            continue;
+        }
         if (need_zwsp) {
             smart_str_appendl(&norm, zwsp, sizeof(zwsp));
+            if (pending_indent_len != 0) {
+                smart_str_appendl(&norm, src + pending_indent_start, pending_indent_len);
+                pending_indent_len = 0;
+            }
             need_zwsp = false;
         }
         smart_str_appendc(&norm, c);
