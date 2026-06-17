@@ -167,7 +167,7 @@ longer than mdparser on the same input.
   difference. Use whatever's already in your composer deps.
 - **You need features mdparser doesn't support.** Definition lists,
   abbreviations, attribute syntax, heading permalinks, TOC,
-  frontmatter, mentions, LaTeX math, custom containers — these are
+  frontmatter, mentions, custom containers — these are
   all handled by league/commonmark's extensions and not by mdparser.
   Raw speed isn't useful if the feature you need isn't there.
 - **You can't install C extensions.** Shared hosting that ships
