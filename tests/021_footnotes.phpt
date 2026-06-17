@@ -1,5 +1,5 @@
 --TEST--
-footnotes: CMARK_OPT_FOOTNOTES renders references and backrefs
+footnotes: MD_FLAG_FOOTNOTES renders references and backrefs
 --EXTENSIONS--
 mdparser
 --FILE--

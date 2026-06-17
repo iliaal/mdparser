@@ -68,7 +68,7 @@ check("toInlineHtml: 1. list stays literal",
 
 // Indented text stays literal (no code block): the 4 leading spaces
 // are preserved verbatim inside the paragraph rather than triggering
-// cmark's indent-code-block rule.
+// the indented-code-block rule.
 check("toInlineHtml: 4-space indent stays text",
     $p->toInlineHtml("    four space") === "    four space");
 

@@ -1,5 +1,5 @@
 --TEST--
-postprocess: an unterminated raw tag must not drop transforms for the rest of the document (review #2)
+postprocess: an unterminated raw tag must not drop transforms for the rest of the document
 --EXTENSIONS--
 mdparser
 --FILE--

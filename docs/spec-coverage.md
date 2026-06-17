@@ -1,42 +1,36 @@
 # Spec coverage
 
-mdparser targets **CommonMark 0.31** (the spec.txt at `cmark` commit
-`eec0eeb`, version 0.31.2 released February 2026) and achieves
-**100% conformance** — all 652 examples in spec.txt pass exactly.
+mdparser targets **CommonMark 0.31**. The backend is
+[md4c](https://github.com/mity/md4c), which implements CommonMark 0.31
+natively, so there is no version gap to bridge and no patches layered on
+top of the parser.
 
 The conformance test lives at `tests/005_commonmark_spec.phpt` and reads
-`tests/fixtures/commonmark-spec.txt`. It runs as part of the standard
-`make test` and blocks any change that regresses spec behavior.
+every example from `tests/fixtures/commonmark-spec.txt` (the 0.31
+`spec.txt`). It runs as part of the standard `make test` and pins md4c's
+conformance, so any change that moves the baseline shows up in a diff.
 
-## How we got here
+## Current baseline
 
-mdparser embeds `cmark-gfm 0.29.0.gfm.13` (commit `587a12b`) as the
-core parser. cmark-gfm targets CommonMark 0.29 (May 2019). CommonMark
-0.30 and 0.31 added several spec clarifications that cmark-gfm never
-incorporated — the original release of mdparser had 19 failing
-examples against 0.31's `spec.txt`.
+The suite parses all 652 spec examples and pins the result at 649 pass,
+3 fail. The three failures are enumerated by example number and source
+line directly in the test's `--EXPECT--` block. They are md4c's known
+deviations from the reference rendering, not mdparser bugs; the test
+treats them as a fixed baseline so a surprise improvement is as visible
+as a regression.
 
-To close the gap we applied four focused cherry-picks from cmark
-upstream, documented in `vendor/VENDOR.md` under "Local modifications":
-
-| Cherry-pick | cmark commit | Files | Fixes |
-|---|---|---|---|
-| Emphasis rule 13 (`openers_bottom` split by `can_open`) | `34250e1` + `8bafc33` | `inlines.c` | 9 emphasis-nesting examples (e.g. `****foo****`, `*foo **bar *baz* bim** bop*`) |
-| Don't flatten nested `<strong>` in HTML output | reverts a cmark-gfm GitHub-compat tweak | `html.c` | Dependency of the emphasis fix |
-| Treat Unicode Symbols as Punctuation for emphasis flanking | `82969a8` | `inlines.c`, `utf8.c`, `utf8.h` | `*£*text.`-style cases (Unicode symbol class) |
-| Numeric entity max-digit limit | `7b35d4b` | `houdini_html_u.c` | `&#87654321;` overflow case |
-
-A fifth non-code change: the spec test runs with `githubPreLang: false`
-because the spec examples use `<pre><code class="language-X">` form,
-while mdparser's default is `<pre lang="X"><code>` (matching GitHub's
-rendering). Both forms are valid; the difference is presentation. The
-spec test measures spec compliance, not GitHub-parity.
+The spec test runs with `githubPreLang: false` because the spec examples
+use the `<pre><code class="language-X">` form, while mdparser's default
+is `<pre lang="X"><code>` (matching GitHub's rendering). Both forms are
+valid; the difference is presentation, not compliance. The spec test
+measures spec compliance, not GitHub parity. It also enables `unsafe`
+and disables the GFM extensions so the input matches plain CommonMark.
 
 ## GFM extensions
 
-mdparser also supports the five GFM core extensions inherited from
-cmark-gfm. These are *not* part of the CommonMark spec itself, but are
-widely used and enabled by default:
+md4c exposes the GitHub Flavored Markdown extensions through parser
+flags. mdparser enables the core set by default. These are *not* part of
+the CommonMark spec itself, but are widely used:
 
 | Extension | Spec | Test coverage |
 |---|---|---|
@@ -46,8 +40,8 @@ widely used and enabled by default:
 | Autolinks | [GFM §6.9](https://github.github.com/gfm/#autolinks-extension-) | `tests/000_smoke.phpt` |
 | Tag filter | GFM security feature | `tests/020_security.phpt` |
 
-Each extension can be toggled independently via `Options`. See
-`docs/options.md` for the full matrix.
+md4c also implements footnotes. Each extension toggles independently via
+`Options`. See `docs/options.md` for the full matrix.
 
 ## Parity with other PHP libraries
 
@@ -64,26 +58,45 @@ theirs. Pinned baselines:
 
 None of the divergences are mdparser bugs; they're the other libraries
 diverging from the CommonMark spec in their own ways. The parity tests
-are pinned so any unexpected movement (either direction) becomes
-visible in a diff.
+are pinned so any unexpected movement (either direction) becomes visible
+in a diff.
 
-## What's covered beyond CommonMark + GFM
+## md4c dialect extensions
 
-mdparser ships two HTML postprocess passes that don't come from
-cmark-gfm itself:
+Beyond CommonMark and GFM, md4c ships several dialect extensions.
+mdparser exposes each as an opt-in `Options` flag, all defaulting to
+`false`:
+
+| Feature | Option | Syntax |
+|---|---|---|
+| Underline | `underline` | `_text_` renders as `<u>` instead of emphasis |
+| Highlight | `highlight` | `==text==` |
+| Superscript | `superscript` | `^text^` |
+| Subscript | `subscript` | `~text~` |
+| Spoilers | `spoilers` | `>!text!<` |
+| LaTeX math | `latexMath` | `$inline$` and `$$block$$` |
+| Wiki links | `wikiLinks` | `[[target]]` |
+
+These are neither CommonMark nor GFM. Turn them on only when your input
+expects them. See `docs/options.md` for behavior and edge cases.
+
+## HTML postprocess passes
+
+mdparser ships two HTML postprocess passes that the parser itself does
+not produce. They rewrite the rendered HTML:
 
 | Feature | Option | Behavior |
 |---|---|---|
 | Heading permalinks / anchors | `headingAnchors: true` | Every `<hN>` gains a GitHub-style slug `id`; collisions deduped with `-1`, `-2`, ... |
 | External link postprocessing | `nofollowLinks: true` | Every `<a href="...">` gets `rel="nofollow noopener noreferrer"`; in-document fragment anchors are skipped |
 
-Both default to `false`. See `docs/options.md` for behavior, edge
-cases, and the documented `unsafe: true` byte-collision limitation
-on heading anchors.
+Both default to `false`. See `docs/options.md` for behavior, edge cases,
+and the documented `unsafe: true` byte-collision limitation on heading
+anchors.
 
 ## What's NOT covered
 
-Features mdparser does not implement, because cmark-gfm doesn't:
+Features mdparser does not implement:
 
 - Definition lists (`Term :: definition`) — Parsedown Extra, michelf
   Extra, cebe Extra
@@ -92,7 +105,6 @@ Features mdparser does not implement, because cmark-gfm doesn't:
 - Table of contents generation — league/commonmark extension
 - YAML front matter — league/commonmark extension
 - Mentions (`@user`) — league/commonmark extension, Ciconia
-- LaTeX math (`$$...$$`) — md4c has it
 - Emoji (`:smile:`) — league/commonmark extension
 - Custom admonition containers (`::: warning`)
 
@@ -105,10 +117,11 @@ actively-maintained pure-PHP option with a plug-in extension system.
 # Run just the spec conformance test
 make test TESTS=tests/005_commonmark_spec.phpt
 
-# Run the full suite (27 tests, ~3 seconds)
+# Run the full suite
 make test
 ```
 
 If you want to run against a newer `spec.txt`, drop it into
-`tests/fixtures/commonmark-spec.txt` and re-run. Any failures will be
-listed by example number and source line.
+`tests/fixtures/commonmark-spec.txt`, update the baseline in
+`tests/005_commonmark_spec.phpt`, and re-run. Any failures will be listed
+by example number and source line.

@@ -7,14 +7,15 @@ mdparser
 
 $p = new MdParser\Parser();
 
-// === AST depth cap: toHtml/toXml use cmark's iterative renderers and
-// are unaffected, but toAst recurses and must cap at MDPARSER_MAX_AST_DEPTH
-// (1000) to keep a one-line input from smashing the C stack. ===
+// === AST depth cap: toHtml/toXml stream md4c's callbacks and are
+// unaffected, but toAst builds a node array on a fixed stack and must cap
+// at MDPARSER_MAX_AST_DEPTH (1000) to keep a one-line input from
+// overflowing it. ===
 
 // Deeply nested blockquotes: `> > > ...` with >1000 levels.
 $deep = str_repeat('> ', 2000) . "x\n";
 
-// toHtml is iterative inside cmark, so it should work fine.
+// toHtml streams md4c callbacks (no per-level C recursion), so it works fine.
 $html = $p->toHtml($deep);
 echo "toHtml on 2000-level blockquote: ", (str_contains($html, 'x') ? "ok" : "FAIL"), "\n";
 
@@ -33,8 +34,8 @@ $ast = $p->toAst($shallow);
 echo "toAst on 50-level blockquote: ", (is_array($ast) && $ast['type'] === 'document' ? "ok" : "FAIL"), "\n";
 
 // === Input size cap: the wrapper rejects >256MB inputs up front with a
-// documented exception rather than handing arbitrary sizes to cmark's
-// int32 bufsize_t internals. We can't actually allocate a 257MB string
+// documented exception rather than handing arbitrary sizes to md4c's
+// 32-bit MD_SIZE / MD_OFFSET internals. We can't actually allocate a 257MB string
 // in a test without blowing memory_limit, so just verify the normal
 // path passes and trust the cap is in the code. ===
 

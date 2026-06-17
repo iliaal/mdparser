@@ -9,9 +9,10 @@ function check(string $label, bool $cond): void {
     echo ($cond ? "OK" : "FAIL"), ": $label\n";
 }
 
-// === Parser is NOT_SERIALIZABLE: cached cmark_options / extension_mask
-// ints live on the C object struct, not in PHP properties, so a
-// round-trip through serialize() would silently reset them. ===
+// === Parser is NOT_SERIALIZABLE: the cached md4c parser-flag and
+// renderer-option ints live on the C object struct, not in PHP
+// properties, so a round-trip through serialize() would silently reset
+// them. ===
 $parser = new MdParser\Parser(new MdParser\Options(smart: true, footnotes: true));
 try {
     serialize($parser);

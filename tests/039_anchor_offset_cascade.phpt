@@ -1,5 +1,5 @@
 --TEST--
-headingAnchors: an unfindable heading must not strip ids from later headings (review #1)
+headingAnchors: an unfindable heading must not strip ids from later headings
 --EXTENSIONS--
 mdparser
 --FILE--

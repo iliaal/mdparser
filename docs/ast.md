@@ -7,10 +7,12 @@ quote, list, etc.) have a `children` key holding an ordered array of
 child nodes. Leaf nodes carry type-specific fields such as `literal`,
 `url`, or `level`.
 
-The AST is built in pure C by walking cmark's internal `cmark_node`
-tree via its public accessor API (`cmark_node_get_literal`, etc.), so
-there's no string parsing or reflection overhead — it's roughly as fast
-as `toHtml`.
+The AST is assembled in C directly from md4c's parser callbacks: as
+md4c emits enter/leave block, enter/leave span, and text events, the
+builder pushes and pops nodes on a zval stack and fills in each node's
+fields as the event arrives. There is no intermediate document tree and
+no string re-parsing, so building the array is roughly as fast as
+`toHtml`.
 
 > **Security: the AST is unsanitized.** Link / image `url` fields and
 > `html_block` / `html_inline` `literal` fields are preserved
@@ -248,24 +250,78 @@ a regular `item`.
 ]
 ```
 
-## Sourcepos
+## Dialect extension node types
 
-If the parser was constructed with `Options(sourcepos: true)`, every
-node in the AST gains four additional keys:
+md4c supports several non-GFM dialect extensions. Each is off by default
+and surfaces as its own node type only when you enable the matching
+option. None of these are part of CommonMark or GFM.
+
+### `underline`
+
+Appears with `Options(underline: true)`. Inline span for `_text_` when
+underscore emphasis is reinterpreted as underline.
+
+```php
+['type' => 'underline', 'children' => [['type' => 'text', 'literal' => 'x']]]
+```
+
+### `highlight`
+
+Appears with `Options(highlight: true)`. Inline span for `==text==`.
+
+```php
+['type' => 'highlight', 'children' => [['type' => 'text', 'literal' => 'x']]]
+```
+
+### `superscript`, `subscript`
+
+Appear with `Options(superscript: true)` / `Options(subscript: true)`,
+for `^text^` and `~text~`.
+
+```php
+['type' => 'superscript', 'children' => [...]]
+['type' => 'subscript',   'children' => [...]]
+```
+
+### `spoiler`
+
+Appears with `Options(spoilers: true)`, for `||text||`.
+
+```php
+['type' => 'spoiler', 'children' => [...]]
+```
+
+### `latex_math`, `latex_math_display`
+
+Appear with `Options(latexMath: true)`. Inline `$...$` math is
+`latex_math`; display `$$...$$` math is `latex_math_display`. The math
+source is carried as a `text` child.
+
+```php
+['type' => 'latex_math',         'children' => [['type' => 'text', 'literal' => 'a^2']]]
+['type' => 'latex_math_display', 'children' => [...]]
+```
+
+### `wikilink`
+
+Appears with `Options(wikiLinks: true)`, for `[[target]]` and
+`[[target|label]]`. The `url` field holds the link target; the
+`children` hold the label.
 
 ```php
 [
-    'type' => 'heading',
-    'start_line' => 1,
-    'start_column' => 1,
-    'end_line' => 1,
-    'end_column' => 4,
-    'level' => 1,
-    'children' => [...],
+    'type' => 'wikilink',
+    'url' => 'Target Page',
+    'children' => [['type' => 'text', 'literal' => 'label']],
 ]
 ```
 
-Line and column numbers are 1-based, following cmark's convention.
+## Source positions
+
+The AST carries no source positions. md4c exposes no line or column
+data, so nodes have no `start_line` / `start_column` / `end_line` /
+`end_column` keys. The `Options(sourcepos: true)` flag is accepted for
+API compatibility but has no effect on any output path.
 
 ## Walking the tree
 
@@ -298,16 +354,17 @@ See `examples/03-ast-toc.php` for a complete version.
 
 ## What's NOT in the AST
 
-- `custom_block` and `custom_inline` types — cmark-gfm supports these
-  via syntax extensions, but mdparser doesn't expose custom extensions.
-  These node types won't appear in output from the standard parser.
+- `custom_block` / `custom_inline` types — md4c has no third-party
+  extension node system, so there are no caller-defined node types and
+  none of these appear in the output.
 - `footnote_definition` and `footnote_reference` — these appear when
   `Options(footnotes: true)` is set, as block-level and inline nodes
   respectively. The shape is `['type' => 'footnote_reference',
   'children' => [['type' => 'text', 'literal' => '1']]]` etc.
-- Extension-owned node types that cmark-gfm third-party extensions
-  might add — only the built-in GFM types (table, strikethrough,
-  tasklist) are reachable through mdparser's API.
+- Any node type beyond what's documented here. The reachable set is
+  fixed: the CommonMark block and inline types, the GFM types (table,
+  strikethrough, tasklist), and the md4c dialect extension types above
+  when their options are enabled.
 
 ## Performance
 

@@ -10,7 +10,7 @@ function check(string $name, bool $cond): void {
 
 $p = new MdParser\Parser;
 
-// CR-004: toAst returns the link URL byte-for-byte. The render path
+// toAst returns the link URL byte-for-byte. The render path
 // strips dangerous schemes; the AST does NOT. Documented contract.
 $ast = $p->toAst("[click](javascript:alert(1))\n");
 $paragraph = $ast['children'][0];

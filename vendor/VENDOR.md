@@ -1,177 +1,77 @@
 # Vendored parser sources
 
-mdparser embeds a modified copy of [cmark-gfm](https://github.com/github/cmark-gfm)
-built directly into the extension's shared object. There is no external
-runtime dependency: users install the PECL/PIE package and everything
-needed to parse CommonMark + GFM ships inside `mdparser.so`.
+mdparser embeds [md4c](https://github.com/mity/md4c) built directly into
+the extension's shared object. There is no external runtime dependency:
+users install the PECL/PIE package and everything needed to parse
+CommonMark + GFM ships inside `mdparser.so`.
+
+md4c is a single-pass streaming parser. It does not build a document
+tree; it emits block/span/text events through callbacks. mdparser's
+HTML, XML, and AST output paths are stateless consumers of those events
+(`mdparser_md4c_html.c`, `mdparser_md4c_xml.c`, `mdparser_md4c_ast.c`).
 
 ## Layout
 
 ```
 vendor/
-├── VENDOR.md                 (this file)
-├── upstream-rebase-notes.md  (rebase postmortem — historical reference)
-└── cmark/                    cmark-gfm source, built by config.m4
-    ├── src/                  core parser + extension framework
-    ├── extensions/           GFM extensions (tables, strikethrough, ...)
-    └── COPYING
+├── VENDOR.md      (this file)
+└── md4c/          md4c source, built by config.m4
+    ├── md4c.c / md4c.h          the parser
+    ├── md4c-html.c / md4c-html.h  md4c's own HTML renderer (see note)
+    ├── entity.c / entity.h      HTML named-entity table
+    └── LICENSE.md               MIT
 ```
 
-The only thing we ship is the working tree that actually gets compiled.
-We do **not** carry pristine upstream snapshots. The fork points are
-recorded as commit SHAs below — anyone who needs to recreate a pristine
-tree can `git clone` and `git checkout`.
+`config.m4` compiles `md4c.c`, `md4c-html.c`, and `entity.c`. mdparser
+uses its **own** callback renderer for `toHtml()` (safe-mode URL
+filtering, heading anchors, nofollow, SmartyPants); md4c's bundled
+`md4c-html.c` renderer is not the active HTML path. `entity.c` is used
+for named-entity decoding in our renderers.
 
 ## Pins
 
-| Component        | Commit   | Version          | Date       |
-|------------------|----------|------------------|------------|
-| github/cmark-gfm | 587a12b  | 0.29.0.gfm.13    | 2023-07-21 |
-| commonmark/cmark | 8daa6b1  | 0.29.0 (fork point) | 2019-05-22 |
-
-The cmark 0.29.0 pin is the point at which cmark-gfm forked from cmark
-upstream. It's a historical reference, not something we ship — use it to
-seed the base for a 3-way merge if you ever need to cherry-pick a cmark
-bug fix. The real working tree is cmark-gfm at 587a12b.
-
-### Parser pin vs conformance fixture
-
-Two related but distinct pins matter here, and conflating them sends
-maintainers at the wrong upstream tree:
-
-| Pin | Source | What it controls |
+| Component | Version | Notes |
 |---|---|---|
-| Parser tree | cmark-gfm `587a12b` (0.29.0.gfm.13, July 2023) | The C source compiled into `mdparser.so`. cmark-gfm itself targets CommonMark 0.29 (May 2019). |
-| Conformance fixture | `commonmark/cmark` `eec0eeb` (CommonMark 0.31.2, February 2026) | The `spec.txt` shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` asserts 652/652 against it. |
+| mity/md4c | `0.5.3+git755ce49` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
+| CommonMark spec fixture | 0.31 `spec.txt` | Shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` pins md4c's conformance against it. |
 
-The fixture is *deliberately* newer than what cmark-gfm natively
-supports. The four cherry-picks documented under "Local
-modifications" close that 0.29 → 0.31 spec gap so the test passes
-100%.
+md4c targets CommonMark 0.31 natively, so the parser pin and the spec
+fixture are on the same spec version. There is no version gap to bridge.
 
-If you refresh the fixture (drop in a newer `spec.txt` from
-`commonmark/cmark`), update the row above, the example count near the
-top of `tests/005_commonmark_spec.phpt`, and the version statement in
-`docs/spec-coverage.md`. If you upgrade the parser pin, update only
-the parser-tree row.
-
-## Generated files
-
-Three files in `cmark/src/` are hand-written replacements for CMake
-outputs, since we don't run CMake at build time:
-
-| File                  | Purpose                                                |
-|-----------------------|--------------------------------------------------------|
-| `config.h`            | Feature macros (HAVE_STDBOOL_H, HAVE___ATTRIBUTE__)    |
-| `cmark-gfm_version.h` | Version integer (0.29.0.gfm.13)                        |
-| `cmark-gfm_export.h`  | Empty export macros (static build, no visibility)     |
-
-Two `.in` templates (`config.h.in`, `cmark-gfm_version.h.in`,
-`libcmark-gfm.pc.in`) are left in place as upstream references but not
-consumed by our build.
-
-Two files are committed in their re2c-generated form rather than being
-regenerated at build time, so users don't need re2c installed:
-
-- `src/scanners.c` — generated from `src/scanners.re`
-- `extensions/ext_scanners.c` — generated from `extensions/ext_scanners.re`
-
-Regenerate via `re2c -i --no-generation-date -W -Werror -o scanners.c scanners.re`
-from each directory if the `.re` files ever change.
-
-`src/main.c` (the cmark-gfm CLI driver) is stripped — we don't want a
-`main` symbol in the PHP extension.
-
-## Refresh: cherry-pick only, no bulk rebase
-
-The original plan proposed a `refresh-cmark.sh` workflow that would
-track cmark upstream's 0.30/0.31 improvements and forward-port them
-wholesale. **Bulk rebase is not viable.** cmark and cmark-gfm diverged
-on the internal AST data model (link/code/custom/list/heading fields
-use `cmark_chunk` in cmark-gfm and heap-allocated strings in cmark
-0.31), and a bulk rebase produces silently-broken files — not merge
-conflicts, actual corrupt code where one side's assumptions are no
-longer valid.
-
-Full postmortem and per-file conflict resolutions in
-`upstream-rebase-notes.md`. Cross-repo writeup in
-`~/ai/wiki/debugging/cmark-gfm-rebase.md`.
-
-**Practical path that worked:** keep cmark-gfm 587a12b as the base
-tree, cherry-pick *individual* cmark upstream commits by file and
-adapt each one by hand to the cmark-gfm AST shape. The four cherry-
-picks listed under "Local modifications" below were enough to close
-all 19 spec gaps and reach 100% conformance on cmark 0.31.2.
-
-Future bug-fix commits from cmark upstream (post-0.31.2) can be
-incorporated the same way: read the diff, understand which cmark-gfm
-files and lines are affected, apply the edit by hand, and add an
-entry to the "Local modifications" table. Do not attempt bulk rebases.
+If you refresh the fixture (drop in a newer `spec.txt`), update the row
+above, the baseline in `tests/005_commonmark_spec.phpt`, and the version
+statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Any edit to `vendor/cmark/` that is not a straight copy of cmark-gfm's
-tree at 587a12b goes here:
+None. md4c is vendored as a clean upstream copy — no patches, no
+cherry-picks, no hand-edited build shims. md4c.c is self-contained C
+(no CMake, no re2c, no generated headers to maintain).
 
-### Build-related
+## Refresh
 
-- Removed `src/main.c` (cmark-gfm CLI driver; conflicts with PHP
-  extension main symbol).
-- Added `src/config.h` (hand-written replacement for CMake-generated
-  feature macros).
-- Added `src/cmark-gfm_version.h` (filled in from
-  `cmark-gfm_version.h.in`).
-- Added `src/cmark-gfm_export.h` (empty macros; static build has no
-  visibility attributes).
+md4c is a small, self-contained library, so a refresh is a drop-in:
 
-### CommonMark 0.31 spec conformance cherry-picks
+1. Copy `md4c.c`, `md4c.h`, `md4c-html.c`, `md4c-html.h`, `entity.c`,
+   `entity.h`, and `LICENSE.md` from the new md4c release into
+   `vendor/md4c/`.
+2. Update `MDPARSER_MD4C_VERSION` in `php_mdparser.h`.
+3. Rebuild and run `make test`.
+4. If `tests/005_commonmark_spec.phpt` moves, explain the delta in the
+   commit message (a new md4c release may change conformance in either
+   direction). Re-baseline the pinned list only after confirming the
+   change is an intentional upstream behavior shift.
 
-cmark-gfm at 587a12b ships the cmark 0.29 CommonMark spec. Bulk
-rebasing to 0.31 is infeasible because of the AST-shape divergence
-(see "Refresh: don't"). Instead we cherry-picked four focused commits
-from cmark upstream to close the spec gap. All four apply cleanly to
-our tree and bring us to 652/652 on cmark 0.31.2's `spec.txt`.
+No 3-way merges, no per-file conflict resolution. If md4c ever grows a
+new block or span type you want to surface, add the case to all three
+renderers (`mdparser_md4c_html.c`, `mdparser_md4c_xml.c`,
+`mdparser_md4c_ast.c`) and a matching `Options` flag — the parser flags
+live in `MD_FLAG_*` (`md4c.h`).
 
-| Cherry-pick | Upstream commit | Files | Fixes |
-|---|---|---|---|
-| Emphasis rule 13 (openers_bottom split by can_open) | 34250e1 + 8bafc33 | `src/inlines.c` | 9 spec examples in emphasis section (#388, #416, #424-426, #463-465, #467) |
-| Don't flatten nested `<strong>` in HTML renderer | reverts cmark-gfm's GitHub-compat tweak | `src/html.c` | Dependency of the emphasis fix; cmark-gfm had a custom "collapse adjacent strong" tweak that diverged from the spec. Removed it. |
-| Treat Unicode Symbols as Punctuation for emphasis flanking | 82969a8 | `src/inlines.c`, `src/utf8.c`, `src/utf8.h` | `*£*text.` etc. (#354 and siblings) |
-| Numeric entity max-digit limit in houdini_unescape_ent | 7b35d4b | `src/houdini_html_u.c` | `&#87654321;` overflow case (#28) |
+## History
 
-The `<pre lang="X"><code>` vs `<pre><code class="language-X">` difference
-is handled as an `Options::githubPreLang` runtime toggle, not a
-vendor-tree change. Default stays `true` for GitHub parity; the spec
-conformance test passes `false`.
-
-When refreshing to a future cmark version, these cherry-picks need to
-be re-applied manually. Every one has a `/* cmark upstream <commit>,
-adapted... */` comment near the change site so you can find them.
-
-### Module-lifecycle additions (no upstream equivalent)
-
-- `extensions/core-extensions.c` + `extensions/cmark-gfm-core-extensions.h`:
-  hoisted `ensure_registered`'s function-local `static int registered`
-  guard to file scope and added
-  `cmark_gfm_core_extensions_reset_registered(void)`. The guard latches
-  after the first registration and survives `cmark_release_plugins()`,
-  so a host that releases the registry at module shutdown (our
-  PHP_MSHUTDOWN) could never re-register on a second MINIT in the same
-  process image — `cmark_find_syntax_extension("table")` returned NULL
-  and startup failed. PHP_MSHUTDOWN now calls the reset hook right
-  after `cmark_release_plugins()`.
-- `extensions/table.c` + `extensions/strikethrough.c`: made
-  `create_table_extension` / `create_strikethrough_extension`
-  idempotent across registration cycles. `CMARK_NODE__TABLE_VISITED`
-  and the `CMARK_NODE_TABLE`/`_ROW`/`_CELL`/`_STRIKETHROUGH` node-type
-  ids are process globals that survive `cmark_release_plugins()`;
-  re-running registration unguarded aborts in
-  `cmark_register_node_flag` (double flag init) and burns fresh
-  node-type ids from the shared counter each cycle. Both now keep the
-  first-registration values.
-
-All change sites carry an `mdparser local modification` comment.
-Regression test: `tests/043_mshutdown_reminit_registry.phpt` (drives
-the real `zm_shutdown_mdparser` + re-registration in a harness linked
-against the build-tree objects; asserts the registry is usable and the
-node-type ids are stable across the cycle).
+This extension previously embedded cmark-gfm, which built a heap AST and
+walked it to render. The migration to md4c (a streaming parser) is
+documented in `.plan/md4c-migration.md`. The cmark-gfm rebase postmortem
+that motivated leaving that ecosystem is at
+`~/ai/wiki/debugging/cmark-gfm-rebase.md`.

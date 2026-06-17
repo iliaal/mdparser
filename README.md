@@ -117,7 +117,7 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 
 ## What we don't cover
 
-mdparser is deliberately scoped to what cmark-gfm supports: CommonMark core plus the five GFM extensions. It does **not** cover the "Markdown Extra" family of features that Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions offer. If you need any of the following, reach for league/commonmark, the most actively-maintained pure-PHP option for extended Markdown:
+mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It does **not** cover the "Markdown Extra" family of features that Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions offer. If you need any of the following, reach for league/commonmark, the most actively-maintained pure-PHP option for extended Markdown:
 
 - Definition lists (`Term :: definition`)
 - Abbreviations (`*[HTML]: ...`)
@@ -131,11 +131,11 @@ mdparser is deliberately scoped to what cmark-gfm supports: CommonMark core plus
 - Emoji (`:smile:`)
 - Custom admonition containers (`::: warning`)
 
-These are real features. They're just not in scope for a CommonMark+GFM core parser, and cmark-gfm doesn't implement them.
+These are real features. They're just out of scope for a CommonMark+GFM core parser.
 
 ## A note on `unsafe: true`
 
-`Options::unsafe = true` tells cmark to pass raw HTML through verbatim instead of escaping or stripping it. The contract for this mode is that you own the input: it is yours, or it comes from a pipeline you trust. Two postprocess interactions are worth knowing if you also turn on `headingAnchors` or `nofollowLinks`:
+`Options::unsafe = true` tells the renderer to pass raw HTML through verbatim instead of escaping or stripping it. The contract for this mode is that you own the input: it is yours, or it comes from a pipeline you trust. Two postprocess interactions are worth knowing if you also turn on `headingAnchors` or `nofollowLinks`:
 
 - **Heading slug positioning under raw `<hN>`.** mdparser locates each AST heading in the rendered HTML by rendering it standalone and matching its exact byte sequence. Raw `<h1>x</h1>` blocks written directly in the markdown source are therefore left untouched and do not consume slugs. The fingerprint search skips over HTML comments, CDATA sections, and raw-text / escapable-raw-text element bodies (`script`, `style`, `title`, `textarea`, `iframe`, `noscript`, `xmp`, `noembed`, `noframes`, `plaintext`), so a heading-shaped byte sequence inside those regions cannot hijack a slug. The narrow remaining exception is when a raw `<hN>...</hN>` block in the document body produces bytes byte-identical to a later Markdown heading (same level, same inner text), in which case the `id` attribute lands on the first match.
 - **`nofollowLinks` is tag-aware.** It rewrites every `<a href="...">` it finds at a real tag-start position. The scan walks tag-by-tag with quote-aware attribute parsing, so anchor-shaped substrings inside another tag's quoted attribute value (e.g. `<div title='<a href="x">y</a>'>` written directly in the source) are passed through verbatim rather than rewritten. Raw-text element bodies and comment / CDATA bodies are likewise emitted verbatim. In-document fragment anchors (`href="#..."`) are intentionally skipped, so footnote references and backrefs stay clean.
@@ -159,7 +159,7 @@ Full background, design rationale, and benchmark methodology in the launch post:
 ## License
 
 - Wrapper code (`mdparser*.c`, `php_mdparser.h`) under BSD 3-Clause.
-- Embedded cmark-gfm sources under BSD-2-Clause, MIT, and related permissive licenses. See `LICENSE` for aggregated notices.
+- Embedded md4c sources under the MIT license. See `LICENSE` for aggregated notices.
 
 ---
 

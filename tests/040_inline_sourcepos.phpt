@@ -1,15 +1,16 @@
 --TEST--
-toInlineHtml: sourcepos option must not leak the <p> wrapper into inline output (review #4)
+toInlineHtml: sourcepos option must not leak the <p> wrapper into inline output
 --EXTENSIONS--
 mdparser
 --FILE--
 <?php
 
 /* toInlineHtml strips the paragraph wrapper by matching an exact
- * "<p>\xE2\x80\x8B" prefix. When the Parser was built with
- * Options(sourcepos: true), cmark emitted "<p data-sourcepos=...>",
- * the prefix match failed, and the fallback returned the full HTML with
- * the wrapper leaked in. The inline render now masks sourcepos off. */
+ * "<p>\xE2\x80\x8B" prefix. Historically Options(sourcepos: true) made the
+ * backend emit "<p data-sourcepos=...>", the prefix match failed, and the
+ * wrapper leaked into the output. Under md4c sourcepos is inert (no source
+ * positions exist), so this is now a guard that the option never perturbs
+ * inline output. */
 
 function check(string $label, bool $cond): void {
     echo ($cond ? "OK" : "FAIL"), ": $label\n";

@@ -112,8 +112,8 @@ var_dump($cell['type']);
 var_dump($cell['children'][0]['literal']);
 
 // footnote_reference + footnote_definition (requires footnotes: true).
-// cmark-gfm's own get_type_string returns "<unknown>" for these; the
-// walker overrides locally so consumers see stable names.
+// The AST builder names these directly from md4c's callbacks, so
+// consumers see stable type strings.
 $fp = new MdParser\Parser(new MdParser\Options(footnotes: true));
 $ast = $fp->toAst("here[^1]\n\n[^1]: the note\n");
 $para = $ast['children'][0];

@@ -1,8 +1,9 @@
 # mdparser documentation
 
 Native C CommonMark + GitHub Flavored Markdown parser for PHP,
-installable via PIE (the PHP Foundation's PECL successor). 100%
-CommonMark 0.31 spec compliance, GFM extensions (tables, strikethrough,
+installable via PIE (the PHP Foundation's PECL successor). Built on
+[md4c](https://github.com/mity/md4c), a fast single-pass parser that
+targets CommonMark 0.31 natively. GFM extensions (tables, strikethrough,
 task lists, autolinks, tag filter), three output formats (HTML, XML,
 AST), zero external runtime dependencies.
 
@@ -12,15 +13,16 @@ AST), zero external runtime dependencies.
   from source, platform notes, Windows binaries
 - **[parser.md](parser.md)** — `MdParser\Parser` class: `toHtml`,
   `toXml`, `toAst`, constructor, error model
-- **[options.md](options.md)** — `MdParser\Options` class: all 19 bool
-  fields documented (12 cmark options, 5 GFM extension toggles, 2 HTML
-  postprocess flags), per-option examples of the output change
+- **[options.md](options.md)** — `MdParser\Options` class: all 29 bool
+  fields documented (core parser toggles, GFM extension toggles, two HTML
+  postprocess flags, parser-behavior toggles, and md4c dialect
+  extensions), per-option examples of the output change
 - **[ast.md](ast.md)** — `toAst()` output format: node types, fields
   per type, sourcepos behavior, walking the tree
 - **[security.md](security.md)** — safe mode guarantees, XSS
   considerations, when `unsafe: true` is appropriate, tag filter
 - **[spec-coverage.md](spec-coverage.md)** — CommonMark 0.31 conformance
-  notes, GFM extension notes, cherry-picks applied over cmark-gfm
+  baseline, GFM extension notes, md4c dialect extensions
 
 ## Examples
 
@@ -58,14 +60,15 @@ mdparser follows semver from 1.0.0 onward. During 0.x, minor version
 bumps may introduce breaking changes; those are always called out in
 `CHANGELOG.md`.
 
-The CommonMark spec itself is frozen at 0.31 and mdparser's spec
-compliance is pinned by a full 652-example test suite in
-`tests/005_commonmark_spec.phpt`. Any future change that breaks spec
-conformance will fail that test. GFM extensions are pinned the same way
-by `tests/002_option_effects.phpt` and the parity corpus under
-`tests/parity/`.
+The CommonMark spec itself is frozen at 0.31, and mdparser's spec
+conformance is pinned by `tests/005_commonmark_spec.phpt`, which runs
+every example in `spec.txt` against md4c's output. Any future change that
+moves that baseline will fail the test. GFM extensions are pinned the
+same way by `tests/002_option_effects.phpt` and the parity corpus under
+`tests/parity/`. See `spec-coverage.md` for the current baseline.
 
 ## License
 
-Wrapper code is under the PHP License 3.01. The vendored cmark-gfm
-sources are under BSD-2-Clause and MIT. See `LICENSE` at the repo root.
+Wrapper code is under the PHP License 3.01. The vendored md4c parser is
+under the MIT License. See `LICENSE` at the repo root and
+`vendor/md4c/LICENSE.md`.

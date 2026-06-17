@@ -63,7 +63,7 @@ assertHtml(
     $safe->toHtml("[![x](https://example.com/x.png)](javascript:alert(1))")
 );
 
-// === SS-001: entity-encoded colon must not smuggle a scheme past the
+// === entity-encoded colon must not smuggle a scheme past the
 // filter (the filter runs on decoded bytes: decode -> check -> emit) ===
 
 assertHtml(
@@ -90,7 +90,7 @@ assertHtml(
     $safe->toHtml("![x](javascript&colon;alert(1))")
 );
 
-// === SS-002: data: allowlist is image-context only, exact MIME + terminator ===
+// === data: allowlist is image-context only, exact MIME + terminator ===
 
 assertHtml(
     "safe: data: rejected in link href",

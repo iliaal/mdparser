@@ -53,7 +53,7 @@ different amounts of work. See "Methodology caveats" below.
 |---|--:|---|
 | `corpora/small.md` | 200 B | Short paragraph, some inline formatting, a 3-item bullet list |
 | `corpora/medium.md` | 1.8 KB | Typical README: intro + install + features list + GFM table + task list + code blocks |
-| `corpora/large.md` | 200.2 KB | A copy of cmark's own `spec.txt` (the CommonMark 0.31 spec document, which is markdown about markdown) |
+| `corpora/large.md` | 200.2 KB | A copy of the CommonMark 0.31 `spec.txt` (the spec document, which is markdown about markdown) |
 
 The three sizes are chosen to cover typical use cases:
 

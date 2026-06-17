@@ -21,8 +21,8 @@
 size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail);
 
 /* validateUtf8 pre-pass shared by every md4c render path (HTML/XML/AST).
- * md4c never validates UTF-8; cmark's CMARK_OPT_VALIDATE_UTF8 rewrote invalid
- * sequences to U+FFFD. If `src` is already clean, returns `src` and sets
+ * md4c never validates UTF-8; this restores the U+FFFD substitution for
+ * invalid sequences. If `src` is already clean, returns `src` and sets
  * *owned=false. Otherwise returns an emalloc'd sanitized copy (invalid bytes
  * -> U+FFFD), sets *owned=true, and writes the new length to *out_len. The
  * caller must efree the result iff *owned is true. */

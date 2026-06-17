@@ -1,8 +1,8 @@
 # Installation
 
 mdparser ships as a PHP extension with zero external runtime
-dependencies. The parser (cmark-gfm with targeted cherry-picks) is
-embedded directly in the extension shared object.
+dependencies. The parser ([md4c](https://github.com/mity/md4c)) compiles
+directly into the extension shared object.
 
 ## Requirements
 
@@ -11,8 +11,8 @@ embedded directly in the extension shared object.
 - `phpize` and `php-config` (usually from `php-dev` or `php8.x-dev`)
 - GNU Make on Unix; Visual Studio on Windows
 
-No external libraries are required. cmark-gfm is bundled under
-`vendor/cmark/`.
+No external libraries are required. md4c is bundled under
+`vendor/md4c/`.
 
 ## PIE
 
@@ -149,5 +149,6 @@ After building:
 make test
 ```
 
-The test suite includes a 652-example CommonMark 0.31 spec conformance
-check that takes ~1 second to run.
+The test suite includes a CommonMark 0.31 spec conformance check that
+runs every example from `spec.txt` and pins md4c's result. See
+`docs/spec-coverage.md` for the current baseline.

@@ -9,8 +9,8 @@ function check(string $name, bool $cond): void {
 }
 
 // Same Parser instance: link reference defined in render N1 must NOT be
-// resolvable in render N2. Confirms cmark_parser_reset (called by
-// cmark_parser_finish on the happy path) clears the reference map.
+// resolvable in render N2. Each render runs a fresh md_parse (md4c is
+// stateless per call), so a reference definition cannot leak forward.
 $p = new MdParser\Parser;
 
 $first  = $p->toHtml("[ref]: https://x.example\n[link][ref]\n");

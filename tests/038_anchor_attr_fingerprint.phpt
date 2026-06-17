@@ -24,7 +24,7 @@ $opts = new MdParser\Options(headingAnchors: true, unsafe: true, tagfilter: fals
 $p = new MdParser\Parser($opts);
 
 // The <div> attribute holds the exact fingerprint for `# foo`. The real
-// "foo" heading inherits no id (documented CR-003 collision), but "bar"
+// "foo" heading inherits no id (documented collision), but "bar"
 // must still be slugged.
 $h = $p->toHtml("<div title=\"<h1>foo</h1>\n\">x</div>\n\n# foo\n\n# bar\n");
 check("later heading keeps its id after attr-embedded fingerprint",

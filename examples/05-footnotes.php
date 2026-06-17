@@ -24,8 +24,7 @@ CommonMark[^cm] and GFM[^gfm] have different feature sets. Both
 descend from the original Markdown[^gruber] but they diverge on
 *edge cases*.
 
-mdparser embeds a fork of cmark-gfm[^fork] patched up to 0.31
-conformance.
+mdparser embeds md4c[^fork], which targets CommonMark 0.31.
 
 [^cm]: The CommonMark spec, maintained at <https://spec.commonmark.org/>.
 [^gfm]: GitHub Flavored Markdown, maintained at <https://github.github.com/gfm/>.

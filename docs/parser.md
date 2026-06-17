@@ -2,12 +2,12 @@
 
 `final class MdParser\Parser`
 
-The main entry point. Holds a precomputed cmark options bitmask plus an
-extension mask, then offers four rendering methods (`toHtml`, `toXml`,
-`toAst`, `toInlineHtml`) and three static shortcuts that render with
-the default Options. The cached cmark_parser is reused across calls
-on the same instance. Options are parsed once at construction time so
-parse-time is pure native work with no per-call option walking.
+The main entry point. Holds a precomputed md4c parser-flags bitmask
+plus a renderer-options bitmask, then offers four rendering methods
+(`toHtml`, `toXml`, `toAst`, `toInlineHtml`) and three static shortcuts
+that render with the default Options. Options are translated to those
+two bitmasks once at construction time, so each parse runs md4c with
+the flags already resolved — no per-call option walking.
 
 ## Synopsis
 
@@ -39,7 +39,7 @@ public function __construct(?Options $options = null);
 
 Creates a parser. If `$options` is `null`, an `Options` instance with
 default values is created and attached. The options are translated to
-cmark's internal bitmask/extension-mask once, then frozen.
+md4c's parser-flags and renderer-options bitmasks once, then frozen.
 
 The `options` property is readonly — it can't be reassigned after
 construction. Create a new `Parser` if you need different options.
@@ -49,7 +49,6 @@ $default = new Parser();
 $strict  = new Parser(new Options(unsafe: false, smart: false));
 $github  = new Parser(new Options(
     smart: true,
-    sourcepos: true,
     footnotes: true,
 ));
 ```
@@ -113,7 +112,8 @@ explicitly pass `tagfilter: false`), which escapes `<script>`,
 ## `toXml(string $source): string`
 
 Renders the same parse result as CommonMark XML. Useful for piping into
-XSLT or other external tooling, or for capturing sourcepos.
+XSLT or other external tooling, or for inspecting the document structure
+as a serialized tree.
 
 ```php
 $parser = new Parser();
@@ -128,8 +128,11 @@ echo $parser->toXml("# hi");
 // </document>
 ```
 
-The XML format is cmark's native tree serialization, matching what
-`cmark-gfm --to xml` would emit.
+The XML is CommonMark XML, emitted by a streaming serializer in this
+extension. The format matches what cmark-gfm's `--to xml` historically
+produced, so existing XML consumers work unchanged. md4c exposes no
+source positions, so the `<document>` tree carries no `sourcepos`
+attributes.
 
 ## `toAst(string $source): array`
 
@@ -172,13 +175,13 @@ All render methods can throw `MdParser\Exception` (final, extends
 `\RuntimeException`). The throw cases are deliberately narrow:
 
 - **Wrapper validation guards.** Inputs over `MDPARSER_MAX_INPUT_SIZE`
-  (256 MB) throw before cmark ever sees them. `toAst()` walks the
-  document recursively and throws if nesting exceeds
+  (256 MB) throw before md4c ever sees them. `toAst()` builds the node
+  array on a fixed-depth stack and throws if nesting exceeds
   `MDPARSER_MAX_AST_DEPTH` (1000) — adversarial inputs like `> ` × 50000
-  hit this. `toHtml()` and `toXml()` use cmark's iterative renderer
-  and are unaffected by AST depth.
-- **cmark null returns.** Parser construction, `cmark_parser_finish`,
-  the renderer, or the postprocess pass returning `NULL` raises an
+  hit this. `toHtml()` and `toXml()` stream md4c's callbacks straight to
+  output and are unaffected by AST depth.
+- **md4c / render null path.** The rare case where `md_parse()` reports
+  failure, or the renderer or postprocess pass returns `NULL`, raises an
   exception with the source length included for triage.
 - **Reflection-bypassed Options.** Constructing a Parser with an
   `Options` object built via
@@ -188,7 +191,7 @@ All render methods can throw `MdParser\Exception` (final, extends
   `clone $parser` and `serialize($parser)` raise the engine's standard
   Error.
 
-cmark is extremely tolerant of malformed markdown by design — any byte
+md4c is extremely tolerant of malformed markdown by design — any byte
 sequence parses to something — so normal rendering of well-formed or
 malformed input does not need a try/catch. The exception path covers
 hostile inputs and resource limits.
@@ -197,32 +200,40 @@ hostile inputs and resource limits.
 try {
     $html = $parser->toHtml($source);
 } catch (\MdParser\Exception $e) {
-    // input-size cap, AST depth cap, or rare cmark/render null path
+    // input-size cap, AST depth cap, or rare md4c/render null path
     error_log("mdparser failed: " . $e->getMessage());
 }
 ```
 
-### Memory exhaustion is a fatal, not an exception
+### Memory: parse-side allocation is outside `memory_limit`
 
-cmark allocations now route through Zend MM (`ecalloc` / `erealloc` /
-`efree`), so cmark-side memory is accounted by `memory_limit` and
-visible to `memory_get_usage()`. Hitting the limit triggers PHP's
-standard `Allowed memory size of X bytes exhausted` fatal error, not
-`MdParser\Exception`. This is the normal Zend MM bailout path and is
-**not catchable** with `try/catch`. The previous behavior (cmark's
-default allocator calling `abort()` on OOM and tearing down the
-process) is gone.
+md4c allocates its own working memory with libc `malloc`/`free`, not
+Zend MM. That memory is **not** counted against PHP's `memory_limit`
+and does not show up in `memory_get_usage()`. The wrapper's own output
+buffers — the rendered HTML/XML string, the AST arrays — use Zend MM
+(`emalloc`/`efree`) and are accounted normally.
 
-If you need to defend against runaway markdown allocating beyond a
-budget, the right tool is PHP's `memory_limit` — set it appropriately
-for the request and let the engine bail.
+So `memory_limit` will not stop md4c mid-parse on a pathological input.
+The guard for that is the 256 MB input-size cap
+(`MDPARSER_MAX_INPUT_SIZE`), which throws `MdParser\Exception` before
+md4c sees the source. If a libc allocation itself fails, the process
+behaves the way any failed `malloc` does in the SAPI; the wrapper
+surfaces a clean `MdParser\Exception` on md4c's failure return rather
+than letting a partial parse through.
+
+If you accept markdown from untrusted callers, cap the input length in
+your application before handing it to the parser; that bounds the
+parse-side footprint more directly than `memory_limit` can.
 
 ## Reusing parsers
 
 Parsers are cheap to construct, but if you're rendering many documents
 with the same options it's more efficient to reuse one instance — the
-cmark options bitmask is computed once at construction and reused on
-every `toHtml`/`toXml`/`toAst` call.
+md4c flag bitmasks are computed once at construction and reused on every
+`toHtml`/`toXml`/`toAst` call. Each call still runs an independent
+`md_parse()` over its own input; md4c keeps no state between calls, so
+reference-link definitions resolve within a single document and never
+leak across separate calls.
 
 ```php
 $parser = new Parser(new Options(smart: true));
@@ -232,6 +243,6 @@ foreach ($documents as $doc) {
 ```
 
 Thread safety: each `Parser` instance is single-threaded, but different
-instances in different threads (ZTS builds) are safe. The cmark-gfm
-extension registry is process-global and initialized once at module
-startup.
+instances in different threads (ZTS builds) are safe. md4c holds no
+global state — every parse runs from the per-instance flag bitmasks and
+the input you pass — so there is no shared registry to contend on.

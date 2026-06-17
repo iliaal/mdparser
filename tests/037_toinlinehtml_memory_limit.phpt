@@ -6,7 +6,7 @@ mdparser
 memory_limit=128M
 --FILE--
 <?php
-// CR-001: pre-rewrite, toInlineHtml allocated `4 * src_len + 3` for the
+// pre-rewrite, toInlineHtml allocated `4 * src_len + 3` for the
 // scratch buffer, which fatals at ~168 MB for 40 MB of newlines under
 // memory_limit=128M even though the normalized buffer is empty. With
 // the smart_str rewrite the peak allocation tracks the actual normalized

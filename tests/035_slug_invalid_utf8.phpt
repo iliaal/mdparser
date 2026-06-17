@@ -17,7 +17,7 @@ check('valid UTF-8 multibyte preserved', strpos($out, 'id="日本語"') !== fals
 $out = $p->toHtml("# Café résumé!\n");
 check('valid 2-byte UTF-8 preserved',    strpos($out, 'id="café-résumé"') !== false);
 
-// validateUtf8=false: malformed bytes survive cmark and reach the slug.
+// validateUtf8=false: malformed bytes survive the parser and reach the slug.
 // Lone continuation bytes get percent-encoded; otherwise we'd land
 // invalid HTML id values that browsers handle inconsistently.
 $pUnsafe = new MdParser\Parser(new MdParser\Options(

@@ -8,7 +8,7 @@
 - `phpize` and `php-config` (from `php-dev` or `php8.x-dev`)
 - GNU Make (Unix) or Visual Studio (Windows)
 
-mdparser embeds cmark-gfm directly. No external libraries are required
+mdparser embeds md4c directly. No external libraries are required
 to build or run.
 
 ## Bug reports
@@ -75,9 +75,10 @@ Before filing, try to reproduce against the latest `master` branch.
   `--EXPECTF--` when the output legitimately varies (e.g. line
   numbers in exception traces, object IDs).
 - When a test depends on CommonMark spec behavior, put the input in
-  `tests/fixtures/` and add a byte-match test against cmark's own
-  expected output from `tests/fixtures/commonmark-spec.txt` (that
-  file is the cmark 0.31.2 spec; do not modify it).
+  `tests/fixtures/` and add a byte-match test against the parser's
+  output, comparing to the expected output in
+  `tests/fixtures/commonmark-spec.txt` (that file is the CommonMark
+  0.31 `spec.txt`; do not modify it).
 - Parity tests under `tests/parity/` hold fixture corpora from other
   PHP markdown libraries (Parsedown, cebe, michelf). Divergences
   are pinned by exact counts and file lists so any unintended drift
@@ -93,25 +94,34 @@ Before filing, try to reproduce against the latest `master` branch.
 - Class registration goes through `mdparser_arginfo.h` (generated
   from `mdparser.stub.php` by `php $PHP_SRC/build/gen_stub.php`).
   Do not hand-edit `mdparser_arginfo.h`.
-- Memory: use PHP's `emalloc`/`efree` at the Zend boundary. The
-  vendored cmark sources use their own allocator — don't mix.
+- Memory: use PHP's `emalloc`/`efree` in the wrapper code at the Zend
+  boundary. md4c uses libc `malloc`/`free` internally — don't route
+  md4c-internal allocation through Zend MM, and don't mix the two.
 - In `zend_try` / `catch` blocks, don't duplicate cleanup in the
   catch arm; set a `bool bailout` flag, fall through to the shared
   cleanup, then bailout at the end if the flag was set.
 
-### Vendored cmark changes
+### Vendored md4c
 
-`vendor/cmark/` is a patched cmark-gfm tree. If your change needs
-to touch cmark sources, follow the existing cherry-pick pattern:
+`vendor/md4c/` is a clean upstream copy of md4c — no patches, no
+cherry-picks, no hand-edited build shims. Keep it that way. md4c
+targets CommonMark 0.31 natively, so there's no spec gap to bridge
+in the vendored sources.
 
-1. Find the cmark upstream commit that fixes the same issue.
-2. Adapt it to cmark-gfm's AST shape by hand (don't bulk-rebase —
-   see `vendor/upstream-rebase-notes.md` for why).
-3. Add an entry to the "Local modifications" table in
-   `vendor/VENDOR.md` with the upstream commit reference and a
-   one-line description of what it fixes.
-4. Add a comment at the change site in the vendor file naming the
-   upstream commit, so the next refresh can find it.
+Refreshing md4c is a drop-in file swap:
+
+1. Copy `md4c.c`, `md4c.h`, `md4c-html.c`, `md4c-html.h`,
+   `entity.c`, `entity.h`, and `LICENSE.md` from the new md4c
+   release into `vendor/md4c/`.
+2. Bump `MDPARSER_MD4C_VERSION` in `php_mdparser.h`.
+3. Rebuild and re-check the spec baseline. If
+   `tests/005_commonmark_spec.phpt` moves, explain the delta in the
+   commit message.
+
+To surface a new md4c block or span type, add cases to all three
+renderers (`mdparser_md4c_html.c`, `mdparser_md4c_xml.c`,
+`mdparser_md4c_ast.c`) plus a matching `MdParser\Options` flag. See
+`vendor/VENDOR.md` for the full layout and refresh details.
 
 ## Release workflow
 

@@ -40,7 +40,7 @@ In scope:
 - Tag filter bypasses (`<script>` or similar landing in rendered output
   when `unsafe: true, tagfilter: true`)
 - Crashes or memory corruption in the parser C code
-- Buffer overflows or read-after-free in `vendor/cmark/`
+- Buffer overflows or read-after-free in `vendor/md4c/`
 
 Out of scope:
 

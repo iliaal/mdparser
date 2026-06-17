@@ -12,7 +12,7 @@ function check(string $label, bool $cond): void {
 $p = new MdParser\Parser();
 
 // validateUtf8 (default true) must rewrite invalid bytes to U+FFFD on the
-// XML and AST paths too, not just HTML (review P2).
+// XML and AST paths too, not just HTML.
 $xml = $p->toXml("\xFF");
 check("toXml replaces invalid byte with U+FFFD", str_contains($xml, "\xEF\xBF\xBD"));
 check("toXml emits no raw 0xFF", !str_contains($xml, "\xFF"));
@@ -28,7 +28,7 @@ check("validateUtf8:false keeps raw byte in toXml", str_contains($raw->toXml("\x
 check("validateUtf8:false keeps raw byte in toHtml", str_contains($raw->toHtml("\xFF"), "\xFF"));
 
 // Entity-encoded in-document fragment must skip the nofollow rel, decided on
-// the DECODED href bytes (review P3).
+// the DECODED href bytes.
 $nf = new MdParser\Parser(new MdParser\Options(nofollowLinks: true));
 $h = $nf->toHtml("[x](&#35;section)");
 check("entity-encoded #fragment renders as #", str_contains($h, 'href="#section"'));

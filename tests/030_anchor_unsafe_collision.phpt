@@ -1,5 +1,5 @@
 --TEST--
-headingAnchors: byte-fingerprint collision when raw HTML matches a Markdown heading (CR-003)
+headingAnchors: byte-fingerprint collision when raw HTML matches a Markdown heading
 --EXTENSIONS--
 mdparser
 --FILE--
@@ -32,20 +32,20 @@ $p = new MdParser\Parser($opts);
 // text. The fingerprint search hits the raw HTML first; the real
 // Markdown heading inherits no id.
 $h = $p->toHtml("<h1>same</h1>\n\n# same\n");
-check("CR-003: raw <h1> absorbs the id (current behavior)",
+check("raw <h1> absorbs the id (current behavior)",
     str_contains($h, '<h1 id="same">same</h1>'));
-check("CR-003: real Markdown heading is left without an id",
+check("real Markdown heading is left without an id",
     substr_count($h, '<h1>same</h1>') === 1);
 
 // Sanity: when the visible text differs, the raw heading is not
 // confused for the Markdown heading and slugging works as expected.
 $h = $p->toHtml("<h1>raw</h1>\n\n# real\n");
-check("CR-003: distinct text -- raw stays plain, real gets slug",
+check("distinct text -- raw stays plain, real gets slug",
     str_contains($h, '<h1>raw</h1>') &&
     str_contains($h, '<h1 id="real">real</h1>'));
 
 ?>
 --EXPECT--
-OK: CR-003: raw <h1> absorbs the id (current behavior)
-OK: CR-003: real Markdown heading is left without an id
-OK: CR-003: distinct text -- raw stays plain, real gets slug
+OK: raw <h1> absorbs the id (current behavior)
+OK: real Markdown heading is left without an id
+OK: distinct text -- raw stays plain, real gets slug

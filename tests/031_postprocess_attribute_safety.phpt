@@ -16,7 +16,7 @@ function check(string $name, bool $cond): void {
     echo ($cond ? 'PASS' : 'FAIL') . " $name\n";
 }
 
-// SS-101: nofollow injection must not corrupt attribute values inside raw HTML.
+// nofollow injection must not corrupt attribute values inside raw HTML.
 $out = $p->toHtml("<!-- <a href=\"x\">y</a> -->\n\nReal [link](https://example.com)\n");
 check('comment body untouched',         strpos($out, '<!-- <a href="x">y</a> -->') !== false);
 check('real link gets nofollow',        strpos($out, 'rel="nofollow noopener noreferrer" href="https://example.com"') !== false);
@@ -43,7 +43,7 @@ $out = $p->toHtml("<div title=\"<a href=\\\"x\\\">y</a>\">visible</div>\n\nReal 
 check('attr value untouched',           strpos($out, '<div title="<a href=\"x\">y</a>">visible</div>') !== false);
 check('real link still rewritten (attr)', strpos($out, 'rel="nofollow noopener noreferrer" href="https://example.com"') !== false);
 
-// SS-102: heading-anchor fingerprint matching inside an HTML comment must
+// heading-anchor fingerprint matching inside an HTML comment must
 // NOT consume the slug intended for the real Markdown heading.
 $out = $p->toHtml("<!-- <h1>injected</h1> -->\n\n# injected\n");
 check('comment-internal heading not slugged', strpos($out, '<!-- <h1>injected</h1> -->') !== false);
@@ -53,7 +53,7 @@ check('real markdown heading slugged',        strpos($out, '<h1 id="injected">in
 // verbatim and are NOT rel-rewritten (nofollow applies only to Markdown
 // links, never to author-supplied raw HTML). Both <a> here are raw HTML,
 // so neither gets rel. Each Markdown heading is slugged from its own text
-// in-stream, so the earlier raw/Markdown slug-collision (CR-003) no longer
+// in-stream, so the earlier raw/Markdown slug-collision no longer
 // applies: the Markdown heading gets its id; the raw <h1> stays untouched.
 $out = $p->toHtml("<h1>look <a href=\"evil.com\">x</a></h1>\n\n# look <a href=\"evil.com\">x</a>\n");
 check('raw-HTML anchors are not rel-rewritten',
