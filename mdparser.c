@@ -20,6 +20,7 @@
 
 #include "php_mdparser.h"
 #include "mdparser_md4c_html.h"
+#include "mdparser_md4c_ast.h"
 #include "mdparser_arginfo.h"
 
 /* md4c is a stateless push parser with no global registry and no allocator
@@ -29,6 +30,7 @@ PHP_MINIT_FUNCTION(mdparser)
 {
     mdparser_options_init_defaults();
     mdparser_md4c_html_minit();
+    mdparser_md4c_ast_minit();
 
     mdparser_exception_register_class();
     mdparser_options_register_class();

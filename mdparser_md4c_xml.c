@@ -166,10 +166,18 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
      * resolve them to raw bytes first, then XML-escape once. Escaping the
      * raw bytes directly would double-encode entities (&amp; -> &amp;amp;). */
     if (a && a->text) {
-        smart_str dec = {0};
-        mdparser_md4c_decode_attr(&dec, a);
-        if (dec.s) mdx_escape(&c->out, ZSTR_VAL(dec.s), ZSTR_LEN(dec.s), true);
-        smart_str_free(&dec);
+        const char *p;
+        size_t n;
+        if (mdparser_md4c_attr_plain(a, &p, &n)) {
+            /* Plain substring decodes to itself; XML-escape the bytes
+             * directly, skipping the scratch decode buffer. */
+            mdx_escape(&c->out, p, n, true);
+        } else {
+            smart_str dec = {0};
+            mdparser_md4c_decode_attr(&dec, a);
+            if (dec.s) mdx_escape(&c->out, ZSTR_VAL(dec.s), ZSTR_LEN(dec.s), true);
+            smart_str_free(&dec);
+        }
     }
     smart_str_appendc(&c->out, '"');
 }

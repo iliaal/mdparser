@@ -65,6 +65,18 @@ static zval *mda_table_alignments(mda_ctx *c)
     return NULL;
 }
 
+/* Interned keys for the two hot per-node inserts ("type" on every node,
+ * "children" on every container). Created once at MINIT and reused, so the
+ * builder neither re-allocates nor re-hashes them per node. */
+static zend_string *mda_k_type;
+static zend_string *mda_k_children;
+
+void mdparser_md4c_ast_minit(void)
+{
+    mda_k_type = zend_string_init_interned("type", sizeof("type") - 1, 1);
+    mda_k_children = zend_string_init_interned("children", sizeof("children") - 1, 1);
+}
+
 /* ---- node helpers ---------------------------------------------------- */
 
 static zval *mda_top(mda_ctx *c) { return &c->stack[c->depth]; }
@@ -74,11 +86,11 @@ static zval *mda_top(mda_ctx *c) { return &c->stack[c->depth]; }
 static void mda_append_child(mda_ctx *c, zval *child)
 {
     zval *parent = mda_top(c);
-    zval *kids = zend_hash_str_find(Z_ARRVAL_P(parent), "children", sizeof("children") - 1);
+    zval *kids = zend_hash_find(Z_ARRVAL_P(parent), mda_k_children);
     if (!kids) {
         zval arr;
         array_init(&arr);
-        kids = zend_hash_str_add_new(Z_ARRVAL_P(parent), "children", sizeof("children") - 1, &arr);
+        kids = zend_hash_add_new(Z_ARRVAL_P(parent), mda_k_children, &arr);
     }
     add_next_index_zval(kids, child);
 }
@@ -87,7 +99,9 @@ static void mda_append_child(mda_ctx *c, zval *child)
 static void mda_new_node(zval *out, const char *type)
 {
     array_init(out);
-    add_assoc_string(out, "type", type);
+    zval v;
+    ZVAL_STR(&v, zend_string_init_interned(type, strlen(type), 0));
+    zend_hash_add_new(Z_ARRVAL_P(out), mda_k_type, &v);
 }
 
 /* Store an MD_ATTRIBUTE (destination/title/info) under `key`, entity-decoded.

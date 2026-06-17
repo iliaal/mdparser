@@ -24,4 +24,7 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
 
 const char *mdparser_md4c_ast_status_message(int status);
 
+/* Intern the recurring per-node hash keys once at module init. */
+void mdparser_md4c_ast_minit(void);
+
 #endif
