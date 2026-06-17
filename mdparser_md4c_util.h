@@ -40,4 +40,12 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
  * own context (XML-escape, HTML-escape, or store raw in the AST). */
 void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr);
 
+/* Fast-path probe for mdparser_md4c_decode_attr / mdm_attr_decode_raw. Most
+ * attributes (link/image URLs especially) are a single plain substring (no
+ * entity, no NUL) spanning the whole value, so the decoded bytes equal
+ * attr->text and the scratch-buffer copy can be skipped. Returns true and
+ * points *p/*n at the verbatim bytes on the fast path (including the
+ * empty-attribute case); returns false when the caller must decode. */
+bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *n);
+
 #endif

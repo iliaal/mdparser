@@ -36,6 +36,11 @@ $parsers = [
         $p ??= new MdParser\Parser();
         return $p->toHtml($md);
     },
+    'mdparser-inline' => function (string $md): string {
+        static $p = null;
+        $p ??= new MdParser\Parser();
+        return $p->toInlineHtml($md);
+    },
     'parsedown' => function (string $md): string {
         static $p = null;
         $p ??= new Parsedown();

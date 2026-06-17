@@ -606,6 +606,12 @@ static void mdm_emit_decoded_url(mdm_ctx *r, const char *p, size_t n, bool image
 /* Decode an attribute URL to raw bytes, then emit it safely. */
 static void mdm_render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_context)
 {
+    const char *p;
+    size_t n;
+    if (mdparser_md4c_attr_plain(attr, &p, &n)) {
+        mdm_emit_decoded_url(r, p, n, image_context);
+        return;
+    }
     smart_str raw = {0};
     mdm_attr_decode_raw(&raw, attr);
     mdm_emit_decoded_url(r, raw.s ? ZSTR_VAL(raw.s) : "",
@@ -664,9 +670,13 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
      * entity-undecoded, so `&#35;section` and `javascript&colon;` would
      * otherwise dodge the respective checks). */
     smart_str href = {0};
-    mdm_attr_decode_raw(&href, &d->href);
-    const char *hp = href.s ? ZSTR_VAL(href.s) : "";
-    size_t hn = href.s ? ZSTR_LEN(href.s) : 0;
+    const char *hp;
+    size_t hn;
+    if (!mdparser_md4c_attr_plain(&d->href, &hp, &hn)) {
+        mdm_attr_decode_raw(&href, &d->href);
+        hp = href.s ? ZSTR_VAL(href.s) : "";
+        hn = href.s ? ZSTR_LEN(href.s) : 0;
+    }
     /* Fragment-only anchors (href="#...") are in-document links: skip nofollow. */
     bool fragment = hn > 0 && hp[0] == '#';
 
@@ -693,9 +703,13 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
 static void mdm_render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
 {
     smart_str href = {0};
-    mdm_attr_decode_raw(&href, &d->target);
-    const char *hp = href.s ? ZSTR_VAL(href.s) : "";
-    size_t hn = href.s ? ZSTR_LEN(href.s) : 0;
+    const char *hp;
+    size_t hn;
+    if (!mdparser_md4c_attr_plain(&d->target, &hp, &hn)) {
+        mdm_attr_decode_raw(&href, &d->target);
+        hp = href.s ? ZSTR_VAL(href.s) : "";
+        hn = href.s ? ZSTR_LEN(href.s) : 0;
+    }
     bool fragment = hn > 0 && hp[0] == '#';
 
     OUT_LIT(r, "<a");

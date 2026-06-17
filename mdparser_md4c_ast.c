@@ -95,6 +95,12 @@ static void mda_new_node(zval *out, const char *type)
  * substrings rather than storing the raw &amp;-encoded bytes. */
 static void mda_add_attr(zval *node, const char *key, const MD_ATTRIBUTE *a)
 {
+    const char *p;
+    size_t n;
+    if (mdparser_md4c_attr_plain(a, &p, &n)) {
+        add_assoc_stringl(node, key, (char *) p, n);
+        return;
+    }
     smart_str dec = {0};
     mdparser_md4c_decode_attr(&dec, a);
     add_assoc_stringl(node, key, dec.s ? ZSTR_VAL(dec.s) : "",

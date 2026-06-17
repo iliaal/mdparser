@@ -82,6 +82,28 @@ void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
     }
 }
 
+bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *n)
+{
+    if (attr == NULL || attr->text == NULL || attr->size == 0) {
+        *p = "";
+        *n = 0;
+        return true;
+    }
+    /* A single substring spans the whole value when substr_offsets[1]
+     * already reaches attr->size. Entity / NUL substrings still need real
+     * decoding; a plain substring decodes to itself. */
+    if (attr->substr_offsets[1] >= attr->size &&
+        attr->substr_types[0] != MD_TEXT_ENTITY &&
+        attr->substr_types[0] != MD_TEXT_NULLCHAR) {
+        *p = attr->text;
+        *n = attr->size;
+        return true;
+    }
+    *p = "";
+    *n = 0;
+    return false;
+}
+
 size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail)
 {
     unsigned char c = p[0];
