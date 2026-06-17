@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-17
+
 ### Changed
 
 - Parsing backend swapped from cmark-gfm to md4c. The public API
@@ -451,7 +453,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.0...HEAD
+[0.4.0]: https://github.com/iliaal/mdparser/releases/tag/0.4.0
 [0.3.0]: https://github.com/iliaal/mdparser/releases/tag/0.3.0
 [0.2.0]: https://github.com/iliaal/mdparser/releases/tag/0.2.0
 [0.1.0]: https://github.com/iliaal/mdparser/releases/tag/0.1.0

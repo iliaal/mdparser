@@ -113,6 +113,10 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 | XML output           | ✓                       | ✗           | ✗              | ✗        | ✗             | ✗       |
 | AST output           | ✓ (arrays)              | ✗           | ✓ (objects)    | ✗        | ✗             | ✗       |
 
+## Opt-in dialect extensions
+
+Beyond CommonMark + GFM, md4c ships several dialect extensions, each exposed as an opt-in `Options` flag (all default off, so the standard CommonMark + GFM parse is unaffected): `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`>!text!<`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), and `subscript` (`~text~`). Plus parser-behavior toggles (`noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`). See [`docs/options.md`](docs/options.md) for behavior and edge cases.
+
 ## What we don't cover
 
 mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It does **not** cover the "Markdown Extra" family of features that Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions offer. If you need any of the following, reach for league/commonmark, the most actively-maintained pure-PHP option for extended Markdown:
