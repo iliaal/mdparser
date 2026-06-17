@@ -172,6 +172,24 @@ This is the most powerful output mode — you can walk the tree yourself
 to extract headings for a TOC, collect all links, transform or filter
 nodes, or emit your own custom format.
 
+## `toInlineHtml(string $source): string`
+
+Renders `$source` as inline-only HTML: no `<p>` wrapper and no
+block-level constructs. Block markers (`#`, `-`, `>`, `1.`) are emitted
+as literal text rather than parsed, matching `Parsedown::line()` /
+`cebe\markdown::parseParagraph()` semantics.
+
+```php
+echo $parser->toInlineHtml("a *b* `c`");
+// a <em>b</em> <code>c</code>
+```
+
+This is a **snippet renderer**, tuned for short single-line inputs (chat
+messages, table cells, display names). It runs a per-line normalization
+pass that `toHtml` does not, so for large multi-line documents prefer
+`toHtml`. `headingAnchors` is a no-op here (no headings are emitted);
+`nofollowLinks` still applies.
+
 ## Error model
 
 All render methods can throw `MdParser\Exception` (final, extends
