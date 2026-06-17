@@ -96,9 +96,8 @@ is untouched:
 | Heading permalinks / anchors | `headingAnchors: true` | Every Markdown heading gains a GitHub-style slug `id`; collisions deduped with `-1`, `-2`, ...; raw HTML headings are left as-is |
 | External link nofollow | `nofollowLinks: true` | Every Markdown link (inline, reference, autolink) gets `rel="nofollow noopener noreferrer"`; fragment anchors and raw HTML `<a>` are skipped |
 
-Both default to `false`. See `docs/options.md` for behavior, edge cases,
-and the documented `unsafe: true` byte-collision limitation on heading
-anchors.
+Both default to `false`. See `docs/options.md` for behavior and edge
+cases.
 
 ## What's NOT covered
 
