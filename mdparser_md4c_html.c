@@ -525,11 +525,6 @@ static void mdm_render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
     }
 }
 
-/* Render an MD_ATTRIBUTE (used for code-fence lang, link href/title, etc.)
- * with the given escaper applied to its NORMAL substrings; entities are
- * decoded, null chars replaced. */
-typedef enum { MDM_ATTR_HTML, MDM_ATTR_URL } mdm_attr_mode;
-
 /* Decode an entity reference to raw UTF-8 bytes into `out` (no escaping).
  * Used for entities inside URL attributes, which must be percent-escaped
  * after decoding -- not HTML-escaped. Unknown entities pass through raw. */
@@ -602,7 +597,11 @@ static void mdm_render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool imag
     smart_str_free(&raw);
 }
 
-static void mdm_render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr, mdm_attr_mode mode)
+/* Render an MD_ATTRIBUTE (code-fence lang, link/image title) HTML-escaped:
+ * NORMAL substrings are HTML-escaped, entities decoded-then-re-escaped, null
+ * chars replaced. URLs do NOT go through here -- they route through
+ * mdm_render_url_value, which runs the scheme filter and percent-escapes. */
+static void mdm_render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
 {
     for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
         MD_TEXTTYPE type = attr->substr_types[i];
@@ -611,22 +610,8 @@ static void mdm_render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr, mdm_attr_
         const char *text = attr->text + off;
         switch (type) {
             case MD_TEXT_NULLCHAR: mdm_append_codepoint(r, 0x0000); break;
-            case MD_TEXT_ENTITY:
-                if (mode == MDM_ATTR_URL) {
-                    /* Decode, then percent-escape the bytes (matches the CommonMark reference renderer). */
-                    smart_str tmp = {0};
-                    mdm_decode_entity_raw(&tmp, text, sz);
-                    smart_str_0(&tmp);
-                    if (tmp.s) mdm_escape_url(r, ZSTR_VAL(tmp.s), ZSTR_LEN(tmp.s));
-                    smart_str_free(&tmp);
-                } else {
-                    mdm_render_entity(r, text, sz);
-                }
-                break;
-            default:
-                if (mode == MDM_ATTR_URL) mdm_escape_url(r, text, sz);
-                else                      mdm_escape_html(r, text, sz);
-                break;
+            case MD_TEXT_ENTITY:   mdm_render_entity(r, text, sz); break;
+            default:               mdm_escape_html(r, text, sz); break;
         }
     }
 }
@@ -638,7 +623,7 @@ static void mdm_render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
         OUT_LIT(r, " class=\"");
         if (d->lang.size < 9 || strncmp(d->lang.text, "language-", 9) != 0)
             OUT_LIT(r, "language-");
-        mdm_render_attribute(r, &d->lang, MDM_ATTR_HTML);
+        mdm_render_attribute(r, &d->lang);
         OUT_LIT(r, "\"");
     }
     OUT_LIT(r, ">");
@@ -680,7 +665,7 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
     smart_str_free(&href);
     if (d->title.text != NULL) {
         OUT_LIT(r, "\" title=\"");
-        mdm_render_attribute(r, &d->title, MDM_ATTR_HTML);
+        mdm_render_attribute(r, &d->title);
     }
     OUT_LIT(r, "\">");
 }
@@ -718,7 +703,7 @@ static void mdm_render_img_close(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
 {
     if (d->title.text != NULL) {
         OUT_LIT(r, "\" title=\"");
-        mdm_render_attribute(r, &d->title, MDM_ATTR_HTML);
+        mdm_render_attribute(r, &d->title);
     }
     OUT_LIT(r, "\" />");
 }
@@ -747,7 +732,7 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 smart_str_free(&r->heading_text);
                 r->cur = &r->heading_html;
             } else {
-                char tag[5];
+                char tag[8];
                 snprintf(tag, sizeof(tag), "<h%d>", r->heading_level);
                 out_append(r, tag, strlen(tag));
             }
@@ -935,7 +920,11 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
         case MD_TEXT_HTML: mdm_render_raw_html(r, text, size); break;
         case MD_TEXT_ENTITY:
             mdm_render_entity(r, text, size);
-            r->prev_char = 0;
+            /* Seed quote context from the byte the entity actually rendered
+             * (e.g. `&amp;` -> '&' is right-context; `&#32;` -> ' ' is left),
+             * not a blanket 0 which would force an opening quote. */
+            if (r->cur->s && ZSTR_LEN(r->cur->s) > 0)
+                r->prev_char = (unsigned char)ZSTR_VAL(r->cur->s)[ZSTR_LEN(r->cur->s) - 1];
             break;
         case MD_TEXT_CODE:
         case MD_TEXT_LATEXMATH:

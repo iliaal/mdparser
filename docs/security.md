@@ -48,9 +48,11 @@ echo $p->toHtml('[xss](data:text/html,<b>boom</b>)');
 // <p><a href="">xss</a></p>
 ```
 
-### Allowed URL schemes
+### Other URL schemes
 
-These schemes pass through untouched:
+The filter is a **blocklist, not an allowlist**: every scheme except the
+four dangerous ones above passes through untouched. That includes the
+common safe schemes —
 
 - `http:`, `https:`
 - `mailto:`, `tel:`
@@ -58,6 +60,14 @@ These schemes pass through untouched:
 - `data:image/png`, `data:image/jpeg`, `data:image/gif`, `data:image/webp`
   (`image/svg+xml` is NOT allowed because SVG can execute JavaScript)
 - Relative URLs (no scheme)
+
+— but it also passes through **any other scheme** (`livescript:`,
+`intent://`, custom app schemes, etc.). This matches the CommonMark
+reference renderer: only the schemes that execute script in a current
+browser via `<a href>` / `<img src>` (`javascript:`, `vbscript:`,
+non-image `data:`) are blocked. `file:` is blocked as a local-resource
+guard. If your threat model needs a strict scheme allowlist, enforce it
+on the rendered output downstream — mdparser does not.
 
 ```php
 echo $p->toHtml('[docs](https://example.com/docs)');

@@ -18,7 +18,68 @@
 
 #include <string.h>
 
+#include "entity.h"
 #include "mdparser_md4c_util.h"
+
+static unsigned mdu_hex_val(char ch)
+{
+    if ('0' <= ch && ch <= '9') return ch - '0';
+    if ('A' <= ch && ch <= 'F') return ch - 'A' + 10;
+    if ('a' <= ch && ch <= 'f') return ch - 'a' + 10;
+    return 0;
+}
+
+/* Append a codepoint as UTF-8, substituting U+FFFD for NUL / surrogates /
+ * out-of-range values. */
+static void mdu_append_cp(smart_str *out, unsigned cp)
+{
+    unsigned char u[4];
+    if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
+        smart_str_appendl(out, "\xef\xbf\xbd", 3);
+        return;
+    }
+    if (cp <= 0x7f)        { u[0] = (unsigned char)cp; smart_str_appendl(out, (char *)u, 1); }
+    else if (cp <= 0x7ff)  { u[0] = 0xc0 | (cp >> 6); u[1] = 0x80 | (cp & 0x3f);
+                             smart_str_appendl(out, (char *)u, 2); }
+    else if (cp <= 0xffff) { u[0] = 0xe0 | (cp >> 12); u[1] = 0x80 | ((cp >> 6) & 0x3f);
+                             u[2] = 0x80 | (cp & 0x3f); smart_str_appendl(out, (char *)u, 3); }
+    else                   { u[0] = 0xf0 | (cp >> 18); u[1] = 0x80 | ((cp >> 12) & 0x3f);
+                             u[2] = 0x80 | ((cp >> 6) & 0x3f); u[3] = 0x80 | (cp & 0x3f);
+                             smart_str_appendl(out, (char *)u, 4); }
+}
+
+void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
+{
+    if (attr == NULL || attr->text == NULL) return;
+    for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
+        MD_TEXTTYPE type = attr->substr_types[i];
+        MD_OFFSET off = attr->substr_offsets[i];
+        MD_SIZE sz = attr->substr_offsets[i + 1] - off;
+        const char *text = attr->text + off;
+        if (type == MD_TEXT_NULLCHAR) {
+            smart_str_appendl(out, "\xef\xbf\xbd", 3);
+        } else if (type == MD_TEXT_ENTITY) {
+            unsigned cps[2] = {0, 0};
+            if (sz > 3 && text[1] == '#') {
+                if (text[2] == 'x' || text[2] == 'X')
+                    for (MD_SIZE k = 3; k < sz - 1; k++) cps[0] = 16 * cps[0] + mdu_hex_val(text[k]);
+                else
+                    for (MD_SIZE k = 2; k < sz - 1; k++) cps[0] = 10 * cps[0] + (text[k] - '0');
+            } else {
+                const ENTITY *e = entity_lookup(text, sz);
+                if (e == NULL) { smart_str_appendl(out, text, sz); continue; }
+                cps[0] = e->codepoints[0];
+                cps[1] = e->codepoints[1];
+            }
+            for (int k = 0; k < 2; k++) {
+                if (k == 1 && cps[k] == 0) break;
+                mdu_append_cp(out, cps[k]);
+            }
+        } else {
+            smart_str_appendl(out, text, sz);
+        }
+    }
+}
 
 size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail)
 {

@@ -148,7 +148,15 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
     smart_str_appendc(&c->out, ' ');
     smart_str_appends(&c->out, name);
     X_LIT(c, "=\"");
-    if (a && a->text) mdx_escape(&c->out, a->text, a->size, true);
+    /* md4c hands attributes out entity-undecoded across typed substrings;
+     * resolve them to raw bytes first, then XML-escape once. Escaping the
+     * raw bytes directly would double-encode entities (&amp; -> &amp;amp;). */
+    if (a && a->text) {
+        smart_str dec = {0};
+        mdparser_md4c_decode_attr(&dec, a);
+        if (dec.s) mdx_escape(&c->out, ZSTR_VAL(dec.s), ZSTR_LEN(dec.s), true);
+        smart_str_free(&dec);
+    }
     smart_str_appendc(&c->out, '"');
 }
 

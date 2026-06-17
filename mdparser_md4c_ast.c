@@ -90,6 +90,18 @@ static void mda_new_node(zval *out, const char *type)
     add_assoc_string(out, "type", type);
 }
 
+/* Store an MD_ATTRIBUTE (destination/title/info) under `key`, entity-decoded.
+ * The legacy cmark AST exposed decoded URLs/titles, so resolve md4c's typed
+ * substrings rather than storing the raw &amp;-encoded bytes. */
+static void mda_add_attr(zval *node, const char *key, const MD_ATTRIBUTE *a)
+{
+    smart_str dec = {0};
+    mdparser_md4c_decode_attr(&dec, a);
+    add_assoc_stringl(node, key, dec.s ? ZSTR_VAL(dec.s) : "",
+        dec.s ? ZSTR_LEN(dec.s) : 0);
+    smart_str_free(&dec);
+}
+
 /* Push a freshly-created container node. Returns false on depth overflow. */
 static bool mda_push(mda_ctx *c, zval *node)
 {
@@ -216,10 +228,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_CODE: {
             MD_BLOCK_CODE_DETAIL *d = detail;
             mda_new_node(&n, "code_block");
-            if (d->lang.text)
-                add_assoc_stringl(&n, "info", d->lang.text, d->lang.size);
-            else
-                add_assoc_string(&n, "info", "");
+            mda_add_attr(&n, "info", &d->lang);
             c->collecting = true;
             smart_str_free(&c->litbuf);
             break;
@@ -313,15 +322,15 @@ static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_A: {
             MD_SPAN_A_DETAIL *d = detail;
             mda_new_node(&n, "link");
-            add_assoc_stringl(&n, "url", d->href.text ? d->href.text : "", d->href.size);
-            add_assoc_stringl(&n, "title", d->title.text ? d->title.text : "", d->title.size);
+            mda_add_attr(&n, "url", &d->href);
+            mda_add_attr(&n, "title", &d->title);
             break;
         }
         case MD_SPAN_IMG: {
             MD_SPAN_IMG_DETAIL *d = detail;
             mda_new_node(&n, "image");
-            add_assoc_stringl(&n, "url", d->src.text ? d->src.text : "", d->src.size);
-            add_assoc_stringl(&n, "title", d->title.text ? d->title.text : "", d->title.size);
+            mda_add_attr(&n, "url", &d->src);
+            mda_add_attr(&n, "title", &d->title);
             break;
         }
         case MD_SPAN_CODE:
@@ -340,7 +349,7 @@ static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_WIKILINK: {
             MD_SPAN_WIKILINK_DETAIL *d = detail;
             mda_new_node(&n, "wikilink");
-            add_assoc_stringl(&n, "url", d->target.text ? d->target.text : "", d->target.size);
+            mda_add_attr(&n, "url", &d->target);
             break;
         }
         case MD_SPAN_FOOTNOTE_REF: {
