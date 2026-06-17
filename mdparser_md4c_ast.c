@@ -75,6 +75,7 @@ static zval *mda_table_alignments(mda_ctx *c)
     _(document) _(block_quote) _(list) _(tasklist) _(item) \
     _(thematic_break) _(heading) _(code_block) _(html_block) _(paragraph) \
     _(table) _(table_header) _(table_row) _(table_cell) _(footnote_definition) \
+    _(admonition) \
     _(emph) _(strong) _(link) _(image) _(code) \
     _(strikethrough) _(underline) _(superscript) _(subscript) _(highlight) \
     _(spoiler) _(latex_math) _(latex_math_display) _(wikilink) _(footnote_reference) \
@@ -322,6 +323,11 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         }
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: return 0;  /* structural */
+        case MD_BLOCK_ADMONITION:
+            mda_new_node(&n, MDA_T_admonition);
+            mda_add_attr(&n, "admonition_type",
+                &((MD_BLOCK_ADMONITION_DETAIL *)detail)->type);
+            break;
         default:
             mda_new_node(&n, MDA_T_unknown);
             break;
@@ -488,8 +494,9 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     bool owned = false;
     size_t use_len = len;
     const char *use_src = src;
+    mdparser_md4c_skip_bom(&use_src, &use_len);
     if (validate_utf8)
-        use_src = mdparser_md4c_validate_utf8(src, len, &use_len, &owned);
+        use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
     int rc = md_parse(use_src, (MD_SIZE)use_len, &parser, &c);
 

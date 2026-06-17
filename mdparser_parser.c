@@ -24,6 +24,7 @@
 #include "mdparser_md4c_html.h"
 #include "mdparser_md4c_ast.h"
 #include "mdparser_md4c_xml.h"
+#include "mdparser_md4c_util.h"
 
 zend_class_entry *mdparser_parser_ce;
 
@@ -288,6 +289,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
      * peak allocation tracks the actual normalized size. */
     const char *src = ZSTR_VAL(source);
     size_t src_len = ZSTR_LEN(source);
+    mdparser_md4c_skip_bom(&src, &src_len);
     smart_str norm = {0};
 
     /* Single-line fast path: with no line break the per-line ZWSP

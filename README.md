@@ -115,7 +115,7 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 
 ## Opt-in dialect extensions
 
-Beyond CommonMark + GFM, md4c ships several dialect extensions, each exposed as an opt-in `Options` flag (all default off, so the standard CommonMark + GFM parse is unaffected): `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`>!text!<`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), and `subscript` (`~text~`). Plus parser-behavior toggles (`noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`). See [`docs/options.md`](docs/options.md) for behavior and edge cases.
+Beyond CommonMark + GFM, md4c ships several dialect extensions, each exposed as an opt-in `Options` flag (all default off, so the standard CommonMark + GFM parse is unaffected): `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`||text||`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), `subscript` (`~text~`), and `admonitions` (GitHub-style `> [!NOTE]` alert blocks). Plus parser-behavior toggles (`noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`). See [`docs/options.md`](docs/options.md) for behavior and edge cases.
 
 ## What we don't cover
 
@@ -130,7 +130,8 @@ mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It d
 - YAML front matter
 - Mentions (`@user`)
 - Emoji (`:smile:`)
-- Custom admonition containers (`::: warning`)
+- Fenced admonition containers (`::: warning`); GitHub-style `> [!NOTE]`
+  alert blocks are supported via `Options::admonitions`
 
 These are real features. They're just out of scope for a CommonMark+GFM core parser.
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-17
+
+### Added
+
+- New `admonitions` option enables md4c GitHub-style alert blocks (`> [!NOTE]` through `> [!CAUTION]`); off by default.
+
+### Fixed
+
+- Strip a leading UTF-8 BOM before parsing; it was leaking into output verbatim and displacing the first line, so `# Heading` rendered as text instead of `<h1>`.
+
 ## [0.4.0] - 2026-06-17
 
 ### Changed
@@ -453,7 +463,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/iliaal/mdparser/releases/tag/0.4.1
 [0.4.0]: https://github.com/iliaal/mdparser/releases/tag/0.4.0
 [0.3.0]: https://github.com/iliaal/mdparser/releases/tag/0.3.0
 [0.2.0]: https://github.com/iliaal/mdparser/releases/tag/0.2.0

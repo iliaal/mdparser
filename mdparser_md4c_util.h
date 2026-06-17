@@ -48,4 +48,19 @@ void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr);
  * empty-attribute case); returns false when the caller must decode. */
 bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *n);
 
+/* Skip a single leading UTF-8 BOM (EF BB BF) on the (src,len) pair in place.
+ * md4c does not strip a BOM: left in, it leaks into output verbatim and also
+ * displaces the first physical line's start, breaking line-leading recognition
+ * (ATX headings, list markers, blockquotes, ...). Mirrors md4c-html's
+ * MD_HTML_FLAG_SKIP_UTF8_BOM. A BOM is never semantically meaningful in
+ * Markdown, so this is unconditional. */
+static inline void mdparser_md4c_skip_bom(const char **src, size_t *len)
+{
+    const unsigned char *p = (const unsigned char *)*src;
+    if (*len >= 3 && p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF) {
+        *src += 3;
+        *len -= 3;
+    }
+}
+
 #endif

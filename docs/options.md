@@ -50,6 +50,7 @@ new Options(
     spoilers: false,
     latexMath: false,
     wikiLinks: false,
+    admonitions: false,
 );
 ```
 
@@ -308,7 +309,8 @@ with all of them off. Each renders as standard HTML (a semantic tag, or
 an element carrying a `class` hook), so no custom elements or scripts are
 introduced. In `toXml()` / `toAst()` they surface as the node types
 `underline`, `highlight`, `superscript`, `subscript`, `spoiler`,
-`latex_math`, `latex_math_display`, and `wikilink`.
+`latex_math`, `latex_math_display`, `wikilink`, and the block-level
+`admonition`.
 
 ### `underline: bool = false`
 
@@ -352,6 +354,23 @@ uses `label` as the link text. The target runs through the **same URL
 scheme filter as a normal link** (decode → check → emit), so a
 `[[javascript:...]]` target is neutralized to an empty `href` in safe
 mode. `nofollowLinks` applies to wiki links as it does to other links.
+
+### `admonitions: bool = false`
+
+When `true`, GitHub-style alert blocks are recognized:
+
+```
+> [!NOTE]
+> Body text.
+```
+
+The block type is one of `note`, `tip`, `important`, `warning`, or
+`caution`. It renders as
+`<div class="admonition-note"><p class="admonition-title">note</p>…</div>`
+(the type in the `class` and the title); style the `.admonition-*`
+classes downstream. In `toXml()` it is `<admonition type="note">`; in
+`toAst()` it is an `admonition` node carrying an `admonition_type`
+field. With the option off, `> [!NOTE]` stays a plain blockquote.
 
 ## Patterns
 

@@ -738,6 +738,26 @@ static void mdm_render_img_close(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
     OUT_LIT(r, "\" />");
 }
 
+/* md4c-html convention: <div class="admonition-TYPE"><p class="admonition-title">TYPE</p>.
+ * TYPE is one of note/tip/important/warning/caution (entity-resolved, escaped). */
+static void mdm_render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DETAIL *d)
+{
+    const char *p;
+    size_t n;
+    smart_str raw = {0};
+    if (!mdparser_md4c_attr_plain(&d->type, &p, &n)) {
+        mdm_attr_decode_raw(&raw, &d->type);
+        p = raw.s ? ZSTR_VAL(raw.s) : "";
+        n = raw.s ? ZSTR_LEN(raw.s) : 0;
+    }
+    OUT_LIT(r, "<div class=\"admonition-");
+    mdm_escape_html(r, p, n);
+    OUT_LIT(r, "\">\n<p class=\"admonition-title\">");
+    mdm_escape_html(r, p, n);
+    OUT_LIT(r, "</p>\n");
+    smart_str_free(&raw);
+}
+
 static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
@@ -786,7 +806,10 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             out_append(r, buf, (size_t)w);
             break;
         }
-        default: break;  /* admonitions: not in our option set */
+        case MD_BLOCK_ADMONITION:
+            mdm_render_admonition_open(r, (MD_BLOCK_ADMONITION_DETAIL *)detail);
+            break;
+        default: break;
     }
     return 0;
 }
@@ -862,6 +885,7 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             OUT_LIT(r, "\n</li>\n");
             break;
         }
+        case MD_BLOCK_ADMONITION: OUT_LIT(r, "</div>\n"); break;
         default: break;
     }
     return 0;
@@ -897,7 +921,7 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             out_append(r, buf, (size_t)w);
             break;
         }
-        default: break;  /* admonitions: block-level, not in our option set */
+        default: break;
     }
     return 0;
 }
@@ -999,8 +1023,9 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     bool owned = false;
     size_t use_len = len;
     const char *use_src = src;
+    mdparser_md4c_skip_bom(&use_src, &use_len);
     if (render_opts & MDPARSER_RF_VALIDATE_UTF8)
-        use_src = mdparser_md4c_validate_utf8(src, len, &use_len, &owned);
+        use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
     /* Reserve roughly the input size up front: HTML output is typically
      * 1-1.5x the markdown, so this skips the early smart_str doublings (and

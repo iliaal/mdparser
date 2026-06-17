@@ -277,6 +277,13 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             c->depth++;
             break;
         }
+        case MD_BLOCK_ADMONITION:
+            mdx_indent(c);
+            X_LIT(c, "<admonition");
+            mdx_attr(c, "type", &((MD_BLOCK_ADMONITION_DETAIL *)detail)->type);
+            X_LIT(c, ">\n");
+            c->depth++;
+            break;
         default: mdx_open(c, "unknown"); break;
     }
     return 0;
@@ -317,6 +324,7 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_TD: mdx_close(c, "table_cell"); break;
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: mdx_close(c, "footnote_section"); break;
         case MD_BLOCK_FOOTNOTE_DEF: mdx_close(c, "footnote_definition"); break;
+        case MD_BLOCK_ADMONITION: mdx_close(c, "admonition"); break;
         default: mdx_close(c, "unknown"); break;
     }
     return 0;
@@ -476,8 +484,9 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     bool owned = false;
     size_t use_len = len;
     const char *use_src = src;
+    mdparser_md4c_skip_bom(&use_src, &use_len);
     if (validate_utf8)
-        use_src = mdparser_md4c_validate_utf8(src, len, &use_len, &owned);
+        use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
     /* CommonMark XML is markup-heavy (indentation + open/close tags), so the
      * output runs well over the input; reserve ~2x up front to skip the early

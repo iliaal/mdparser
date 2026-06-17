@@ -47,6 +47,7 @@ final readonly class Options
     public bool $spoilers;
     public bool $latexMath;
     public bool $wikiLinks;
+    public bool $admonitions;
 
     public function __construct(
         bool $sourcepos = false,
@@ -78,6 +79,7 @@ final readonly class Options
         bool $spoilers = false,
         bool $latexMath = false,
         bool $wikiLinks = false,
+        bool $admonitions = false,
     ) {}
 
     /**
