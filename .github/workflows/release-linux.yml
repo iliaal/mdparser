@@ -32,6 +32,15 @@ name: Release Linux & macOS binaries
 on:
   release:
     types: [published]
+  # Manual trigger to (re)build and upload prebuilt binaries for an
+  # existing release -- recovery when a lane flaked, or pre-tag build
+  # validation on a throwaway branch (the build still runs; the upload
+  # targets whatever release-tag is given).
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: "Existing release tag to build and upload binaries for"
+        required: true
 
 jobs:
   build:
@@ -58,7 +67,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2 (2.37.2)
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -66,6 +75,6 @@ jobs:
       - name: Build and upload prebuilt binary
         uses: php/pie-ext-binary-builder@5298761950f63c7e9565ed7004e922b346e4386c # 0.0.3
         with:
-          release-tag: ${{ github.event.release.tag_name }}
+          release-tag: ${{ github.event.release.tag_name || inputs.release-tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           configure-flags: '--enable-mdparser'
