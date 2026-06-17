@@ -66,15 +66,38 @@ static zval *mda_table_alignments(mda_ctx *c)
 }
 
 /* Interned keys for the two hot per-node inserts ("type" on every node,
- * "children" on every container). Created once at MINIT and reused, so the
- * builder neither re-allocates nor re-hashes them per node. */
+ * "children" on every container) and the interned node-type *values*. All
+ * created once at MINIT and reused, so the builder neither re-allocates nor
+ * re-hashes (nor re-interns) them per node. The node-type set is defined once
+ * here; the enum, the interned-string table, and the MINIT interning are all
+ * generated from it, so adding a node type is a one-line change. */
+#define MDA_NODE_TYPES(_) \
+    _(document) _(block_quote) _(list) _(tasklist) _(item) \
+    _(thematic_break) _(heading) _(code_block) _(html_block) _(paragraph) \
+    _(table) _(table_header) _(table_row) _(table_cell) _(footnote_definition) \
+    _(emph) _(strong) _(link) _(image) _(code) \
+    _(strikethrough) _(underline) _(superscript) _(subscript) _(highlight) \
+    _(spoiler) _(latex_math) _(latex_math_display) _(wikilink) _(footnote_reference) \
+    _(softbreak) _(linebreak) _(html_inline) _(text) _(unknown)
+
+enum {
+#define MDA_T_ENUM(id) MDA_T_##id,
+    MDA_NODE_TYPES(MDA_T_ENUM)
+#undef MDA_T_ENUM
+    MDA_T__COUNT
+};
+
 static zend_string *mda_k_type;
 static zend_string *mda_k_children;
+static zend_string *mda_types[MDA_T__COUNT];
 
 void mdparser_md4c_ast_minit(void)
 {
     mda_k_type = zend_string_init_interned("type", sizeof("type") - 1, 1);
     mda_k_children = zend_string_init_interned("children", sizeof("children") - 1, 1);
+#define MDA_T_INIT(id) mda_types[MDA_T_##id] = zend_string_init_interned(#id, sizeof(#id) - 1, 1);
+    MDA_NODE_TYPES(MDA_T_INIT)
+#undef MDA_T_INIT
 }
 
 /* ---- node helpers ---------------------------------------------------- */
@@ -96,11 +119,11 @@ static void mda_append_child(mda_ctx *c, zval *child)
 }
 
 /* Create a node array with "type" set; returns it by value in *out. */
-static void mda_new_node(zval *out, const char *type)
+static void mda_new_node(zval *out, int type)
 {
     array_init(out);
     zval v;
-    ZVAL_STR(&v, zend_string_init_interned(type, strlen(type), 0));
+    ZVAL_STR(&v, mda_types[type]);
     zend_hash_add_new(Z_ARRVAL_P(out), mda_k_type, &v);
 }
 
@@ -212,9 +235,9 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_DOC:
             /* document is stack[0], created in the entry function. */
             return 0;
-        case MD_BLOCK_QUOTE: mda_new_node(&n, "block_quote"); break;
+        case MD_BLOCK_QUOTE: mda_new_node(&n, MDA_T_block_quote); break;
         case MD_BLOCK_UL: {
-            mda_new_node(&n, "list");
+            mda_new_node(&n, MDA_T_list);
             add_assoc_string(&n, "list_type", "bullet");
             add_assoc_long(&n, "list_start", 0);
             add_assoc_bool(&n, "list_tight", ((MD_BLOCK_UL_DETAIL *)detail)->is_tight);
@@ -223,7 +246,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         }
         case MD_BLOCK_OL: {
             MD_BLOCK_OL_DETAIL *d = detail;
-            mda_new_node(&n, "list");
+            mda_new_node(&n, MDA_T_list);
             add_assoc_string(&n, "list_type", "ordered");
             add_assoc_long(&n, "list_start", d->start);
             add_assoc_bool(&n, "list_tight", d->is_tight);
@@ -233,34 +256,34 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_LI: {
             MD_BLOCK_LI_DETAIL *d = detail;
             if (d->is_task) {
-                mda_new_node(&n, "tasklist");
+                mda_new_node(&n, MDA_T_tasklist);
                 add_assoc_bool(&n, "checked", d->task_mark == 'x' || d->task_mark == 'X');
             } else {
-                mda_new_node(&n, "item");
+                mda_new_node(&n, MDA_T_item);
             }
             break;
         }
-        case MD_BLOCK_HR: mda_new_node(&n, "thematic_break"); break;
+        case MD_BLOCK_HR: mda_new_node(&n, MDA_T_thematic_break); break;
         case MD_BLOCK_H:
-            mda_new_node(&n, "heading");
+            mda_new_node(&n, MDA_T_heading);
             add_assoc_long(&n, "level", ((MD_BLOCK_H_DETAIL *)detail)->level);
             break;
         case MD_BLOCK_CODE: {
             MD_BLOCK_CODE_DETAIL *d = detail;
-            mda_new_node(&n, "code_block");
+            mda_new_node(&n, MDA_T_code_block);
             mda_add_attr(&n, "info", &d->lang);
             c->collecting = true;
             smart_str_free(&c->litbuf);
             break;
         }
         case MD_BLOCK_HTML:
-            mda_new_node(&n, "html_block");
+            mda_new_node(&n, MDA_T_html_block);
             c->collecting = true;
             smart_str_free(&c->litbuf);
             break;
-        case MD_BLOCK_P: mda_new_node(&n, "paragraph"); break;
+        case MD_BLOCK_P: mda_new_node(&n, MDA_T_paragraph); break;
         case MD_BLOCK_TABLE: {
-            mda_new_node(&n, "table");
+            mda_new_node(&n, MDA_T_table);
             zval aligns;
             array_init(&aligns);
             for (unsigned i = 0; i < ((MD_BLOCK_TABLE_DETAIL *)detail)->col_count; i++)
@@ -272,7 +295,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_TBODY: return 0;
         case MD_BLOCK_TR:
             if (c->in_thead) c->th_col = 0;
-            mda_new_node(&n, c->in_thead ? "table_header" : "table_row");
+            mda_new_node(&n, c->in_thead ? MDA_T_table_header : MDA_T_table_row);
             add_assoc_bool(&n, "is_header", c->in_thead ? 1 : 0);
             break;
         case MD_BLOCK_TH: {
@@ -284,15 +307,15 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 zend_hash_index_update(Z_ARRVAL_P(aligns), c->th_col, &av);
             }
             c->th_col++;
-            mda_new_node(&n, "table_cell");
+            mda_new_node(&n, MDA_T_table_cell);
             break;
         }
         case MD_BLOCK_TD:
-            mda_new_node(&n, "table_cell");
+            mda_new_node(&n, MDA_T_table_cell);
             break;
         case MD_BLOCK_FOOTNOTE_DEF: {
             MD_BLOCK_FOOTNOTE_DEF_DETAIL *d = detail;
-            mda_new_node(&n, "footnote_definition");
+            mda_new_node(&n, MDA_T_footnote_definition);
             char buf[16];
             int w = snprintf(buf, sizeof(buf), "%u", d->id);
             add_assoc_stringl(&n, "literal", buf, (size_t)w);
@@ -300,7 +323,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         }
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: return 0;  /* structural */
         default:
-            mda_new_node(&n, "unknown");
+            mda_new_node(&n, MDA_T_unknown);
             break;
     }
     if (!mda_push(c, &n)) return 1;
@@ -337,50 +360,50 @@ static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
     mda_ctx *c = userdata;
     zval n;
     switch (type) {
-        case MD_SPAN_EM: mda_new_node(&n, "emph"); break;
-        case MD_SPAN_STRONG: mda_new_node(&n, "strong"); break;
+        case MD_SPAN_EM: mda_new_node(&n, MDA_T_emph); break;
+        case MD_SPAN_STRONG: mda_new_node(&n, MDA_T_strong); break;
         case MD_SPAN_A: {
             MD_SPAN_A_DETAIL *d = detail;
-            mda_new_node(&n, "link");
+            mda_new_node(&n, MDA_T_link);
             mda_add_attr(&n, "url", &d->href);
             mda_add_attr(&n, "title", &d->title);
             break;
         }
         case MD_SPAN_IMG: {
             MD_SPAN_IMG_DETAIL *d = detail;
-            mda_new_node(&n, "image");
+            mda_new_node(&n, MDA_T_image);
             mda_add_attr(&n, "url", &d->src);
             mda_add_attr(&n, "title", &d->title);
             break;
         }
         case MD_SPAN_CODE:
-            mda_new_node(&n, "code");
+            mda_new_node(&n, MDA_T_code);
             c->collecting = true;
             smart_str_free(&c->litbuf);
             break;
-        case MD_SPAN_DEL: mda_new_node(&n, "strikethrough"); break;
-        case MD_SPAN_U: mda_new_node(&n, "underline"); break;
-        case MD_SPAN_SUPERSCRIPT: mda_new_node(&n, "superscript"); break;
-        case MD_SPAN_SUBSCRIPT: mda_new_node(&n, "subscript"); break;
-        case MD_SPAN_MARK: mda_new_node(&n, "highlight"); break;
-        case MD_SPAN_SPOILER: mda_new_node(&n, "spoiler"); break;
-        case MD_SPAN_LATEXMATH: mda_new_node(&n, "latex_math"); break;
-        case MD_SPAN_LATEXMATH_DISPLAY: mda_new_node(&n, "latex_math_display"); break;
+        case MD_SPAN_DEL: mda_new_node(&n, MDA_T_strikethrough); break;
+        case MD_SPAN_U: mda_new_node(&n, MDA_T_underline); break;
+        case MD_SPAN_SUPERSCRIPT: mda_new_node(&n, MDA_T_superscript); break;
+        case MD_SPAN_SUBSCRIPT: mda_new_node(&n, MDA_T_subscript); break;
+        case MD_SPAN_MARK: mda_new_node(&n, MDA_T_highlight); break;
+        case MD_SPAN_SPOILER: mda_new_node(&n, MDA_T_spoiler); break;
+        case MD_SPAN_LATEXMATH: mda_new_node(&n, MDA_T_latex_math); break;
+        case MD_SPAN_LATEXMATH_DISPLAY: mda_new_node(&n, MDA_T_latex_math_display); break;
         case MD_SPAN_WIKILINK: {
             MD_SPAN_WIKILINK_DETAIL *d = detail;
-            mda_new_node(&n, "wikilink");
+            mda_new_node(&n, MDA_T_wikilink);
             mda_add_attr(&n, "url", &d->target);
             break;
         }
         case MD_SPAN_FOOTNOTE_REF: {
             MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
-            mda_new_node(&n, "footnote_reference");
+            mda_new_node(&n, MDA_T_footnote_reference);
             char buf[16];
             int w = snprintf(buf, sizeof(buf), "%u", d->id);
             add_assoc_stringl(&n, "literal", buf, (size_t)w);
             break;
         }
-        default: mda_new_node(&n, "unknown"); break;
+        default: mda_new_node(&n, MDA_T_unknown); break;
     }
     if (!mda_push(c, &n)) return 1;
     return 0;
@@ -414,27 +437,27 @@ static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 
     zval n;
     switch (type) {
-        case MD_TEXT_SOFTBR: mda_new_node(&n, "softbreak"); break;
-        case MD_TEXT_BR: mda_new_node(&n, "linebreak"); break;
+        case MD_TEXT_SOFTBR: mda_new_node(&n, MDA_T_softbreak); break;
+        case MD_TEXT_BR: mda_new_node(&n, MDA_T_linebreak); break;
         case MD_TEXT_HTML:
-            mda_new_node(&n, "html_inline");
+            mda_new_node(&n, MDA_T_html_inline);
             add_assoc_stringl(&n, "literal", text, size);
             break;
         case MD_TEXT_ENTITY: {
             smart_str b = {0};
             mda_append_entity(&b, text, size);
             smart_str_0(&b);
-            mda_new_node(&n, "text");
+            mda_new_node(&n, MDA_T_text);
             add_assoc_stringl(&n, "literal", b.s ? ZSTR_VAL(b.s) : "", b.s ? ZSTR_LEN(b.s) : 0);
             smart_str_free(&b);
             break;
         }
         case MD_TEXT_NULLCHAR:
-            mda_new_node(&n, "text");
+            mda_new_node(&n, MDA_T_text);
             add_assoc_stringl(&n, "literal", "\xef\xbf\xbd", 3);
             break;
         default:  /* MD_TEXT_NORMAL / MD_TEXT_CODE outside a collector */
-            mda_new_node(&n, "text");
+            mda_new_node(&n, MDA_T_text);
             add_assoc_stringl(&n, "literal", text, size);
             break;
     }
@@ -451,7 +474,7 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     c.error = 0;
 
     /* stack[0] is the document root. */
-    mda_new_node(&c.stack[0], "document");
+    mda_new_node(&c.stack[0], MDA_T_document);
 
     MD_PARSER parser = {
         0, parser_flags,
