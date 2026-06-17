@@ -3,8 +3,8 @@
 `final readonly class MdParser\Options`
 
 Holds 29 bool toggles that control parser and renderer behavior:
-core parser options, GFM extension toggles, HTML postprocess flags,
-and md4c dialect extensions. All fields are readonly after
+core parser options, GFM extension toggles, HTML output flags (heading
+anchors, nofollow), and md4c dialect extensions. All fields are readonly after
 construction, and the class is `final` so it can't be subclassed.
 Use named arguments to set only the fields you care about.
 
@@ -33,7 +33,7 @@ new Options(
     autolink: true,
     tagfilter: true,
 
-    // HTML postprocess flags
+    // HTML output flags (heading anchors, nofollow)
     headingAnchors: false,
     nofollowLinks: false,
 
@@ -55,8 +55,8 @@ new Options(
 
 The defaults are tuned for rendering untrusted input as GitHub-style
 markdown: safe URL filtering, tag filter, UTF-8 validation, GFM
-extensions enabled, GitHub-style code block class attribute, no
-postprocess passes.
+extensions enabled, GitHub-style code block class attribute, no heading
+anchors or nofollow.
 
 ## Core parser options
 
@@ -217,24 +217,30 @@ GitHub's tag filter: escapes `<title>`, `<textarea>`, `<style>`,
 defense-in-depth layer when `unsafe: true` — the filter still prevents
 the most dangerous tags from passing through.
 
-## HTML postprocess flags
+## HTML output flags (heading anchors, nofollow)
 
-These two flags trigger string-level transforms applied *after* the HTML
-render finishes. They affect `toHtml()` (and `toInlineHtml()` where
-applicable). XML and AST output are unaffected. The static
-`Parser::html()` / `Parser::xml()` shortcuts use the module defaults
-and do not apply either transform.
+These two flags are applied in-stream by the HTML renderer as md4c emits
+its events, not as a separate string pass over the finished HTML. They
+act only on nodes md4c parses from the Markdown source; raw HTML written
+directly in the document (under `unsafe: true`) is passed through
+verbatim and never rewritten. They affect `toHtml()` (and
+`toInlineHtml()` where applicable). XML and AST output are unaffected.
+The static `Parser::html()` / `Parser::xml()` shortcuts use the module
+defaults and do not apply either transform.
 
 ### `headingAnchors: bool = false`
 
-When `true`, every rendered `<hN>` gets an `id` attribute holding a
+When `true`, every Markdown heading gets an `id` attribute holding a
 GitHub-style slug derived from the heading's text. Slugs lowercase
 ASCII, replace whitespace runs with a single `-`, drop other ASCII
 punctuation, preserve UTF-8 multibyte bytes, and dedupe collisions
 with `-1`, `-2`, ... (up to 100,000 collisions for a single base slug;
 beyond that the heading falls back to no id). Headings whose text
 slugifies to nothing (pure punctuation), and entity-only headings that
-decode to nothing, emit `<hN>` with no id rather than `id=""`.
+decode to nothing, emit `<hN>` with no id rather than `id=""`. A raw
+`<hN>` block written directly in the source (only possible under
+`unsafe: true, tagfilter: false`) is raw HTML, not a parsed heading
+node, so it is emitted untouched and gets no id.
 
 ```php
 echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Hello World\n");
@@ -245,25 +251,24 @@ echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Foo\n## Foo\n");
 // <h2 id="foo-1">Foo</h2>
 ```
 
-Known limitation under `unsafe: true, tagfilter: false`: a raw HTML
-heading whose rendered bytes match a later Markdown heading (e.g.
-`<h1>same</h1>` followed by `# same`) absorbs the `id`, leaving the
-real Markdown heading without one. Pinned in
-`tests/030_anchor_unsafe_collision.phpt`. A renderer-level fix is
-planned. For trusted-input pipelines that need stable heading ids,
-avoid raw HTML headings whose text matches Markdown ones.
+Because ids are attached as md4c emits each heading node, a raw HTML
+heading and a later Markdown heading with the same text no longer
+collide: the raw one (`<h1>same</h1>`) stays plain and the Markdown one
+(`# same`) gets `id="same"`. This is the in-stream behavior pinned by
+`tests/030_anchor_unsafe_collision.phpt`. (Earlier versions ran the
+anchor pass as a byte search over the finished HTML, where the raw block
+could absorb the id; the in-stream renderer resolves that.)
 
 ### `nofollowLinks: bool = false`
 
-When `true`, every emitted `<a href="...">` gets
-`rel="nofollow noopener noreferrer"` injected. Applies to inline
-links, reference links, and autolinks across `toHtml()` and
-`toInlineHtml()`. In-document fragment anchors (`href="#..."`,
-including footnote references and backrefs) are intentionally
-skipped. Anchors inside fenced or inline code are untouched because
-the renderer escapes them before the postprocess runs. Raw `<script>` /
-`<style>` regions under `unsafe: true` are emitted verbatim so
-anchor-shaped substrings inside JavaScript or CSS are not corrupted.
+When `true`, every link md4c parses from the Markdown source gets
+`rel="nofollow noopener noreferrer"`. Applies to inline links, reference
+links, and autolinks across `toHtml()` and `toInlineHtml()`. In-document
+fragment anchors (`href="#..."`, including footnote references and
+backrefs) are intentionally skipped. Anchors inside fenced or inline
+code never become links, so they are untouched. A raw `<a href="...">`
+written directly in the source (under `unsafe: true`) is raw HTML, not a
+parsed link node, so it is emitted verbatim and is not rewritten.
 
 ```php
 echo (new Parser(new Options(nofollowLinks: true)))

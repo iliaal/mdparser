@@ -185,8 +185,8 @@ All render methods can throw `MdParser\Exception` (final, extends
   streams md4c's callbacks straight to output (no indentation, output
   linear in input) and is not depth-capped.
 - **md4c / render null path.** The rare case where `md_parse()` reports
-  failure, or the renderer or postprocess pass returns `NULL`, raises an
-  exception with the source length included for triage.
+  failure, or the renderer returns `NULL`, raises an exception with the
+  source length included for triage.
 - **Reflection-bypassed Options.** Constructing a Parser with an
   `Options` object built via
   `ReflectionClass::newInstanceWithoutConstructor()` (uninitialized

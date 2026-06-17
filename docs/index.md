@@ -15,7 +15,7 @@ AST), zero external runtime dependencies.
   `toXml`, `toAst`, constructor, error model
 - **[options.md](options.md)** — `MdParser\Options` class: all 29 bool
   fields documented (core parser toggles, GFM extension toggles, two HTML
-  postprocess flags, parser-behavior toggles, and md4c dialect
+  output flags, parser-behavior toggles, and md4c dialect
   extensions), per-option examples of the output change
 - **[ast.md](ast.md)** — `toAst()` output format: node types, fields
   per type, sourcepos behavior, walking the tree
@@ -68,6 +68,6 @@ same way by `tests/002_option_effects.phpt` and the parity corpus under
 
 ## License
 
-Wrapper code is under the PHP License 3.01. The vendored md4c parser is
-under the MIT License. See `LICENSE` at the repo root and
+Wrapper code is under the BSD 3-Clause License. The vendored md4c parser
+is under the MIT License. See `LICENSE` at the repo root and
 `vendor/md4c/LICENSE.md`.

@@ -1,21 +1,16 @@
 --TEST--
-headingAnchors: byte-fingerprint collision when raw HTML matches a Markdown heading
+headingAnchors: in-stream anchors leave raw HTML headings plain, no collision
 --EXTENSIONS--
 mdparser
 --FILE--
 <?php
 
-/* The heading-anchor postprocess locates each Markdown heading by
- * searching the rendered HTML for the heading's standalone byte
- * rendering. Raw HTML inside the document (only possible under
- * unsafe:true with tagfilter:false) can produce identical bytes to a
- * later Markdown heading. The first match wins, so the raw HTML
- * absorbs the id and the real heading is left without one.
- *
- * This test pins that current behavior so a future fix is forced to
- * update the assertions deliberately. The non-colliding case
- * (different text) already works correctly and is covered by
- * tests/027_heading_anchors.phpt. */
+/* Heading ids are attached in-stream as md4c emits each heading node, so
+ * they apply only to Markdown headings. A raw HTML <h1> block (possible
+ * only under unsafe:true with tagfilter:false) is raw HTML, not a parsed
+ * heading, so it is emitted untouched and gets no id. A raw heading and a
+ * later Markdown heading with identical text therefore do not collide:
+ * the raw one stays plain, the Markdown one gets the id. */
 
 function check(string $label, bool $cond): void {
     echo ($cond ? "OK" : "FAIL"), ": $label\n";
@@ -28,24 +23,24 @@ $opts = new MdParser\Options(
 );
 $p = new MdParser\Parser($opts);
 
-// Raw HTML <h1> precedes a Markdown heading with identical visible
-// text. The fingerprint search hits the raw HTML first; the real
-// Markdown heading inherits no id.
+// Raw HTML <h1> precedes a Markdown heading with identical visible text.
 $h = $p->toHtml("<h1>same</h1>\n\n# same\n");
-check("raw <h1> absorbs the id (current behavior)",
+check("raw <h1> stays plain (no id)",
+    str_contains($h, "<h1>same</h1>\n"));
+check("Markdown heading gets the id",
     str_contains($h, '<h1 id="same">same</h1>'));
-check("real Markdown heading is left without an id",
-    substr_count($h, '<h1>same</h1>') === 1);
+check("exactly one id is emitted",
+    substr_count($h, 'id="same"') === 1);
 
-// Sanity: when the visible text differs, the raw heading is not
-// confused for the Markdown heading and slugging works as expected.
+// Sanity: distinct text behaves the same way.
 $h = $p->toHtml("<h1>raw</h1>\n\n# real\n");
 check("distinct text -- raw stays plain, real gets slug",
-    str_contains($h, '<h1>raw</h1>') &&
+    str_contains($h, "<h1>raw</h1>\n") &&
     str_contains($h, '<h1 id="real">real</h1>'));
 
 ?>
 --EXPECT--
-OK: raw <h1> absorbs the id (current behavior)
-OK: real Markdown heading is left without an id
+OK: raw <h1> stays plain (no id)
+OK: Markdown heading gets the id
+OK: exactly one id is emitted
 OK: distinct text -- raw stays plain, real gets slug

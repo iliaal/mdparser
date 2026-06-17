@@ -24,7 +24,7 @@ if (!extension_loaded('mdparser')) {
     exit(1);
 }
 
-$opts = getopt('', ['iters::', 'parsers::', 'format::', 'warmup::']);
+$opts = getopt('', ['iters::', 'parsers::', 'format::', 'warmup::', 'league']);
 $iters      = (int)($opts['iters']   ?? 50);
 $warmup     = (int)($opts['warmup']  ?? 5);
 $parserList = isset($opts['parsers']) ? explode(',', $opts['parsers']) : null;
@@ -56,7 +56,7 @@ $parsers = [
 // league/commonmark is opt-in via --parsers=... because it requires
 // the native mbstring extension (not just symfony/polyfill-mbstring).
 // On minimal PHP builds without mbstring it errors on large inputs.
-if (extension_loaded('mbstring') || ($opts['league'] ?? false)) {
+if (extension_loaded('mbstring') || array_key_exists('league', $opts)) {
     $parsers['league/commonmark'] = function (string $md): string {
         static $p = null;
         if ($p === null) {

@@ -161,16 +161,16 @@ mdparser does NOT:
   HTML sanitizer like HTML Purifier for attribute-level filtering.
 - Enforce a Content Security Policy. Set your own CSP headers at the
   HTTP layer.
-- Validate that links point at same-origin resources. mdparser can
-  inject `rel="nofollow noopener noreferrer"` on every rendered anchor
-  via `Options::nofollowLinks`. The injection runs on real `<a href="..."`
-  tag-starts only: it skips fragment-only `#anchor` links, raw-text /
-  escapable-raw-text element bodies (`script`, `style`, `title`,
-  `textarea`, `iframe`, `noscript`, `xmp`, `noembed`, `noframes`,
-  `plaintext`), HTML comments, CDATA sections, and anchor-shaped
-  substrings inside another tag's quoted attribute value (`<div
-  title='<a href="x">…'>`). Same-origin allow/deny policy and CSP
-  are still application concerns.
+- Validate that links point at same-origin resources. mdparser can add
+  `rel="nofollow noopener noreferrer"` via `Options::nofollowLinks`. The
+  renderer adds it in-stream to the links it generates from the Markdown
+  source (inline links, reference links, autolinks), skipping
+  fragment-only `#anchor` links (including footnote references and
+  backrefs). Raw `<a href="...">` written directly in the source under
+  `unsafe: true` is raw HTML, not a parsed link, so it is emitted
+  verbatim and is not rewritten — sanitize raw HTML yourself if you allow
+  it. Same-origin allow/deny policy and CSP are still application
+  concerns.
 - Sanitize `Parser::toAst()` or `Parser::toXml()` output. Both are
   structural views: raw HTML literals (`html_block` / `html_inline`) are
   preserved byte-for-byte, and link/image URLs and titles are
