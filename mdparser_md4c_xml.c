@@ -24,9 +24,10 @@
 #include "mdparser_md4c_util.h"
 #include "mdparser_md4c_xml.h"
 
-/* Streaming md4c -> CommonMark-XML emitter. Mirrors cmark's XML layout
- * (2-space indent, xml:space="preserve" on text/code/html) over the same
- * node names the AST builder uses. Source positions are not emitted. */
+/* Streaming md4c -> CommonMark-XML emitter. Mirrors the CommonMark
+ * reference XML layout (2-space indent, xml:space="preserve" on
+ * text/code/html) over the same node names the AST builder uses.
+ * Source positions are not emitted. */
 
 #define MDX_OK        0
 #define MDX_ERR_PARSE 1
@@ -293,6 +294,18 @@ static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_SUPERSCRIPT: mdx_open(c, "superscript"); break;
         case MD_SPAN_SUBSCRIPT: mdx_open(c, "subscript"); break;
         case MD_SPAN_MARK: mdx_open(c, "highlight"); break;
+        case MD_SPAN_SPOILER: mdx_open(c, "spoiler"); break;
+        case MD_SPAN_LATEXMATH: mdx_open(c, "latex_math"); break;
+        case MD_SPAN_LATEXMATH_DISPLAY: mdx_open(c, "latex_math_display"); break;
+        case MD_SPAN_WIKILINK: {
+            MD_SPAN_WIKILINK_DETAIL *d = detail;
+            mdx_indent(c);
+            X_LIT(c, "<wikilink");
+            mdx_attr(c, "destination", &d->target);
+            X_LIT(c, ">\n");
+            c->depth++;
+            break;
+        }
         case MD_SPAN_FOOTNOTE_REF: mdx_open(c, "footnote_reference"); break;
         default: mdx_open(c, "unknown"); break;
     }
@@ -320,6 +333,10 @@ static int mdx_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_SUPERSCRIPT: mdx_close(c, "superscript"); break;
         case MD_SPAN_SUBSCRIPT: mdx_close(c, "subscript"); break;
         case MD_SPAN_MARK: mdx_close(c, "highlight"); break;
+        case MD_SPAN_SPOILER: mdx_close(c, "spoiler"); break;
+        case MD_SPAN_LATEXMATH: mdx_close(c, "latex_math"); break;
+        case MD_SPAN_LATEXMATH_DISPLAY: mdx_close(c, "latex_math_display"); break;
+        case MD_SPAN_WIKILINK: mdx_close(c, "wikilink"); break;
         case MD_SPAN_FOOTNOTE_REF: mdx_close(c, "footnote_reference"); break;
         default: mdx_close(c, "unknown"); break;
     }

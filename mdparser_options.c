@@ -68,6 +68,9 @@ enum {
     MDOPT_HIGHLIGHT,
     MDOPT_SUPERSCRIPT,
     MDOPT_SUBSCRIPT,
+    MDOPT_SPOILERS,
+    MDOPT_LATEX_MATH,
+    MDOPT_WIKILINKS,
     MDOPT_COUNT_
 };
 
@@ -114,6 +117,9 @@ static const mdparser_options_field mdparser_options_fields[] = {
     F("highlight",                  MD_FLAG_HIGHLIGHT, 0, false),
     F("superscript",                MD_FLAG_SUPERSCRIPTS, 0, false),
     F("subscript",                  MD_FLAG_SUBSCRIPTS, 0, false),
+    F("spoilers",                   MD_FLAG_SPOILERS, 0, false),
+    F("latexMath",                  MD_FLAG_LATEXMATHSPANS, 0, false),
+    F("wikiLinks",                  MD_FLAG_WIKILINKS, 0, false),
 };
 
 #undef F
@@ -267,6 +273,9 @@ PHP_METHOD(MdParser_Options, __construct)
         Z_PARAM_BOOL(values[MDOPT_HIGHLIGHT])
         Z_PARAM_BOOL(values[MDOPT_SUPERSCRIPT])
         Z_PARAM_BOOL(values[MDOPT_SUBSCRIPT])
+        Z_PARAM_BOOL(values[MDOPT_SPOILERS])
+        Z_PARAM_BOOL(values[MDOPT_LATEX_MATH])
+        Z_PARAM_BOOL(values[MDOPT_WIKILINKS])
     ZEND_PARSE_PARAMETERS_END();
 
     mdparser_options_populate_object(Z_OBJ_P(ZEND_THIS), values);

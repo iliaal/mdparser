@@ -1,5 +1,5 @@
 /* This is a generated file, edit mdparser.stub.php instead.
- * Stub hash: d5753fa4e7672bf50dd056ace11e0ee5dde59859 */
+ * Stub hash: 675af44e3bb6a21d01b7024f08469d344ffc1233 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sourcepos, _IS_BOOL, 0, "false")
@@ -28,6 +28,9 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, highlight, _IS_BOOL, 0, "false")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, superscript, _IS_BOOL, 0, "false")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, subscript, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, spoilers, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, latexMath, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, wikiLinks, _IS_BOOL, 0, "false")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_MdParser_Options_strict, 0, 0, MdParser\\Options, 0)
@@ -264,6 +267,24 @@ static zend_class_entry *register_class_MdParser_Options(void)
 	zend_string *property_subscript_name = zend_string_init("subscript", sizeof("subscript") - 1, true);
 	zend_declare_typed_property(class_entry, property_subscript_name, &property_subscript_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
 	zend_string_release_ex(property_subscript_name, true);
+
+	zval property_spoilers_default_value;
+	ZVAL_UNDEF(&property_spoilers_default_value);
+	zend_string *property_spoilers_name = zend_string_init("spoilers", sizeof("spoilers") - 1, true);
+	zend_declare_typed_property(class_entry, property_spoilers_name, &property_spoilers_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_spoilers_name, true);
+
+	zval property_latexMath_default_value;
+	ZVAL_UNDEF(&property_latexMath_default_value);
+	zend_string *property_latexMath_name = zend_string_init("latexMath", sizeof("latexMath") - 1, true);
+	zend_declare_typed_property(class_entry, property_latexMath_name, &property_latexMath_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_latexMath_name, true);
+
+	zval property_wikiLinks_default_value;
+	ZVAL_UNDEF(&property_wikiLinks_default_value);
+	zend_string *property_wikiLinks_name = zend_string_init("wikiLinks", sizeof("wikiLinks") - 1, true);
+	zend_declare_typed_property(class_entry, property_wikiLinks_name, &property_wikiLinks_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_wikiLinks_name, true);
 
 	return class_entry;
 }

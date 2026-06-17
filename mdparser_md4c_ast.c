@@ -334,6 +334,15 @@ static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_SUPERSCRIPT: mda_new_node(&n, "superscript"); break;
         case MD_SPAN_SUBSCRIPT: mda_new_node(&n, "subscript"); break;
         case MD_SPAN_MARK: mda_new_node(&n, "highlight"); break;
+        case MD_SPAN_SPOILER: mda_new_node(&n, "spoiler"); break;
+        case MD_SPAN_LATEXMATH: mda_new_node(&n, "latex_math"); break;
+        case MD_SPAN_LATEXMATH_DISPLAY: mda_new_node(&n, "latex_math_display"); break;
+        case MD_SPAN_WIKILINK: {
+            MD_SPAN_WIKILINK_DETAIL *d = detail;
+            mda_new_node(&n, "wikilink");
+            add_assoc_stringl(&n, "url", d->target.text ? d->target.text : "", d->target.size);
+            break;
+        }
         case MD_SPAN_FOOTNOTE_REF: {
             MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
             mda_new_node(&n, "footnote_reference");
@@ -423,7 +432,7 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     };
 
     /* validateUtf8: invalid input bytes -> U+FFFD before parsing, so AST text
-     * literals match the HTML path (parity with cmark's CMARK_OPT_VALIDATE_UTF8). */
+     * literals match the HTML path. */
     bool owned = false;
     size_t use_len = len;
     const char *use_src = src;

@@ -2,7 +2,7 @@
 
 `final readonly class MdParser\Options`
 
-Holds 26 bool toggles that control parser and renderer behavior:
+Holds 29 bool toggles that control parser and renderer behavior:
 core parser options, GFM extension toggles, HTML postprocess flags,
 and md4c dialect extensions. All fields are readonly after
 construction, and the class is `final` so it can't be subclassed.
@@ -12,7 +12,7 @@ Use named arguments to set only the fields you care about.
 
 ```php
 new Options(
-    // Core cmark options
+    // Core parser options
     sourcepos: false,
     hardbreaks: false,
     nobreaks: false,
@@ -47,6 +47,9 @@ new Options(
     highlight: false,
     superscript: false,
     subscript: false,
+    spoilers: false,
+    latexMath: false,
+    wikiLinks: false,
 );
 ```
 
@@ -55,7 +58,7 @@ markdown: safe URL filtering, tag filter, UTF-8 validation, GFM
 extensions enabled, GitHub-style code block class attribute, no
 postprocess passes.
 
-## Core cmark options
+## Core parser options
 
 ### `sourcepos: bool = false`
 
@@ -161,7 +164,7 @@ tags that a strict parser would reject. Off by default.
 ### `footnotes: bool = false`
 
 Enables the `[^ref]` / `[^ref]: body` footnote syntax (not part of
-CommonMark core, inherited from cmark-gfm's footnote extension).
+CommonMark core, an md4c extension via `MD_FLAG_FOOTNOTES`).
 
 ```php
 $md = "A claim[^1] follows.\n\n[^1]: See source.\n";
@@ -227,8 +230,8 @@ the most dangerous tags from passing through.
 
 ## HTML postprocess flags
 
-These two flags trigger string-level transforms applied *after* cmark
-finishes rendering. They affect `toHtml()` (and `toInlineHtml()` where
+These two flags trigger string-level transforms applied *after* the HTML
+render finishes. They affect `toHtml()` (and `toInlineHtml()` where
 applicable). XML and AST output are unaffected. The static
 `Parser::html()` / `Parser::xml()` shortcuts use the module defaults
 and do not apply either transform.
@@ -268,7 +271,7 @@ links, reference links, and autolinks across `toHtml()` and
 `toInlineHtml()`. In-document fragment anchors (`href="#..."`,
 including footnote references and backrefs) are intentionally
 skipped. Anchors inside fenced or inline code are untouched because
-cmark escapes them before the postprocess runs. Raw `<script>` /
+the renderer escapes them before the postprocess runs. Raw `<script>` /
 `<style>` regions under `unsafe: true` are emitted verbatim so
 anchor-shaped substrings inside JavaScript or CSS are not corrupted.
 
@@ -306,10 +309,11 @@ code blocks.
 
 These are md4c extensions outside the CommonMark and GFM specs. They are
 opt-in and default off; mdparser's spec-conformance contract holds only
-with all four off. Each renders as a standard semantic HTML tag, so no
-custom elements or scripts are introduced. In `toXml()` / `toAst()` they
-surface as the node types `underline`, `highlight`, `superscript`, and
-`subscript`.
+with all of them off. Each renders as standard HTML (a semantic tag, or
+an element carrying a `class` hook), so no custom elements or scripts are
+introduced. In `toXml()` / `toAst()` they surface as the node types
+`underline`, `highlight`, `superscript`, `subscript`, `spoiler`,
+`latex_math`, `latex_math_display`, and `wikilink`.
 
 ### `underline: bool = false`
 
@@ -331,6 +335,28 @@ When `true`, `^text^` renders as `<sup>text</sup>`.
 When `true`, `~text~` renders as `<sub>text</sub>`. This coexists with
 GFM strikethrough: `~~text~~` still renders as `<del>`, while a single
 `~` pair is subscript.
+
+### `spoilers: bool = false`
+
+When `true`, `||text||` renders as `<span class="spoiler">text</span>`.
+Style or script the `.spoiler` class downstream to hide/reveal the
+content.
+
+### `latexMath: bool = false`
+
+When `true`, `$x$` renders as `<span class="math">x</span>` and `$$x$$`
+as `<span class="math display">x</span>`. The TeX source is emitted
+verbatim (HTML-escaped, never smart-punctuated) inside the span; wire up
+KaTeX or MathJax against the `.math` class to typeset it.
+
+### `wikiLinks: bool = false`
+
+When `true`, `[[target]]` renders as
+`<a class="wikilink" href="target">target</a>`, and `[[target|label]]`
+uses `label` as the link text. The target runs through the **same URL
+scheme filter as a normal link** (decode → check → emit), so a
+`[[javascript:...]]` target is neutralized to an empty `href` in safe
+mode. `nofollowLinks` applies to wiki links as it does to other links.
 
 ## Patterns
 

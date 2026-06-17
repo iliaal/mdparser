@@ -84,9 +84,10 @@ static zend_always_inline void out_append(mdm_ctx *r, const char *s, size_t n)
 #define OUT_LIT(r, lit) out_append((r), "" lit, sizeof(lit) - 1)
 
 /* Conditional newline: append '\n' only if the current buffer is non-empty
- * and does not already end in one. This is cmark's `cr()` -- emitting it
- * before every block-element open reproduces cmark's exact inter-block
- * whitespace (e.g. `<li>\n<pre>` when a block follows a bare `<li>`). */
+ * and does not already end in one. This is the CommonMark reference
+ * renderer's `cr()` -- emitting it before every block-element open
+ * reproduces its exact inter-block whitespace (e.g. `<li>\n<pre>` when a
+ * block follows a bare `<li>`). */
 static void mdm_cr(mdm_ctx *r)
 {
     zend_string *s = r->cur->s;
@@ -221,15 +222,15 @@ static void mdm_render_entity(mdm_ctx *r, const char *text, size_t size)
  * Safe-mode URL scheme filter
  *
  * md4c does no URL sanitization. In safe mode (default), neutralize
- * dangerous schemes the way cmark does: block javascript:, vbscript:,
+ * dangerous schemes the way the CommonMark reference renderer does: block javascript:, vbscript:,
  * file:, and data: (except data:image/{gif,png,jpeg,webp}, image src only).
  * An unsafe URL renders as an empty attribute value.
  *
  * SECURITY: the caller MUST pass the fully ENTITY-DECODED url bytes. md4c
  * hands attributes out entity-undecoded, so checking the raw bytes lets an
  * entity-encoded colon (`javascript&colon;`) hide the scheme from this scan
- * while the rendered (decoded) attribute is a live `javascript:` link
- * (SS-001). Always decode -> check -> emit. `image_context` is true only for
+ * while the rendered (decoded) attribute is a live `javascript:` link.
+ * Always decode -> check -> emit. `image_context` is true only for
  * <img src>; data: is rejected in <a href> (a navigable data: document).
  * =================================================================== */
 
@@ -564,7 +565,7 @@ static void mdm_decode_entity_raw(smart_str *out, const char *text, MD_SIZE size
 }
 
 /* Fully entity-decode an attribute to raw bytes (no escaping). Used to
- * canonicalize a URL before the scheme filter sees it (SS-001). */
+ * canonicalize a URL before the scheme filter sees it. */
 static void mdm_attr_decode_raw(smart_str *out, const MD_ATTRIBUTE *attr)
 {
     for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
@@ -612,7 +613,7 @@ static void mdm_render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr, mdm_attr_
             case MD_TEXT_NULLCHAR: mdm_append_codepoint(r, 0x0000); break;
             case MD_TEXT_ENTITY:
                 if (mode == MDM_ATTR_URL) {
-                    /* Decode, then percent-escape the bytes (matches cmark). */
+                    /* Decode, then percent-escape the bytes (matches the CommonMark reference renderer). */
                     smart_str tmp = {0};
                     mdm_decode_entity_raw(&tmp, text, sz);
                     smart_str_0(&tmp);
@@ -684,6 +685,27 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
     OUT_LIT(r, "\">");
 }
 
+/* Wiki-link target is URL-like, so route it through the same decode ->
+ * scheme-filter -> percent-escape path as a normal <a href>. Without this,
+ * [[javascript:alert(1)]] would emit a live javascript: link. nofollow and
+ * the fragment exception follow the same rule as mdm_render_a_open. */
+static void mdm_render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
+{
+    smart_str href = {0};
+    mdm_attr_decode_raw(&href, &d->target);
+    const char *hp = href.s ? ZSTR_VAL(href.s) : "";
+    size_t hn = href.s ? ZSTR_LEN(href.s) : 0;
+    bool fragment = hn > 0 && hp[0] == '#';
+
+    OUT_LIT(r, "<a");
+    if ((r->render_opts & MDPARSER_RF_NOFOLLOW) && !fragment)
+        OUT_LIT(r, " rel=\"nofollow noopener noreferrer\"");
+    OUT_LIT(r, " class=\"wikilink\" href=\"");
+    mdm_emit_decoded_url(r, hp, hn, false);
+    smart_str_free(&href);
+    OUT_LIT(r, "\">");
+}
+
 static void mdm_render_img_open(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
 {
     OUT_LIT(r, "<img src=\"");
@@ -704,8 +726,9 @@ static void mdm_render_img_close(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
 static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
-    /* cmark emits a conditional newline before every block open; doing the
-     * same reproduces its inter-block whitespace (notably `<li>\n<block>`). */
+    /* The CommonMark reference renderer emits a conditional newline before
+     * every block open; doing the same reproduces its inter-block whitespace
+     * (notably `<li>\n<block>`). */
     mdm_cr(r);
     switch (type) {
         case MD_BLOCK_DOC: break;
@@ -846,6 +869,10 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_SUPERSCRIPT: OUT_LIT(r, "<sup>"); break;
         case MD_SPAN_SUBSCRIPT: OUT_LIT(r, "<sub>"); break;
         case MD_SPAN_MARK: OUT_LIT(r, "<mark>"); break;
+        case MD_SPAN_SPOILER: OUT_LIT(r, "<span class=\"spoiler\">"); break;
+        case MD_SPAN_LATEXMATH: OUT_LIT(r, "<span class=\"math\">"); break;
+        case MD_SPAN_LATEXMATH_DISPLAY: OUT_LIT(r, "<span class=\"math display\">"); break;
+        case MD_SPAN_WIKILINK: mdm_render_wikilink_open(r, (MD_SPAN_WIKILINK_DETAIL *)detail); break;
         case MD_SPAN_FOOTNOTE_REF: {
             const MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
             char buf[128];
@@ -855,7 +882,7 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             out_append(r, buf, (size_t)w);
             break;
         }
-        default: break;  /* spoiler/latex/wikilink: not in our option set */
+        default: break;  /* admonitions: block-level, not in our option set */
     }
     return 0;
 }
@@ -876,6 +903,10 @@ static int mdm_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_SUPERSCRIPT: OUT_LIT(r, "</sup>"); break;
         case MD_SPAN_SUBSCRIPT: OUT_LIT(r, "</sub>"); break;
         case MD_SPAN_MARK: OUT_LIT(r, "</mark>"); break;
+        case MD_SPAN_SPOILER:
+        case MD_SPAN_LATEXMATH:
+        case MD_SPAN_LATEXMATH_DISPLAY: OUT_LIT(r, "</span>"); break;
+        case MD_SPAN_WIKILINK: OUT_LIT(r, "</a>"); break;
         default: break;
     }
     return 0;
@@ -907,6 +938,8 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             r->prev_char = 0;
             break;
         case MD_TEXT_CODE:
+        case MD_TEXT_LATEXMATH:
+            /* Verbatim TeX / code: HTML-escape, never SmartyPants. */
             mdm_escape_html(r, text, size);
             r->prev_char = size ? (unsigned char)text[size - 1] : r->prev_char;
             break;
@@ -937,7 +970,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
 
     for (int i = 0; i < 256; i++) {
         unsigned char ch = (unsigned char)i;
-        /* Match cmark: escape " & < > but NOT ' in text/attributes. Every
+        /* Match the CommonMark reference renderer: escape " & < > but NOT ' in text/attributes. Every
          * emitted attribute is double-quoted, so a literal ' is safe, and
          * leaving it unescaped matches the CommonMark reference output. */
         if (strchr("\"&<>", ch) != NULL) r.escape_map[i] |= NEED_HTML_ESC_FLAG;
