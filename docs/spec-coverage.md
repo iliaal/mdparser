@@ -22,12 +22,13 @@ clean 652. The test pins the pass/fail counts in its `--EXPECT--` block,
 so any movement (a regression, or a surprise improvement from an md4c
 update) shows up in a diff.
 
-The spec test runs with `githubPreLang: false` because the spec examples
-use the `<pre><code class="language-X">` form, while mdparser's default
-is `<pre lang="X"><code>` (matching GitHub's rendering). Both forms are
-valid; the difference is presentation, not compliance. The spec test
-measures spec compliance, not GitHub parity. It also enables `unsafe`
-and disables the GFM extensions so the input matches plain CommonMark.
+The spec examples use the `<pre><code class="language-X">` form for
+fenced code, which is exactly what mdparser emits — md4c renders only
+that form. (`githubPreLang` is accepted for API compatibility but inert;
+md4c exposes no `<pre lang="X">` variant, so the spec test's
+`githubPreLang: false` has no effect on output.) The spec test also
+enables `unsafe` and disables the GFM extensions so the input matches
+plain CommonMark.
 
 ## GFM extensions
 
@@ -83,15 +84,17 @@ mdparser exposes each as an opt-in `Options` flag, all defaulting to
 These are neither CommonMark nor GFM. Turn them on only when your input
 expects them. See `docs/options.md` for behavior and edge cases.
 
-## HTML postprocess passes
+## HTML output flags (heading anchors, nofollow)
 
-mdparser ships two HTML postprocess passes that the parser itself does
-not produce. They rewrite the rendered HTML:
+mdparser can add two things the parser itself does not emit. The HTML
+renderer applies them in-stream as md4c fires its events, to
+Markdown-derived nodes only; raw HTML you pass through under `unsafe`
+is untouched:
 
 | Feature | Option | Behavior |
 |---|---|---|
-| Heading permalinks / anchors | `headingAnchors: true` | Every `<hN>` gains a GitHub-style slug `id`; collisions deduped with `-1`, `-2`, ... |
-| External link postprocessing | `nofollowLinks: true` | Every `<a href="...">` gets `rel="nofollow noopener noreferrer"`; in-document fragment anchors are skipped |
+| Heading permalinks / anchors | `headingAnchors: true` | Every Markdown heading gains a GitHub-style slug `id`; collisions deduped with `-1`, `-2`, ...; raw HTML headings are left as-is |
+| External link nofollow | `nofollowLinks: true` | Every Markdown link (inline, reference, autolink) gets `rel="nofollow noopener noreferrer"`; fragment anchors and raw HTML `<a>` are skipped |
 
 Both default to `false`. See `docs/options.md` for behavior, edge cases,
 and the documented `unsafe: true` byte-collision limitation on heading

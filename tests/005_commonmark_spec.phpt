@@ -64,7 +64,7 @@ $parser = new MdParser\Parser(new MdParser\Options(
     autolink: false,
     tagfilter: false,
     unsafe: true,          // spec examples exercise raw HTML
-    githubPreLang: false,  // spec wants <pre><code class="language-X"> form
+    githubPreLang: false,  // inert under md4c; md4c emits only the spec form
 ));
 
 $total = count($examples);
