@@ -179,8 +179,11 @@ All render methods can throw `MdParser\Exception` (final, extends
   (256 MB) throw before md4c ever sees them. `toAst()` builds the node
   array on a fixed-depth stack and throws if nesting exceeds
   `MDPARSER_MAX_AST_DEPTH` (1000) — adversarial inputs like `> ` × 50000
-  hit this. `toHtml()` and `toXml()` stream md4c's callbacks straight to
-  output and are unaffected by AST depth.
+  hit this. `toXml()` applies the same depth cap: its 2-spaces-per-level
+  indentation makes a tiny deeply-nested input produce quadratic output,
+  so it throws past `MDPARSER_MAX_AST_DEPTH` rather than amplify. `toHtml()`
+  streams md4c's callbacks straight to output (no indentation, output
+  linear in input) and is not depth-capped.
 - **md4c / render null path.** The rare case where `md_parse()` reports
   failure, or the renderer or postprocess pass returns `NULL`, raises an
   exception with the source length included for triage.

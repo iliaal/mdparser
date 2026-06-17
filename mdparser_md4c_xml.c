@@ -21,6 +21,7 @@
 
 #include "md4c.h"
 #include "entity.h"
+#include "php_mdparser.h"
 #include "mdparser_md4c_util.h"
 #include "mdparser_md4c_xml.h"
 
@@ -31,10 +32,15 @@
 
 #define MDX_OK        0
 #define MDX_ERR_PARSE 1
+#define MDX_ERR_DEPTH 2
 
 const char *mdparser_md4c_xml_status_message(int status)
 {
-    return status == MDX_ERR_PARSE ? "mdparser: md4c parser failed" : NULL;
+    switch (status) {
+        case MDX_ERR_PARSE: return "mdparser: md4c parser failed";
+        case MDX_ERR_DEPTH: return "mdparser: XML nesting exceeds maximum depth";
+        default: return NULL;
+    }
 }
 
 typedef struct {
@@ -43,6 +49,7 @@ typedef struct {
     int in_thead;
     bool collecting;   /* code/code_block/html literal */
     smart_str lit;
+    int error;
 } mdx_ctx;
 
 static void mdx_indent(mdx_ctx *c)
@@ -171,6 +178,10 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
     char buf[64];
+    /* Cap nesting: indentation is 2*depth spaces per line, so unbounded depth
+     * makes a tiny input produce quadratic XML (a DoS amplifier). Aborting
+     * here mirrors the toAst depth cap and fails with a clean exception. */
+    if (c->depth >= MDPARSER_MAX_AST_DEPTH) { c->error = MDX_ERR_DEPTH; return 1; }
     switch (type) {
         case MD_BLOCK_DOC: break;
         case MD_BLOCK_QUOTE: mdx_open(c, "block_quote"); break;
@@ -306,6 +317,7 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
+    if (c->depth >= MDPARSER_MAX_AST_DEPTH) { c->error = MDX_ERR_DEPTH; return 1; }
     switch (type) {
         case MD_SPAN_EM: mdx_open(c, "emph"); break;
         case MD_SPAN_STRONG: mdx_open(c, "strong"); break;
@@ -471,7 +483,7 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
 
     if (rc != 0) {
         smart_str_free(&c.out);
-        *status = MDX_ERR_PARSE;
+        *status = c.error ? c.error : MDX_ERR_PARSE;
         return NULL;
     }
 

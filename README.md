@@ -6,9 +6,9 @@
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-green.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Follow @iliaa](https://img.shields.io/badge/Follow-@iliaa-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/follow?screen_name=iliaa)
 
-![mdparser: 15-30× faster than pure-PHP](images/mdparser-hero.jpg)
+![mdparser: ~5-9× faster than pure-PHP](images/mdparser-hero.jpg)
 
-Native C CommonMark + GitHub Flavored Markdown parser for PHP. 15-30× faster than pure-PHP alternatives (Parsedown, cebe, michelf) with full CommonMark 0.31 compliance: 652/652 spec examples pass. GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.2 minimum, OO API with `final` classes and `readonly` options.
+Native C CommonMark + GitHub Flavored Markdown parser for PHP. ~5-9× faster than pure-PHP alternatives (Parsedown, cebe, michelf) on a clean optimized build, targeting CommonMark 0.31 (649/652 spec examples pass; see `docs/spec-coverage.md`). GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.2 minimum, OO API with `final` classes and `readonly` options.
 
 ## 📦 Install
 
@@ -80,16 +80,15 @@ $ast  = $parser->toAst($markdown);   // nested arrays, see below
 
 ## 📊 Performance
 
-Against the major pure-PHP Markdown libraries, on PHP 8.4 with each parser in its default configuration:
+Against the major pure-PHP Markdown libraries, on PHP 8.4 (clean optimized build, each parser in its default configuration):
 
-| Parser | Small (200 B) | Medium (1.8 KB) | Large (200 KB) |
+| Corpus | mdparser ops/sec | Best pure-PHP ops/sec | Speedup |
 |---|--:|--:|--:|
-| **mdparser** | **30447 ops/s** | **5697 ops/s** | **105 ops/s** |
-| Parsedown | 1651 ops/s (18x slower) | 325 ops/s (17x) | 6 ops/s (17x) |
-| cebe/markdown (GFM) | 1350 ops/s (22x) | 374 ops/s (15x) | 6 ops/s (16x) |
-| michelf (Markdown Extra) | 1006 ops/s (30x) | 209 ops/s (27x) | 5 ops/s (19x) |
+| 200 B  | ~225,000 | ~26,000 (Parsedown)  | ~9× |
+| 1.8 KB | ~41,000  | ~5,900 (cebe/GitHub) | ~7× |
+| 200 KB | ~497     | ~99 (cebe/GitHub)    | ~5× |
 
-15-30× faster across the board, from small messages to full 200 KB spec documents. See [`bench/README.md`](bench/README.md) for methodology, corpora, caveats, league/commonmark notes, and how to reproduce these numbers yourself.
+~5-9× faster across the corpora (up to ~18× vs the slowest), from small messages to full 200 KB spec documents. [`bench/README.md`](bench/README.md) is the source of truth: methodology, all parsers, caveats, league/commonmark notes, and how to reproduce. (Always benchmark a clean optimized PHP build — a debug/ASan build inflates these numbers.)
 
 ## ✨ Feature matrix
 

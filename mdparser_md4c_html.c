@@ -917,9 +917,15 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
 
-    /* While buffering a heading, also accumulate plain text for the slug. */
-    if (r->in_heading && (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE))
-        smart_str_appendl(&r->heading_text, text, size);
+    /* While buffering a heading, also accumulate plain text for the slug.
+     * Entities are decoded to their raw bytes so `# &copy;` slugs the same
+     * as a literal `# ©` (otherwise the heading would get no id at all). */
+    if (r->in_heading) {
+        if (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE)
+            smart_str_appendl(&r->heading_text, text, size);
+        else if (type == MD_TEXT_ENTITY)
+            mdm_decode_entity_raw(&r->heading_text, text, size);
+    }
 
     switch (type) {
         case MD_TEXT_NULLCHAR: mdm_append_codepoint(r, 0x0000); break;

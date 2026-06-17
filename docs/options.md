@@ -231,8 +231,10 @@ When `true`, every rendered `<hN>` gets an `id` attribute holding a
 GitHub-style slug derived from the heading's text. Slugs lowercase
 ASCII, replace whitespace runs with a single `-`, drop other ASCII
 punctuation, preserve UTF-8 multibyte bytes, and dedupe collisions
-with `-1`, `-2`, ... Headings whose text slugifies to nothing (pure
-punctuation) emit `<hN>` with no id rather than `id=""`.
+with `-1`, `-2`, ... (up to 100,000 collisions for a single base slug;
+beyond that the heading falls back to no id). Headings whose text
+slugifies to nothing (pure punctuation), and entity-only headings that
+decode to nothing, emit `<hN>` with no id rather than `id=""`.
 
 ```php
 echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Hello World\n");
