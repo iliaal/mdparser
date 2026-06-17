@@ -137,6 +137,17 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     size_t o = 0;
     i = 0;
     while (i < len) {
+        /* Bulk-copy ASCII runs (same fast path as the clean scan). */
+        size_t beg = i;
+        while (i + 8 <= len) {
+            uint64_t w;
+            memcpy(&w, p + i, 8);
+            if (w & 0x8080808080808080ULL) break;
+            i += 8;
+        }
+        while (i < len && p[i] < 0x80) i++;
+        if (i > beg) { memcpy(dst + o, p + beg, i - beg); o += i - beg; }
+        if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
         if (n == 0) {
             dst[o++] = (char)0xEF; dst[o++] = (char)0xBF; dst[o++] = (char)0xBD;

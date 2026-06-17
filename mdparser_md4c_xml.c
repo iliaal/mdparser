@@ -459,6 +459,12 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     if (validate_utf8)
         use_src = mdparser_md4c_validate_utf8(src, len, &use_len, &owned);
 
+    /* CommonMark XML is markup-heavy (indentation + open/close tags), so the
+     * output runs well over the input; reserve ~2x up front to skip the early
+     * smart_str doublings. */
+    if (use_len)
+        smart_str_alloc(&c.out, use_len * 2, 0);
+
     int rc = md_parse(use_src, (MD_SIZE)use_len, &parser, &c);
     smart_str_free(&c.lit);
     if (owned) efree((void *)use_src);

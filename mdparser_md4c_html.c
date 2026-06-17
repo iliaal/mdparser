@@ -55,7 +55,6 @@ typedef struct {
     smart_str main;         /* document buffer */
     int render_opts;        /* MDPARSER_RF_* */
     int image_nesting_level;
-    char escape_map[256];
 
     /* heading-anchor streaming state */
     bool in_heading;
@@ -122,7 +121,7 @@ static int mdm_ascii_ncasecmp(const char *a, const char *b, size_t n);
 static void mdm_escape_html(mdm_ctx *r, const char *data, size_t size)
 {
     size_t beg = 0, off = 0;
-    #define NEED_HTML_ESC(ch) (r->escape_map[(unsigned char)(ch)] & NEED_HTML_ESC_FLAG)
+    #define NEED_HTML_ESC(ch) (mdm_escape_map_template[(unsigned char)(ch)] & NEED_HTML_ESC_FLAG)
     while (1) {
         while (off + 3 < size && !NEED_HTML_ESC(data[off]) && !NEED_HTML_ESC(data[off+1])
                && !NEED_HTML_ESC(data[off+2]) && !NEED_HTML_ESC(data[off+3]))
@@ -148,7 +147,7 @@ static void mdm_escape_url(mdm_ctx *r, const char *data, size_t size)
 {
     static const char hex_chars[] = "0123456789ABCDEF";
     size_t beg = 0, off = 0;
-    #define NEED_URL_ESC(ch) (r->escape_map[(unsigned char)(ch)] & NEED_URL_ESC_FLAG)
+    #define NEED_URL_ESC(ch) (mdm_escape_map_template[(unsigned char)(ch)] & NEED_URL_ESC_FLAG)
     while (1) {
         while (off < size && !NEED_URL_ESC(data[off])) off++;
         if (off > beg) out_append(r, data + beg, off - beg);
@@ -973,11 +972,6 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     r.render_opts = render_opts;
     r.cur = &r.main;
     r.prev_char = 0;
-
-    /* Map is precomputed once at MINIT; copy it in (escape " & < > but not ',
-     * since attributes are double-quoted -- matches the CommonMark reference
-     * renderer). */
-    memcpy(r.escape_map, mdm_escape_map_template, sizeof(r.escape_map));
 
     if (render_opts & MDPARSER_RF_HEADING_ANCHORS)
         mdm_slugs_init(&r.slugs);
