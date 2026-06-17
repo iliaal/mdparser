@@ -1,0 +1,14 @@
+# /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
+# detected from php_mdparser.h (MDPARSER_MD4C_VERSION)
+
+pinned: 0.5.3
+vendored_at: vendor/md4c
+resolver: github
+repo: mity/md4c
+tag_regex: "release-(.+)"
+note: |
+  md4c (mity/md4c), vendored at release-0.5.3 plus master commit 755ce49
+  (MDPARSER_MD4C_VERSION = 0.5.3+git755ce49). Carries one local patch: a
+  code-span trailing-whitespace fix in md_process_inlines (see
+  vendor/VENDOR.md), submitted upstream as mity/md4c#378. Remove the
+  patch on the next refresh that includes the upstream fix.

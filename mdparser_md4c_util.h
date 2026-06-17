@@ -44,7 +44,7 @@ void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr);
  * attributes (link/image URLs especially) are a single plain substring (no
  * entity, no NUL) spanning the whole value, so the decoded bytes equal
  * attr->text and the scratch-buffer copy can be skipped. Returns true and
- * points *p/*n at the verbatim bytes on the fast path (including the
+ * points *p and *n at the verbatim bytes on the fast path (including the
  * empty-attribute case); returns false when the caller must decode. */
 bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *n);
 
