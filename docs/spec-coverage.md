@@ -2,8 +2,10 @@
 
 mdparser targets **CommonMark 0.31**. The backend is
 [md4c](https://github.com/mity/md4c), which implements CommonMark 0.31
-natively, so there is no version gap to bridge and no patches layered on
-top of the parser.
+natively, so there is no version gap to bridge. mdparser carries a single
+local patch to md4c's code-span whitespace handling (documented in
+`vendor/VENDOR.md`); it is submitted upstream and drops out on the next
+vendor refresh that includes the fix.
 
 The conformance test lives at `tests/005_commonmark_spec.phpt` and reads
 every example from `tests/fixtures/commonmark-spec.txt` (the 0.31
@@ -12,12 +14,13 @@ conformance, so any change that moves the baseline shows up in a diff.
 
 ## Current baseline
 
-The suite parses all 652 spec examples and pins the result at 649 pass,
-3 fail. The three failures are enumerated by example number and source
-line directly in the test's `--EXPECT--` block. They are md4c's known
-deviations from the reference rendering, not mdparser bugs; the test
-treats them as a fixed baseline so a surprise improvement is as visible
-as a regression.
+The suite parses all 652 spec examples and pins the result at 652 pass,
+0 fail. Stock md4c fails three code-span examples (335, 337, 640) where
+an interior line ends in whitespace; the local patch in
+`vendor/md4c/md4c.c` fixes that one case, bringing the baseline to a
+clean 652. The test pins the pass/fail counts in its `--EXPECT--` block,
+so any movement (a regression, or a surprise improvement from an md4c
+update) shows up in a diff.
 
 The spec test runs with `githubPreLang: false` because the spec examples
 use the `<pre><code class="language-X">` form, while mdparser's default

@@ -68,7 +68,7 @@ The three sizes are chosen to cover typical use cases:
 
 | Package | Version | Mode | Notes |
 |---|---|---|---|
-| mdparser | 0.1.0-dev | `new Parser()` | Defaults: GFM extensions on, safe mode on |
+| mdparser | 0.3.0 | `new Parser()` | Defaults: GFM extensions on, safe mode on |
 | erusev/parsedown | 1.8.0 | `new Parsedown()` | Simplest and historically fastest pure-PHP; GFM tables + strikethrough |
 | cebe/markdown | 1.2.1 | `new GithubMarkdown()` | GFM dialect |
 | michelf/php-markdown | 2.0.0 | `new MarkdownExtra()` | Gruber 1.0.3 + Extra (definition lists, footnotes, abbreviations) |

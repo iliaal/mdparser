@@ -44,9 +44,23 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-None. md4c is vendored as a clean upstream copy — no patches, no
-cherry-picks, no hand-edited build shims. md4c.c is self-contained C
-(no CMake, no re2c, no generated headers to maintain).
+One patch, in `md4c/md4c.c` (`md_process_inlines`, code-span line-break
+handling). Stock md4c renders an interior code-span line that ends in
+whitespace one space short, because it emits the line-break space only
+`if(off == line->end)` and the trailing-whitespace loop just above has
+already advanced `off` past `line->end`. This fails CommonMark 0.31
+examples 335, 337, and 640. The patch emits the space whenever `off`
+rests on an interior newline still preceding the closer
+(`off < mark->beg && ISNEWLINE(off)`), which fixes those three without
+regressing the boundary cases (121, 336). The change site is marked
+with an `mdparser local patch` comment.
+
+Submitted upstream to mity/md4c. **Remove this patch on the next vendor
+refresh that includes the upstream fix** — when copying in a new md4c
+release (see Refresh below), diff `md_process_inlines` against this note
+and drop the local change if upstream now carries it. No other files are
+modified; md4c.c is otherwise self-contained C (no CMake, no re2c, no
+generated headers to maintain).
 
 ## Refresh
 
@@ -57,7 +71,11 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    `vendor/md4c/`.
 2. Update `MDPARSER_MD4C_VERSION` in `php_mdparser.h`.
 3. Rebuild and run `make test`.
-4. If `tests/005_commonmark_spec.phpt` moves, explain the delta in the
+4. Re-apply or drop the local code-span patch (see Local modifications).
+   If the new release already carries the upstream fix, the copy in
+   step 1 removes the patch for free; confirm 005 still reads 652/652.
+   Otherwise re-apply it to the new `md_process_inlines`.
+5. If `tests/005_commonmark_spec.phpt` moves, explain the delta in the
    commit message (a new md4c release may change conformance in either
    direction). Re-baseline the pinned list only after confirming the
    change is an intentional upstream behavior shift.
