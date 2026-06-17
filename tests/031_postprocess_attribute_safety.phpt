@@ -49,12 +49,18 @@ $out = $p->toHtml("<!-- <h1>injected</h1> -->\n\n# injected\n");
 check('comment-internal heading not slugged', strpos($out, '<!-- <h1>injected</h1> -->') !== false);
 check('real markdown heading slugged',        strpos($out, '<h1 id="injected">injected</h1>') !== false);
 
-// AD-301: combined heading + nofollow on same-text headings. Body-identical
-// raw/Markdown collision still routes the slug to the raw heading (the
-// documented CR-003 limitation), but BOTH anchors must get rel injection.
+// AD-301: under the md4c in-stream renderer, raw-HTML anchors pass through
+// verbatim and are NOT rel-rewritten (nofollow applies only to Markdown
+// links, never to author-supplied raw HTML). Both <a> here are raw HTML,
+// so neither gets rel. Each Markdown heading is slugged from its own text
+// in-stream, so the earlier raw/Markdown slug-collision (CR-003) no longer
+// applies: the Markdown heading gets its id; the raw <h1> stays untouched.
 $out = $p->toHtml("<h1>look <a href=\"evil.com\">x</a></h1>\n\n# look <a href=\"evil.com\">x</a>\n");
-check('both anchors get rel',
-    substr_count($out, 'rel="nofollow noopener noreferrer" href="evil.com"') === 2);
+check('raw-HTML anchors are not rel-rewritten',
+    !str_contains($out, 'rel="nofollow'));
+check('markdown heading slugged, raw heading untouched',
+    str_contains($out, '<h1 id="look-x">') &&
+    str_contains($out, '<h1>look <a href="evil.com">x</a></h1>'));
 
 // CDATA section -- treated as opaque skip region under unsafe.
 $out = $p->toHtml("<![CDATA[ <a href=\"x\">y</a> ]]>\n\nReal [link](https://example.com)\n");
@@ -101,7 +107,8 @@ PASS attr value untouched
 PASS real link still rewritten (attr)
 PASS comment-internal heading not slugged
 PASS real markdown heading slugged
-PASS both anchors get rel
+PASS raw-HTML anchors are not rel-rewritten
+PASS markdown heading slugged, raw heading untouched
 PASS CDATA body untouched
 PASS whitespace before close `>` recognized
 PASS rel injected after whitespace close

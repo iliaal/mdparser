@@ -23,8 +23,11 @@ $p = new MdParser\Parser(new MdParser\Options(unsafe: true, nofollowLinks: true)
 $h = $p->toHtml("<a href=\"x<!--y\">l</a>\n\n[z](http://example.com/)\n");
 check("comment opener in href: later link keeps rel",
     str_contains($h, '<a rel="nofollow noopener noreferrer" href="http://example.com/">z</a>'));
-check("comment opener in href: decoy anchor itself got rel",
-    str_contains($h, '<a rel="nofollow noopener noreferrer" href="x<!--y">l</a>'));
+// The in-stream renderer never rewrites raw-HTML anchors (nofollow applies
+// only to Markdown links), so the raw decoy passes through verbatim with no
+// rel -- and there is no HTML rescan that an embedded opener could derail.
+check("comment opener in href: decoy anchor passes verbatim, no rel",
+    str_contains($h, '<a href="x<!--y">l</a>'));
 
 // Control: same document without the embedded opener.
 $h = $p->toHtml("<a href=\"xy\">l</a>\n\n[z](http://example.com/)\n");
@@ -53,7 +56,7 @@ check("real comment after decoy: later link keeps rel",
 ?>
 --EXPECT--
 OK: comment opener in href: later link keeps rel
-OK: comment opener in href: decoy anchor itself got rel
+OK: comment opener in href: decoy anchor passes verbatim, no rel
 OK: control: later link keeps rel
 OK: script opener in href: later link keeps rel
 OK: comment opener in href: later heading keeps id

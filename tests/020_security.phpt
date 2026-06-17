@@ -63,6 +63,53 @@ assertHtml(
     $safe->toHtml("[![x](https://example.com/x.png)](javascript:alert(1))")
 );
 
+// === SS-001: entity-encoded colon must not smuggle a scheme past the
+// filter (the filter runs on decoded bytes: decode -> check -> emit) ===
+
+assertHtml(
+    "safe: entity-colon javascript (&colon;)",
+    '<p><a href="">x</a></p>',
+    $safe->toHtml("[x](javascript&colon;alert(1))")
+);
+
+assertHtml(
+    "safe: numeric entity-colon javascript (&#58;)",
+    '<p><a href="">x</a></p>',
+    $safe->toHtml("[x](javascript&#58;alert(1))")
+);
+
+assertHtml(
+    "safe: hex entity-colon javascript (&#x3a;)",
+    '<p><a href="">x</a></p>',
+    $safe->toHtml("[x](javascript&#x3a;alert(1))")
+);
+
+assertHtml(
+    "safe: entity-colon javascript in image src",
+    '<p><img src="" alt="x" /></p>',
+    $safe->toHtml("![x](javascript&colon;alert(1))")
+);
+
+// === SS-002: data: allowlist is image-context only, exact MIME + terminator ===
+
+assertHtml(
+    "safe: data: rejected in link href",
+    '<p><a href="">c</a></p>',
+    $safe->toHtml("[c](data:image/png,x)")
+);
+
+assertHtml(
+    "safe: data:image/png+xml prefix not accepted",
+    '<p><img src="" alt="x" /></p>',
+    $safe->toHtml("![x](data:image/png+xml;base64,AAAA)")
+);
+
+assertHtml(
+    "safe: data:image/svg+xml rejected",
+    '<p><img src="" alt="x" /></p>',
+    $safe->toHtml("![x](data:image/svg+xml;base64,AAAA)")
+);
+
 // === default (safe) mode: legit URL schemes pass through ===
 
 assertHtml(
@@ -83,23 +130,23 @@ assertHtml(
     $safe->toHtml("![x](data:image/png;base64,iVBORw0KGgo=)")
 );
 
-// === default (safe) mode: raw HTML gets stripped to comments ===
+// === default (safe) mode: raw HTML is HTML-escaped, not executable ===
 
 assertHtml(
-    "safe: raw script block stripped",
-    "<p>before</p>\n<!-- raw HTML omitted -->\n<p>after</p>",
+    "safe: raw script block escaped",
+    "<p>before</p>\n&lt;script&gt;alert(1)&lt;/script&gt;\n<p>after</p>",
     $safe->toHtml("before\n\n<script>alert(1)</script>\n\nafter")
 );
 
 assertHtml(
-    "safe: inline script tags stripped, text content remains",
-    '<p>before <!-- raw HTML omitted -->alert(1)<!-- raw HTML omitted --> after</p>',
+    "safe: inline script tags escaped, text content remains",
+    '<p>before &lt;script&gt;alert(1)&lt;/script&gt; after</p>',
     $safe->toHtml("before <script>alert(1)</script> after")
 );
 
 assertHtml(
-    "safe: iframe block stripped",
-    '<!-- raw HTML omitted -->',
+    "safe: iframe escaped",
+    '&lt;iframe src=javascript:alert(1)&gt;&lt;/iframe&gt;',
     $safe->toHtml("<iframe src=javascript:alert(1)></iframe>")
 );
 
@@ -136,12 +183,19 @@ OK: safe: data:text/html URL in link
 OK: safe: vbscript URL in link
 OK: safe: javascript URL in image
 OK: safe: image nested inside link with bad URL
+OK: safe: entity-colon javascript (&colon;)
+OK: safe: numeric entity-colon javascript (&#58;)
+OK: safe: hex entity-colon javascript (&#x3a;)
+OK: safe: entity-colon javascript in image src
+OK: safe: data: rejected in link href
+OK: safe: data:image/png+xml prefix not accepted
+OK: safe: data:image/svg+xml rejected
 OK: safe: mailto URL passes
 OK: safe: https URL passes
 OK: safe: data:image/png base64 image passes
-OK: safe: raw script block stripped
-OK: safe: inline script tags stripped, text content remains
-OK: safe: iframe block stripped
+OK: safe: raw script block escaped
+OK: safe: inline script tags escaped, text content remains
+OK: safe: iframe escaped
 OK: unsafe: javascript URL in link passes
 OK: unsafe+tagfilter: script tag escaped
 OK: unsafe+no_tagfilter: raw script passes verbatim

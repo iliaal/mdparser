@@ -13,71 +13,26 @@ if test "$PHP_MDPARSER" != "no"; then
     AC_MSG_ERROR([mdparser requires PHP 8.2.0 or later (found $PHP_VERSION_ID)])
   fi
 
-  CMARK_SRC_DIR=vendor/cmark/src
-  CMARK_EXT_DIR=vendor/cmark/extensions
+  dnl md4c (https://github.com/mity/md4c, MIT) is the parsing backend. It is
+  dnl a single-file push parser plus its bundled HTML entity table; the HTML
+  dnl renderer ships too but we use our own callback renderer (safe-mode,
+  dnl heading anchors, nofollow, smart punctuation). entity.c is still needed
+  dnl for named-entity decoding. See .plan/md4c-migration.md and vendor/VENDOR.md.
+  MD4C_SRC_DIR=vendor/md4c
+  MD4C_SOURCES="\
+    $MD4C_SRC_DIR/md4c.c \
+    $MD4C_SRC_DIR/md4c-html.c \
+    $MD4C_SRC_DIR/entity.c"
 
-  CMARK_SOURCES="\
-    $CMARK_SRC_DIR/cmark.c \
-    $CMARK_SRC_DIR/blocks.c \
-    $CMARK_SRC_DIR/inlines.c \
-    $CMARK_SRC_DIR/scanners.c \
-    $CMARK_SRC_DIR/utf8.c \
-    $CMARK_SRC_DIR/buffer.c \
-    $CMARK_SRC_DIR/references.c \
-    $CMARK_SRC_DIR/render.c \
-    $CMARK_SRC_DIR/node.c \
-    $CMARK_SRC_DIR/iterator.c \
-    $CMARK_SRC_DIR/commonmark.c \
-    $CMARK_SRC_DIR/plaintext.c \
-    $CMARK_SRC_DIR/html.c \
-    $CMARK_SRC_DIR/xml.c \
-    $CMARK_SRC_DIR/latex.c \
-    $CMARK_SRC_DIR/man.c \
-    $CMARK_SRC_DIR/houdini_href_e.c \
-    $CMARK_SRC_DIR/houdini_html_e.c \
-    $CMARK_SRC_DIR/houdini_html_u.c \
-    $CMARK_SRC_DIR/cmark_ctype.c \
-    $CMARK_SRC_DIR/arena.c \
-    $CMARK_SRC_DIR/linked_list.c \
-    $CMARK_SRC_DIR/map.c \
-    $CMARK_SRC_DIR/plugin.c \
-    $CMARK_SRC_DIR/registry.c \
-    $CMARK_SRC_DIR/syntax_extension.c \
-    $CMARK_SRC_DIR/footnotes.c"
+  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c mdparser_md4c_xml.c mdparser_md4c_util.c"
 
-  CMARK_EXT_SOURCES="\
-    $CMARK_EXT_DIR/core-extensions.c \
-    $CMARK_EXT_DIR/table.c \
-    $CMARK_EXT_DIR/strikethrough.c \
-    $CMARK_EXT_DIR/tasklist.c \
-    $CMARK_EXT_DIR/autolink.c \
-    $CMARK_EXT_DIR/tagfilter.c \
-    $CMARK_EXT_DIR/ext_scanners.c"
-
-  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_ast.c mdparser_html_postprocess.c mdparser_arena.c"
-
-  dnl -Wall -Wextra are on by default so wrapper regressions get caught
-  dnl in every local build; --enable-mdparser-dev upgrades warnings to
-  dnl -Werror plus extra strictness. -Wno-unused-parameter and
-  dnl -Wno-unused-function silence noise from cmark's own callback-style
-  dnl APIs and from cmark static helpers that aren't reachable in our
-  dnl build configuration; both share the translation-unit flags with
-  dnl our wrapper.
-  dnl
-  dnl -fvisibility=hidden keeps vendored cmark symbols (cmark_parser_new
-  dnl etc.) and our wrapper internals out of the .so's dynamic symbol
-  dnl table. PHP only needs `get_module` exported, and ZEND_GET_MODULE
-  dnl already marks that with ZEND_DLEXPORT (visibility("default")), so
-  dnl the loader still finds it. Prevents collisions if another
-  dnl extension also vendors cmark.
-  dnl MDPARSER_ARENA routes cmark allocation through a per-call Zend-backed
-  dnl bump arena with a free-list (mdparser_arena.c) instead of per-node
-  dnl emalloc/efree. ~8-14% faster parse; peak RSS runs higher but stays
-  dnl emalloc-backed so memory_limit still bounds it. Build with
-  dnl -UMDPARSER_ARENA to fall back to the cached-parser + direct-emalloc path.
-  MDPARSER_CFLAGS="-DCMARK_GFM_STATIC_DEFINE -DCMARK_GFM_EXTENSIONS_STATIC_DEFINE \
-    -DMDPARSER_ARENA \
-    -fvisibility=hidden \
+  dnl -Wall -Wextra are on by default so wrapper regressions get caught in
+  dnl every local build; --enable-mdparser-dev upgrades warnings to -Werror.
+  dnl -Wno-unused-parameter / -Wno-unused-function silence noise from md4c's
+  dnl callback-style APIs and bundled static helpers we don't reach.
+  dnl -fvisibility=hidden keeps vendored md4c symbols and our internals out of
+  dnl the .so's dynamic symbol table (only get_module needs exporting).
+  MDPARSER_CFLAGS="-fvisibility=hidden \
     -Wall -Wextra -Wno-unused-parameter -Wno-unused-function"
 
   dnl -Wshadow is intentionally NOT enabled; PHP's own headers
@@ -88,12 +43,10 @@ if test "$PHP_MDPARSER" != "no"; then
   fi
 
   PHP_NEW_EXTENSION(mdparser,
-    $WRAPPER_SOURCES $CMARK_SOURCES $CMARK_EXT_SOURCES,
+    $WRAPPER_SOURCES $MD4C_SOURCES,
     $ext_shared,,
     $MDPARSER_CFLAGS)
 
-  PHP_ADD_INCLUDE([$ext_srcdir/$CMARK_SRC_DIR])
-  PHP_ADD_INCLUDE([$ext_srcdir/$CMARK_EXT_DIR])
-  PHP_ADD_BUILD_DIR([$ext_builddir/$CMARK_SRC_DIR], 1)
-  PHP_ADD_BUILD_DIR([$ext_builddir/$CMARK_EXT_DIR], 1)
+  PHP_ADD_INCLUDE([$ext_srcdir/$MD4C_SRC_DIR])
+  PHP_ADD_BUILD_DIR([$ext_builddir/$MD4C_SRC_DIR], 1)
 fi

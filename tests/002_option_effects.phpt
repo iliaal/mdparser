@@ -70,10 +70,10 @@ echo $lib->toHtml("<div{onclick}>x</div>"), "\n";
 echo "-- liberalHtmlTag=false --\n";
 echo $strict->toHtml("<div{onclick}>x</div>"), "\n";
 ?>
---EXPECTF--
+--EXPECT--
 -- default (safe) --
 <p>before</p>
-<!-- raw HTML omitted -->
+&lt;script&gt;alert(1)&lt;/script&gt;
 <p>after</p>
 
 -- unsafe=true, tagfilter=true --
@@ -95,36 +95,37 @@ line two</p>
 | 1 | 2 |</p>
 
 -- sourcepos --
-<h1 data-sourcepos="1:1-1:4">hi</h1>
+<h1>hi</h1>
 
 -- nobreaks --
 <p>line one line two</p>
 
 -- strikethroughDoubleTilde --
-<p>~one~ and <del>two</del></p>
+<p><del>one</del> and <del>two</del></p>
 
 -- tablePreferStyleAttributes --
 <table>
 <thead>
 <tr>
-<th style="text-align: center">a</th>
-<th style="text-align: right">b</th>
+<th align="center">a</th>
+<th align="right">b</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: center">1</td>
-<td style="text-align: right">2</td>
+<td align="center">1</td>
+<td align="right">2</td>
 </tr>
 </tbody>
 </table>
 
 -- fullInfoString --
-<pre lang="php" data-meta="title=x linenums"><code>x
+<pre><code class="language-php">x
 </code></pre>
 
 -- liberalHtmlTag=true --
-<p><div{onclick}>x</div></p>
+<p>&lt;div{onclick}&gt;x</div></p>
 
 -- liberalHtmlTag=false --
 <p>&lt;div{onclick}&gt;x</div></p>
+

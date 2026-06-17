@@ -86,7 +86,7 @@ $h = (new MdParser\Parser($opts_fn))->toHtml("Hello[^1]\n\n[^1]: world\n");
 check("footnote ref (#fn-) keeps no rel",
     str_contains($h, '<a href="#fn-1"'));
 check("footnote backref (#fnref-) keeps no rel",
-    str_contains($h, '<a href="#fnref-1"'));
+    str_contains($h, '<a href="#fnref-1-1"'));
 check("fragment anchors: no rel anywhere", !str_contains($h, "rel="));
 
 // fragment + external mix: external still gets rel

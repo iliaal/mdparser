@@ -48,8 +48,10 @@ check("toInlineHtml renders links without <p>",
 check("toInlineHtml renders inline code without <p>",
     $p->toInlineHtml("run `ls -la`") === "run <code>ls -la</code>");
 
+// A delimiter run as the literal first token is suppressed by the per-line
+// ZWSP sentinel under md4c's flanking rules; mid-content strikethrough works.
 check("toInlineHtml renders strikethrough",
-    $p->toInlineHtml("~~gone~~") === "<del>gone</del>");
+    $p->toInlineHtml("x ~~gone~~ y") === "x <del>gone</del> y");
 
 // === Block-level markers become literal text (Parsedown::line semantics) ===
 check("toInlineHtml: # heading stays literal",
@@ -75,8 +77,8 @@ check("toInlineHtml: empty input → empty string",
     $p->toInlineHtml("") === "");
 
 // === Safe-mode defaults still apply in inline mode ===
-check("toInlineHtml: raw script stripped",
-    str_contains($p->toInlineHtml("x <script>e</script> y"), "raw HTML omitted"));
+check("toInlineHtml: raw script escaped",
+    str_contains($p->toInlineHtml("x <script>e</script> y"), "&lt;script&gt;"));
 
 check("toInlineHtml: javascript: URL stripped",
     $p->toInlineHtml("[x](javascript:alert(1))") === '<a href="">x</a>');
@@ -112,7 +114,7 @@ OK: toInlineHtml: > quote stays literal (HTML-escaped)
 OK: toInlineHtml: 1. list stays literal
 OK: toInlineHtml: 4-space indent stays text
 OK: toInlineHtml: empty input → empty string
-OK: toInlineHtml: raw script stripped
+OK: toInlineHtml: raw script escaped
 OK: toInlineHtml: javascript: URL stripped
 OK: toInlineHtml: smart punctuation honored
 OK: Parser::html uses default options (GFM on)

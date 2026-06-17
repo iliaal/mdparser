@@ -41,7 +41,7 @@ check("github: tagfilter=true",  $g->tagfilter === true);
 $pg = new MdParser\Parser($g);
 $html = $pg->toHtml("here[^1]\n\n[^1]: the note\n");
 check("github: footnote reference rendered",
-    str_contains($html, 'class="footnote-ref"'));
+    str_contains($html, '<sup><a href="#fn-1"'));
 
 // === permissive: unsafe + no tagfilter + liberal HTML ===
 $p = MdParser\Options::permissive();

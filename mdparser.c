@@ -21,116 +21,16 @@
 #include "php_mdparser.h"
 #include "mdparser_arginfo.h"
 
-#include "cmark-gfm.h"
-#include "cmark-gfm-core-extensions.h"
-#include "registry.h"
-
-#include "mdparser_ast.h"
-
-mdparser_cached_extension mdparser_cached_extensions[MDPARSER_EXT_COUNT];
-
-/* cmark's default allocator wraps system calloc/realloc/free and
- * abort()s on allocation failure. That is unacceptable for a server
- * extension: hostile or oversized input can pin memory outside Zend's
- * memory_limit and tear down the worker on OOM. Routing every cmark
- * allocation through Zend MM gives us memory_limit accounting, debug
- * tracking, and a controlled bailout (longjmp via E_ERROR) in place
- * of abort. Allocations are request-scoped because every call site
- * lives inside a PHP method invocation; Zend MM cleans them up at
- * request shutdown if a bailout fires mid-parse. */
-static void *mdparser_zend_calloc(size_t nmemb, size_t size)
-{
-    return ecalloc(nmemb, size);
-}
-
-static void *mdparser_zend_realloc(void *ptr, size_t size)
-{
-    return erealloc(ptr, size);
-}
-
-static void mdparser_zend_free(void *ptr)
-{
-    /* Match the libc free() contract that cmark_mem free callbacks are
-     * written against: free(NULL) is a no-op. cmark's default allocator
-     * is plain free(), so vendored cmark code is not guaranteed to guard
-     * every mem->free() against NULL, and a future cherry-pick could add
-     * one that doesn't. efree(NULL) happens to be safe in the current
-     * Zend allocator too (zend_mm_free_heap returns early on a NULL
-     * pointer), but guarding here keeps the callback correct on its own
-     * terms instead of leaning on that internal detail. */
-    if (!ptr) {
-        return;
-    }
-    efree(ptr);
-}
-
-cmark_mem mdparser_zend_mem = {
-    mdparser_zend_calloc,
-    mdparser_zend_realloc,
-    mdparser_zend_free,
-};
-
-static int mdparser_resolve_extensions(void)
-{
-    static const struct {
-        int bit;
-        const char *name;
-    } wanted[MDPARSER_EXT_COUNT] = {
-        { MDPARSER_EXT_TABLES,        "table" },
-        { MDPARSER_EXT_STRIKETHROUGH, "strikethrough" },
-        { MDPARSER_EXT_TASKLIST,      "tasklist" },
-        { MDPARSER_EXT_AUTOLINK,      "autolink" },
-        { MDPARSER_EXT_TAGFILTER,     "tagfilter" },
-    };
-
-    for (int i = 0; i < MDPARSER_EXT_COUNT; i++) {
-        cmark_syntax_extension *ext = cmark_find_syntax_extension(wanted[i].name);
-        if (!ext) {
-            php_error_docref(NULL, E_CORE_ERROR,
-                "mdparser: required cmark-gfm extension '%s' missing from registry",
-                wanted[i].name);
-            return FAILURE;
-        }
-        mdparser_cached_extensions[i].bit = wanted[i].bit;
-        mdparser_cached_extensions[i].ptr = ext;
-    }
-    return SUCCESS;
-}
-
+/* md4c is a stateless push parser with no global registry and no allocator
+ * hook, so MINIT only precomputes the default option masks and registers the
+ * classes; there is nothing to tear down at MSHUTDOWN. */
 PHP_MINIT_FUNCTION(mdparser)
 {
-    cmark_gfm_core_extensions_ensure_registered();
-
-    if (mdparser_resolve_extensions() == FAILURE) {
-        return FAILURE;
-    }
-
     mdparser_options_init_defaults();
-    mdparser_init_ast_strings();
 
     mdparser_exception_register_class();
     mdparser_options_register_class();
     mdparser_parser_register_class();
-    return SUCCESS;
-}
-
-PHP_MSHUTDOWN_FUNCTION(mdparser)
-{
-    cmark_release_plugins();
-    /* ensure_registered's guard latches after the first registration
-     * and survives cmark_release_plugins. Without resetting it, a
-     * re-MINIT in the same process image (embedded SAPI cycle, a
-     * dlclose that doesn't unload) runs ensure_registered as a no-op
-     * against the now-empty registry and module startup fails with
-     * E_CORE_ERROR. The reset hook is a local vendor modification
-     * (vendor/VENDOR.md). Regression test:
-     * tests/043_mshutdown_reminit_registry.phpt. */
-    cmark_gfm_core_extensions_reset_registered();
-    /* cmark_release_plugins frees the syntax_extension structs the
-     * cached pointers reference. Zero the cache so a re-MINIT starts
-     * clean instead of dereferencing freed memory before
-     * mdparser_resolve_extensions reseats the array. */
-    memset(mdparser_cached_extensions, 0, sizeof(mdparser_cached_extensions));
     return SUCCESS;
 }
 
@@ -139,7 +39,8 @@ PHP_MINFO_FUNCTION(mdparser)
     php_info_print_table_start();
     php_info_print_table_header(2, "mdparser support", "enabled");
     php_info_print_table_row(2, "mdparser version", PHP_MDPARSER_VERSION);
-    php_info_print_table_row(2, "cmark-gfm version", CMARK_GFM_VERSION_STRING);
+    php_info_print_table_row(2, "backend", "md4c");
+    php_info_print_table_row(2, "md4c version", MDPARSER_MD4C_VERSION);
     php_info_print_table_end();
 }
 
@@ -152,7 +53,7 @@ zend_module_entry mdparser_module_entry = {
     "mdparser",
     mdparser_functions,
     PHP_MINIT(mdparser),
-    PHP_MSHUTDOWN(mdparser),
+    NULL, /* MSHUTDOWN: md4c has no global state to release */
     NULL, /* RINIT */
     NULL, /* RSHUTDOWN */
     PHP_MINFO(mdparser),

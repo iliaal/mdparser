@@ -6,38 +6,39 @@ inputs. Results are reproducible locally with the commands below.
 
 ## TL;DR
 
-mdparser is **~15-30x faster** than the fastest pure-PHP CommonMark
-libraries on all three corpora we measure (200 B, 1.8 KB, 200 KB).
+mdparser is **~5-9x faster** than the fastest pure-PHP CommonMark
+libraries on all three corpora we measure (200 B, 1.8 KB, 200 KB), and
+up to ~18x faster than the slowest.
 
 | Corpus | mdparser ops/sec | Best pure-PHP ops/sec | Speedup |
 |---|--:|--:|--:|
-| 200 B   | ~30,000 | ~1,650 (Parsedown)   | ~18x |
-| 1.8 KB  | ~5,700  | ~370 (cebe/GitHub)   | ~15x |
-| 200 KB  | ~105    | ~6 (cebe/GitHub)     | ~16x |
+| 200 B   | ~225,000 | ~26,000 (Parsedown)  | ~9x |
+| 1.8 KB  | ~41,000  | ~5,900 (cebe/GitHub) | ~7x |
+| 200 KB  | ~497     | ~99 (cebe/GitHub)    | ~5x |
 
 The 200 KB corpus is CommonMark's own `spec.txt` (our
-`tests/fixtures/commonmark-spec.txt`). mdparser handles ~100 full
+`tests/fixtures/commonmark-spec.txt`). mdparser handles ~500 full
 spec-sized documents per second on a single core.
 
 ## Full results
 
-Latest measurement, iters=200, warmup=5, PHP 8.4.21-dev on Linux
+Latest measurement, iters=300, warmup=5, PHP 8.4.22-dev (NTS) on Linux
 WSL2, with all parsers at their default configuration:
 
 | Parser | Corpus | Size | Mean (ms) | Ops/sec | Speedup |
 |---|---|--:|--:|--:|--:|
-| mdparser | small | 200 B | 0.033 | 30447 | — |
-| parsedown | small | 200 B | 0.606 | 1651 | 18.4x |
-| cebe/markdown | small | 200 B | 0.740 | 1350 | 22.5x |
-| michelf | small | 200 B | 0.993 | 1006 | 30.2x |
-| mdparser | medium | 1.8 KB | 0.176 | 5697 | — |
-| parsedown | medium | 1.8 KB | 3.074 | 325 | 17.5x |
-| cebe/markdown | medium | 1.8 KB | 2.674 | 374 | 15.2x |
-| michelf | medium | 1.8 KB | 4.770 | 209 | 27.2x |
-| mdparser | large | 200.2 KB | 9.460 | 105 | — |
-| parsedown | large | 200.2 KB | 164.554 | 6 | 17.4x |
-| cebe/markdown | large | 200.2 KB | 148.272 | 6 | 15.7x |
-| michelf | large | 200.2 KB | 175.550 | 5 | 18.6x |
+| mdparser | small | 200 B | 0.004 | 225668 | — |
+| parsedown | small | 200 B | 0.038 | 26268 | 8.6x |
+| cebe/markdown | small | 200 B | 0.043 | 23143 | 9.8x |
+| michelf | small | 200 B | 0.077 | 12934 | 17.4x |
+| mdparser | medium | 1.8 KB | 0.024 | 40923 | — |
+| parsedown | medium | 1.8 KB | 0.220 | 4551 | 9.0x |
+| cebe/markdown | medium | 1.8 KB | 0.171 | 5855 | 7.0x |
+| michelf | medium | 1.8 KB | 0.445 | 2246 | 18.2x |
+| mdparser | large | 200.2 KB | 2.010 | 497 | — |
+| parsedown | large | 200.2 KB | 11.429 | 87 | 5.7x |
+| cebe/markdown | large | 200.2 KB | 10.028 | 99 | 5.0x |
+| michelf | large | 200.2 KB | 22.054 | 45 | 11.0x |
 
 **Speedup column reads as "X times slower than mdparser".** Higher
 numbers = mdparser wins more decisively. The comparison is fair in
@@ -95,6 +96,10 @@ want concrete numbers.
 
 ## Running the benchmark
 
+> **Build against an optimized PHP.** Unoptimized debug builds inflate
+> wall time several-fold and distort the speedup ratios. Point
+> `--with-php-config` at an optimized build for benchmarking.
+
 ```bash
 # Install the pure-PHP parsers:
 cd bench
@@ -133,7 +138,7 @@ GC pause or page fault without throwing away real data. `ops_sec` is
 `1000 / mean_ms`.
 
 The `speedup` column is simply `other_mean_ms / mdparser_mean_ms` for
-the same corpus. A value of `15.0x` means that parser took 15 times
+the same corpus. A value of `5.0x` means that parser took 5 times
 longer than mdparser on the same input.
 
 ## Methodology caveats
@@ -147,13 +152,10 @@ longer than mdparser on the same input.
 2. **Output isn't byte-identical across parsers.** See
    `tests/parity/` for the divergence patterns. This benchmark
    measures throughput on shared inputs, not behavioral compatibility.
-3. **PHP version matters.** OPcache enabled makes the pure-PHP parsers
-   faster by 2-3x. These numbers are from PHP 8.4 with default OPcache
-   settings, matching what a typical production server would run.
-4. **Warm caches.** The harness pre-warms CPU caches, opcode cache,
-   and JIT (where applicable) with 5 iterations before measuring.
-   First-hit numbers would be substantially higher for all parsers.
-5. **Single-threaded.** mdparser is a conventional PHP extension; it
+3. **Warm caches.** The harness pre-warms CPU caches with 5 iterations
+   before measuring. First-hit numbers would be substantially higher
+   for all parsers.
+4. **Single-threaded.** mdparser is a conventional PHP extension; it
    runs single-threaded per request. Multi-request scaling on a
    process-per-request PHP model (FPM, CLI-server) is roughly linear
    — the wins stack across workers.

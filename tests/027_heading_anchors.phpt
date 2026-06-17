@@ -66,11 +66,12 @@ check("code-fenced <h1> not slug-injected",
     str_contains($h, '<h1 id="heading">Heading</h1>') &&
     str_contains($h, '&lt;h1&gt;raw&lt;/h1&gt;'));
 
-// sourcepos coexists: id comes before data-sourcepos
+// sourcepos is inert on the md4c backend (no position info), but the
+// heading anchor id is still emitted.
 $opts2 = new MdParser\Options(headingAnchors: true, sourcepos: true);
 $h = (new MdParser\Parser($opts2))->toHtml("# X\n");
-check("sourcepos coexists",
-    str_contains($h, 'id="x" data-sourcepos='));
+check("anchor id emitted (sourcepos inert)",
+    str_contains($h, '<h1 id="x">'));
 
 // static html() shortcut path: defaults off, so no anchors
 $h = MdParser\Parser::html("# Hi\n");
@@ -117,7 +118,7 @@ OK: UTF-8 multibyte preserved
 OK: all-punctuation: no id attr
 OK: empty + real: real still gets slug
 OK: code-fenced <h1> not slug-injected
-OK: sourcepos coexists
+OK: anchor id emitted (sourcepos inert)
 OK: static html() default has no anchors
 OK: toXml ignores anchor flag
 OK: toAst returns array regardless

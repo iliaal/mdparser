@@ -1,24 +1,20 @@
 ARG_ENABLE("mdparser", "Enable mdparser (CommonMark + GFM) support", "no");
 
 if (PHP_MDPARSER != "no") {
-    var cmark_src_dir = "vendor/cmark/src";
-    var cmark_ext_dir = "vendor/cmark/extensions";
+    var md4c_src_dir = "vendor/md4c";
 
-    ADD_FLAG("CFLAGS_MDPARSER", "/DCMARK_GFM_STATIC_DEFINE /DCMARK_GFM_EXTENSIONS_STATIC_DEFINE /I" + configure_module_dirname + "\\" + cmark_src_dir + " /I" + configure_module_dirname + "\\" + cmark_ext_dir);
+    ADD_FLAG("CFLAGS_MDPARSER", "/I" + configure_module_dirname + "\\" + md4c_src_dir);
 
-    var cmark_sources = "cmark.c blocks.c inlines.c scanners.c utf8.c buffer.c " +
-        "references.c render.c node.c iterator.c commonmark.c plaintext.c " +
-        "html.c xml.c latex.c man.c houdini_href_e.c houdini_html_e.c " +
-        "houdini_html_u.c cmark_ctype.c arena.c linked_list.c map.c " +
-        "plugin.c registry.c syntax_extension.c footnotes.c";
-
-    var cmark_ext_sources = "core-extensions.c table.c strikethrough.c " +
-        "tasklist.c autolink.c tagfilter.c ext_scanners.c";
+    // md4c (https://github.com/mity/md4c, MIT): single-file push parser plus
+    // its bundled HTML entity table. entity.c is needed for named-entity
+    // decoding; we use our own callback renderer over md4c (md4c-html.c ships
+    // but is not the active renderer). Keep in sync with config.m4.
+    var md4c_sources = "md4c.c md4c-html.c entity.c";
 
     var wrapper_sources = "mdparser.c mdparser_parser.c mdparser_options.c " +
-        "mdparser_exception.c mdparser_ast.c mdparser_html_postprocess.c";
+        "mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c " +
+        "mdparser_md4c_xml.c mdparser_md4c_util.c";
 
-    EXTENSION("mdparser", wrapper_sources, null, "/DCMARK_GFM_STATIC_DEFINE /DCMARK_GFM_EXTENSIONS_STATIC_DEFINE");
-    ADD_SOURCES(configure_module_dirname + "\\" + cmark_src_dir, cmark_sources, "mdparser");
-    ADD_SOURCES(configure_module_dirname + "\\" + cmark_ext_dir, cmark_ext_sources, "mdparser");
+    EXTENSION("mdparser", wrapper_sources);
+    ADD_SOURCES(configure_module_dirname + "\\" + md4c_src_dir, md4c_sources, "mdparser");
 }

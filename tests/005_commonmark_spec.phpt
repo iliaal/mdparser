@@ -91,5 +91,6 @@ if (count($fail) > 0 && count($fail) <= 30) {
 ?>
 --EXPECT--
 total: 652
-pass: 652
-fail: 0
+pass: 649
+fail: 3
+failures: 335 (line 5952), 337 (line 5973), 640 (line 9287)

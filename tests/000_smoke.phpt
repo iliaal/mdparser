@@ -44,8 +44,8 @@ bool(true)
 <p><del>strike</del></p>
 ---
 <ul>
-<li><input type="checkbox" disabled="" /> todo</li>
-<li><input type="checkbox" checked="" disabled="" /> done</li>
+<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled />todo</li>
+<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled checked />done</li>
 </ul>
 ---
 <p>visit <a href="https://example.com">https://example.com</a> today</p>

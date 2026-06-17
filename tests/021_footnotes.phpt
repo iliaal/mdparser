@@ -38,41 +38,41 @@ var_dump(count($ast['children']));
 <p>Text[^a] body.</p>
 <p>[^a]: the note</p>
 --- single ---
-<p>Text<sup class="footnote-ref"><a href="#fn-a" id="fnref-a" data-footnote-ref>1</a></sup> body.</p>
-<section class="footnotes" data-footnotes>
+<p>Text<sup><a href="#fn-1" id="fnref-1-1">1</a></sup> body.</p>
+<section class="footnotes">
 <ol>
-<li id="fn-a">
-<p>the note <a href="#fnref-a" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="1" aria-label="Back to reference 1">↩</a></p>
+<li id="fn-1">
+the note<a href="#fnref-1-1" class="footnote-backref">&#8617;</a>
 </li>
 </ol>
 </section>
 --- multiple ---
-<p>First<sup class="footnote-ref"><a href="#fn-one" id="fnref-one" data-footnote-ref>1</a></sup>, then<sup class="footnote-ref"><a href="#fn-two" id="fnref-two" data-footnote-ref>2</a></sup>.</p>
-<section class="footnotes" data-footnotes>
+<p>First<sup><a href="#fn-1" id="fnref-1-1">1</a></sup>, then<sup><a href="#fn-2" id="fnref-2-1">2</a></sup>.</p>
+<section class="footnotes">
 <ol>
-<li id="fn-one">
-<p>alpha <a href="#fnref-one" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="1" aria-label="Back to reference 1">↩</a></p>
+<li id="fn-1">
+alpha<a href="#fnref-1-1" class="footnote-backref">&#8617;</a>
 </li>
-<li id="fn-two">
-<p>beta <a href="#fnref-two" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="2" aria-label="Back to reference 2">↩</a></p>
+<li id="fn-2">
+beta<a href="#fnref-2-1" class="footnote-backref">&#8617;</a>
 </li>
 </ol>
 </section>
 --- reused ref (one def, two references) ---
-<p>Twice<sup class="footnote-ref"><a href="#fn-x" id="fnref-x" data-footnote-ref>1</a></sup> here<sup class="footnote-ref"><a href="#fn-x" id="fnref-x-2" data-footnote-ref>1</a></sup>.</p>
-<section class="footnotes" data-footnotes>
+<p>Twice<sup><a href="#fn-1" id="fnref-1-1">1</a></sup> here<sup><a href="#fn-1" id="fnref-1-2">1</a></sup>.</p>
+<section class="footnotes">
 <ol>
-<li id="fn-x">
-<p>once <a href="#fnref-x" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="1" aria-label="Back to reference 1">↩</a> <a href="#fnref-x-2" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="1-2" aria-label="Back to reference 1-2">↩<sup class="footnote-ref">2</sup></a></p>
+<li id="fn-1">
+once<a href="#fnref-1-1" class="footnote-backref">&#8617;</a> <a href="#fnref-1-2" class="footnote-backref">&#8617;</a>
 </li>
 </ol>
 </section>
 --- inline emphasis inside note body ---
-<p>a<sup class="footnote-ref"><a href="#fn-n" id="fnref-n" data-footnote-ref>1</a></sup>b</p>
-<section class="footnotes" data-footnotes>
+<p>a<sup><a href="#fn-1" id="fnref-1-1">1</a></sup>b</p>
+<section class="footnotes">
 <ol>
-<li id="fn-n">
-<p><em>emphasized</em> <a href="#fnref-n" class="footnote-backref" data-footnote-backref data-footnote-backref-idx="1" aria-label="Back to reference 1">↩</a></p>
+<li id="fn-1">
+<em>emphasized</em><a href="#fnref-1-1" class="footnote-backref">&#8617;</a>
 </li>
 </ol>
 </section>

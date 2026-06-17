@@ -51,15 +51,14 @@ foreach ($diverge as $d) echo "  - $d\n";
 ?>
 --EXPECT--
 total: 64
-match: 40
-diverge: 24
+match: 42
+diverge: 22
 diverging:
   - aligned_table
   - atx_heading
   - code_block
   - deeply_nested_list
   - em_strong
-  - email
   - emphasis
   - escaping
   - fenced_code_block
@@ -69,11 +68,10 @@ diverging:
   - inline_link_title
   - ordered_list
   - simple_table
+  - span-level_html
   - strikethrough
   - tab-indented_code_block
-  - table_inline_markdown
   - text_reference
-  - url_autolinking
   - whitespace
   - xss_attribute_encoding
   - xss_bad_url

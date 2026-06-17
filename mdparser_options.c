@@ -20,16 +20,16 @@
 #include "php_mdparser.h"
 #include "mdparser_arginfo.h"
 
-#include "cmark-gfm.h"
+#include "md4c.h"
+#include "mdparser_md4c_html.h"
 
 zend_class_entry *mdparser_options_ce;
 
-int mdparser_default_cmark_options = 0;
-int mdparser_default_extension_mask = 0;
-int mdparser_default_postprocess_mask = 0;
+unsigned mdparser_default_md4c_pflags = 0;
+int mdparser_default_md4c_ropts = 0;
 
-/* Each Options property corresponds to either a CMARK_OPT_* flag or a
- * GFM extension toggle.
+/* Each Options property maps to an md4c parser flag (MD_FLAG_*), a renderer
+ * behavior bit (MDPARSER_RF_*), or neither (accepted-but-inert legacy options).
  *
  * IMPORTANT: default_value MUST match the constructor default in
  * mdparser.stub.php. ZPP does not auto-apply arginfo defaults to
@@ -67,35 +67,39 @@ enum {
 typedef struct {
     const char *name;
     size_t name_len;
-    int cmark_bit;          /* nonzero if this maps to a cmark option */
-    int extension_bit;      /* nonzero if this maps to a GFM extension */
-    int postprocess_bit;    /* nonzero if this drives an HTML post-pass */
+    unsigned md4c_pflag;    /* md4c MD_FLAG_* contribution (parser flag) */
+    int md4c_ropt;          /* md4c MDPARSER_RF_* contribution (renderer) */
     bool default_value;
 } mdparser_options_field;
 
-#define F(name_, cmark_, ext_, pp_, def_) \
-    { name_, sizeof(name_) - 1, cmark_, ext_, pp_, def_ }
+/* Fields with md4c_pflag==0 && md4c_ropt==0 have no md4c analog and are
+ * accepted-but-inert (kept for API compatibility): sourcepos (md4c exposes
+ * no source positions), githubPreLang, liberalHtmlTag, strikethroughDoubleTilde,
+ * tablePreferStyleAttributes, fullInfoString (former cmark-renderer quirks).
+ * See .plan/md4c-migration.md. */
+#define F(name_, mpf_, mro_, def_) \
+    { name_, sizeof(name_) - 1, mpf_, mro_, def_ }
 
 static const mdparser_options_field mdparser_options_fields[] = {
-    F("sourcepos",                  CMARK_OPT_SOURCEPOS,                     0, 0, false),
-    F("hardbreaks",                 CMARK_OPT_HARDBREAKS,                    0, 0, false),
-    F("nobreaks",                   CMARK_OPT_NOBREAKS,                      0, 0, false),
-    F("smart",                      CMARK_OPT_SMART,                         0, 0, false),
-    F("unsafe",                     CMARK_OPT_UNSAFE,                        0, 0, false),
-    F("validateUtf8",               CMARK_OPT_VALIDATE_UTF8,                 0, 0, true),
-    F("githubPreLang",              CMARK_OPT_GITHUB_PRE_LANG,               0, 0, true),
-    F("liberalHtmlTag",             CMARK_OPT_LIBERAL_HTML_TAG,              0, 0, false),
-    F("footnotes",                  CMARK_OPT_FOOTNOTES,                     0, 0, false),
-    F("strikethroughDoubleTilde",   CMARK_OPT_STRIKETHROUGH_DOUBLE_TILDE,    0, 0, false),
-    F("tablePreferStyleAttributes", CMARK_OPT_TABLE_PREFER_STYLE_ATTRIBUTES, 0, 0, false),
-    F("fullInfoString",             CMARK_OPT_FULL_INFO_STRING,              0, 0, false),
-    F("tables",                     0, MDPARSER_EXT_TABLES,                  0, true),
-    F("strikethrough",              0, MDPARSER_EXT_STRIKETHROUGH,           0, true),
-    F("tasklist",                   0, MDPARSER_EXT_TASKLIST,                0, true),
-    F("autolink",                   0, MDPARSER_EXT_AUTOLINK,                0, true),
-    F("tagfilter",                  0, MDPARSER_EXT_TAGFILTER,               0, true),
-    F("headingAnchors",             0, 0, MDPARSER_PP_HEADING_ANCHORS,          false),
-    F("nofollowLinks",              0, 0, MDPARSER_PP_NOFOLLOW_LINKS,           false),
+    F("sourcepos",                  0, 0, false),
+    F("hardbreaks",                 MD_FLAG_HARD_SOFT_BREAKS, 0, false),
+    F("nobreaks",                   0, MDPARSER_RF_NOBREAKS, false),
+    F("smart",                      0, MDPARSER_RF_SMART, false),
+    F("unsafe",                     0, MDPARSER_RF_UNSAFE, false),
+    F("validateUtf8",               0, MDPARSER_RF_VALIDATE_UTF8, true),
+    F("githubPreLang",              0, 0, true),
+    F("liberalHtmlTag",             0, 0, false),
+    F("footnotes",                  MD_FLAG_FOOTNOTES, 0, false),
+    F("strikethroughDoubleTilde",   0, 0, false),
+    F("tablePreferStyleAttributes", 0, 0, false),
+    F("fullInfoString",             0, 0, false),
+    F("tables",                     MD_FLAG_TABLES, 0, true),
+    F("strikethrough",              MD_FLAG_STRIKETHROUGH, 0, true),
+    F("tasklist",                   MD_FLAG_TASKLISTS, 0, true),
+    F("autolink",                   MD_FLAG_PERMISSIVEAUTOLINKS, 0, true),
+    F("tagfilter",                  0, MDPARSER_RF_TAGFILTER, true),
+    F("headingAnchors",             0, MDPARSER_RF_HEADING_ANCHORS, false),
+    F("nofollowLinks",              0, MDPARSER_RF_NOFOLLOW, false),
 };
 
 #undef F
@@ -117,27 +121,20 @@ typedef char mdparser_options_field_count_assert[
 
 void mdparser_options_init_defaults(void)
 {
-    int c = 0;
-    int e = 0;
-    int p = 0;
+    unsigned mpf = 0;
+    int mro = 0;
 
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
         const mdparser_options_field *f = &mdparser_options_fields[i];
         if (!f->default_value) {
             continue;
         }
-        if (f->cmark_bit) {
-            c |= f->cmark_bit;
-        } else if (f->extension_bit) {
-            e |= f->extension_bit;
-        } else {
-            p |= f->postprocess_bit;
-        }
+        mpf |= f->md4c_pflag;
+        mro |= f->md4c_ropt;
     }
 
-    mdparser_default_cmark_options = c;
-    mdparser_default_extension_mask = e;
-    mdparser_default_postprocess_mask = p;
+    mdparser_default_md4c_pflags = mpf;
+    mdparser_default_md4c_ropts = mro;
 }
 
 /* Write the value vector into a freshly-allocated Options object's
@@ -167,11 +164,10 @@ static void mdparser_options_seed_defaults(bool values[MDPARSER_OPTIONS_FIELD_CO
     }
 }
 
-void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *extension_mask, int *postprocess_mask)
+void mdparser_options_read_masks(zval *options_zv, unsigned *md4c_pflags, int *md4c_ropts)
 {
-    int c = 0;
-    int e = 0;
-    int p = 0;
+    unsigned mpf = 0;
+    int mro = 0;
     zend_object *obj = Z_OBJ_P(options_zv);
 
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
@@ -205,18 +201,12 @@ void mdparser_options_read_masks(zval *options_zv, int *cmark_options, int *exte
             continue;
         }
 
-        if (f->cmark_bit) {
-            c |= f->cmark_bit;
-        } else if (f->extension_bit) {
-            e |= f->extension_bit;
-        } else {
-            p |= f->postprocess_bit;
-        }
+        mpf |= f->md4c_pflag;
+        mro |= f->md4c_ropt;
     }
 
-    *cmark_options = c;
-    *extension_mask = e;
-    *postprocess_mask = p;
+    *md4c_pflags = mpf;
+    *md4c_ropts = mro;
 }
 
 void mdparser_options_register_class(void)
