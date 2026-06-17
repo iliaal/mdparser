@@ -232,8 +232,7 @@ GitHub-style slug derived from the heading's text. Slugs lowercase
 ASCII, replace whitespace runs with a single `-`, drop other ASCII
 punctuation, preserve UTF-8 multibyte bytes, and dedupe collisions
 with `-1`, `-2`, ... Headings whose text slugifies to nothing (pure
-punctuation) emit `<hN>` with no id rather than `id=""`. Coexists
-with `sourcepos`: the `id` lands before `data-sourcepos`.
+punctuation) emit `<hN>` with no id rather than `id=""`.
 
 ```php
 echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Hello World\n");
@@ -373,11 +372,15 @@ new Options(
 
 ```php
 new Options(
-    sourcepos: true,        // enable click-to-jump
     smart: false,           // keep authored text byte-exact
     hardbreaks: false,
 );
 ```
+
+Note: md4c exposes no source positions, so mdparser cannot emit
+`data-sourcepos` for editor click-to-jump (the `sourcepos` option is
+inert). If you need source mapping, a different parser is the better
+fit.
 
 ### Rendering trusted internal docs
 

@@ -17,8 +17,8 @@ no string re-parsing, so building the array is roughly as fast as
 > **Security: the AST is unsanitized.** Link / image `url` fields and
 > `html_block` / `html_inline` `literal` fields are preserved
 > byte-for-byte. `Options::unsafe`, `Options::tagfilter`, and the
-> URL-scheme defenses apply to the rendering paths (`toHtml` /
-> `toXml` / `toInlineHtml`), NOT to `toAst`. If you build HTML out of
+> URL-scheme defenses apply only to the HTML paths (`toHtml` /
+> `toInlineHtml`), NOT to `toAst` or `toXml`. If you build HTML out of
 > the AST yourself, you own the sanitization: apply a URL scheme
 > allowlist (`http`, `https`, `mailto`, `tel`, …) before emitting
 > `href`, and run HTML through a sanitizer before emitting raw

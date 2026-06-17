@@ -57,9 +57,8 @@ echo $parser->toHtml('# Hello');
 // Custom options via named arguments. All fields readonly.
 $parser = new Parser(new Options(
     smart: true,          // --- -> em dash, -- -> en dash, "..." -> curly
-    sourcepos: true,      // add data-sourcepos to every HTML element
     footnotes: true,      // enable [^ref] / [^ref]: syntax
-    unsafe: false,        // raw HTML is still stripped (default)
+    unsafe: false,        // raw HTML is escaped (default)
 ));
 echo $parser->toHtml($markdown);
 
@@ -108,7 +107,7 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 | Smart punctuation    | ✓ (`Options::smart`)    | ✗           | via ext        | ✗        | ✗             | ✗       |
 | Footnotes            | ✓ (`Options::footnotes`)| Extra       | via ext        | ✗        | ✓ Extra       | plugin  |
 | Hardbreaks/nobreaks  | ✓                       | ✗           | ✗              | ✗        | ✗             | ✗       |
-| Sourcepos            | ✓                       | ✗           | ✓              | ✗        | ✗             | ✗       |
+| Sourcepos            | ✗                       | ✗           | ✓              | ✗        | ✗             | ✗       |
 | Heading anchors      | ✓ (`Options::headingAnchors`) | ✗     | via ext        | ✗        | ✗             | ✗       |
 | `rel="nofollow"`     | ✓ (`Options::nofollowLinks`)  | ✗     | via ext        | ✗        | ✗             | ✗       |
 | HTML output          | ✓                       | ✓           | ✓              | ✓        | ✓             | ✓       |

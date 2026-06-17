@@ -28,9 +28,9 @@ echo "\n=== hardbreaks: true ===\n";
 echo (new Parser(new Options(hardbreaks: true)))
     ->toHtml("line one\nline two");
 
-echo "\n=== sourcepos: true ===\n";
-echo (new Parser(new Options(sourcepos: true)))
-    ->toHtml("# heading\n\nparagraph");
+echo "\n=== nobreaks: true (soft breaks become spaces) ===\n";
+echo (new Parser(new Options(nobreaks: true)))
+    ->toHtml("line one\nline two");
 
 echo "\n=== all-off (disable every GFM extension) ===\n";
 $strict = new Parser(new Options(

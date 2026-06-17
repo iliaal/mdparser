@@ -48,7 +48,6 @@ echo $parser->toHtml('# Hello');    // <h1>Hello</h1>
 // With custom options (named arguments).
 $parser = new Parser(new Options(
     smart: true,
-    sourcepos: true,
     footnotes: true,
 ));
 echo $parser->toHtml($markdown);
