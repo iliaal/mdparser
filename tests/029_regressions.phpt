@@ -91,8 +91,8 @@ foreach ($ctor->getParameters() as $param) {
             . " prop=" . var_export($propValue, true);
     }
 }
-check("CR-004: all 19 ctor parameters present",
-    count($ctor->getParameters()) === 19);
+check("CR-004: all 26 ctor parameters present",
+    count($ctor->getParameters()) === 26);
 check("CR-004: every ctor default matches property default",
     $mismatches === []);
 if ($mismatches) {
@@ -138,7 +138,7 @@ OK: CR-002: lone CR normalized like LF
 OK: CR-002: single-line block markers stay literal (regression sanity)
 OK: CR-002: empty input stays empty
 OK: CR-002: lone newline stays empty
-OK: CR-004: all 19 ctor parameters present
+OK: CR-004: all 26 ctor parameters present
 OK: CR-004: every ctor default matches property default
 OK: CR-005: reflection-bypassed Options is rejected
 OK: CR-005: message names the offending property

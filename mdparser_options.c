@@ -61,6 +61,13 @@ enum {
     MDOPT_TAGFILTER,
     MDOPT_HEADING_ANCHORS,
     MDOPT_NOFOLLOW_LINKS,
+    MDOPT_NO_INDENTED_CODE_BLOCKS,
+    MDOPT_PERMISSIVE_ATX_HEADINGS,
+    MDOPT_COLLAPSE_WHITESPACE,
+    MDOPT_UNDERLINE,
+    MDOPT_HIGHLIGHT,
+    MDOPT_SUPERSCRIPT,
+    MDOPT_SUBSCRIPT,
     MDOPT_COUNT_
 };
 
@@ -100,6 +107,13 @@ static const mdparser_options_field mdparser_options_fields[] = {
     F("tagfilter",                  0, MDPARSER_RF_TAGFILTER, true),
     F("headingAnchors",             0, MDPARSER_RF_HEADING_ANCHORS, false),
     F("nofollowLinks",              0, MDPARSER_RF_NOFOLLOW, false),
+    F("noIndentedCodeBlocks",       MD_FLAG_NOINDENTEDCODEBLOCKS, 0, false),
+    F("permissiveAtxHeadings",      MD_FLAG_PERMISSIVEATXHEADERS, 0, false),
+    F("collapseWhitespace",         MD_FLAG_COLLAPSEWHITESPACE, 0, false),
+    F("underline",                  MD_FLAG_UNDERLINE, 0, false),
+    F("highlight",                  MD_FLAG_HIGHLIGHT, 0, false),
+    F("superscript",                MD_FLAG_SUPERSCRIPTS, 0, false),
+    F("subscript",                  MD_FLAG_SUBSCRIPTS, 0, false),
 };
 
 #undef F
@@ -246,6 +260,13 @@ PHP_METHOD(MdParser_Options, __construct)
         Z_PARAM_BOOL(values[MDOPT_TAGFILTER])
         Z_PARAM_BOOL(values[MDOPT_HEADING_ANCHORS])
         Z_PARAM_BOOL(values[MDOPT_NOFOLLOW_LINKS])
+        Z_PARAM_BOOL(values[MDOPT_NO_INDENTED_CODE_BLOCKS])
+        Z_PARAM_BOOL(values[MDOPT_PERMISSIVE_ATX_HEADINGS])
+        Z_PARAM_BOOL(values[MDOPT_COLLAPSE_WHITESPACE])
+        Z_PARAM_BOOL(values[MDOPT_UNDERLINE])
+        Z_PARAM_BOOL(values[MDOPT_HIGHLIGHT])
+        Z_PARAM_BOOL(values[MDOPT_SUPERSCRIPT])
+        Z_PARAM_BOOL(values[MDOPT_SUBSCRIPT])
     ZEND_PARSE_PARAMETERS_END();
 
     mdparser_options_populate_object(Z_OBJ_P(ZEND_THIS), values);

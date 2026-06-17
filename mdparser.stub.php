@@ -37,6 +37,13 @@ final readonly class Options
     public bool $tagfilter;
     public bool $headingAnchors;
     public bool $nofollowLinks;
+    public bool $noIndentedCodeBlocks;
+    public bool $permissiveAtxHeadings;
+    public bool $collapseWhitespace;
+    public bool $underline;
+    public bool $highlight;
+    public bool $superscript;
+    public bool $subscript;
 
     public function __construct(
         bool $sourcepos = false,
@@ -58,6 +65,13 @@ final readonly class Options
         bool $tagfilter = true,
         bool $headingAnchors = false,
         bool $nofollowLinks = false,
+        bool $noIndentedCodeBlocks = false,
+        bool $permissiveAtxHeadings = false,
+        bool $collapseWhitespace = false,
+        bool $underline = false,
+        bool $highlight = false,
+        bool $superscript = false,
+        bool $subscript = false,
     ) {}
 
     /**

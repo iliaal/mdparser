@@ -330,6 +330,10 @@ static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             smart_str_free(&c->litbuf);
             break;
         case MD_SPAN_DEL: mda_new_node(&n, "strikethrough"); break;
+        case MD_SPAN_U: mda_new_node(&n, "underline"); break;
+        case MD_SPAN_SUPERSCRIPT: mda_new_node(&n, "superscript"); break;
+        case MD_SPAN_SUBSCRIPT: mda_new_node(&n, "subscript"); break;
+        case MD_SPAN_MARK: mda_new_node(&n, "highlight"); break;
         case MD_SPAN_FOOTNOTE_REF: {
             MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
             mda_new_node(&n, "footnote_reference");

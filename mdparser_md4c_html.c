@@ -843,6 +843,9 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_IMG: mdm_render_img_open(r, (MD_SPAN_IMG_DETAIL *)detail); break;
         case MD_SPAN_CODE: OUT_LIT(r, "<code>"); break;
         case MD_SPAN_DEL: OUT_LIT(r, "<del>"); break;
+        case MD_SPAN_SUPERSCRIPT: OUT_LIT(r, "<sup>"); break;
+        case MD_SPAN_SUBSCRIPT: OUT_LIT(r, "<sub>"); break;
+        case MD_SPAN_MARK: OUT_LIT(r, "<mark>"); break;
         case MD_SPAN_FOOTNOTE_REF: {
             const MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
             char buf[128];
@@ -852,7 +855,7 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             out_append(r, buf, (size_t)w);
             break;
         }
-        default: break;  /* spoiler/sub/sup/mark/latex/wikilink: not in our option set */
+        default: break;  /* spoiler/latex/wikilink: not in our option set */
     }
     return 0;
 }
@@ -870,6 +873,9 @@ static int mdm_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_IMG: mdm_render_img_close(r, (MD_SPAN_IMG_DETAIL *)detail); break;
         case MD_SPAN_CODE: OUT_LIT(r, "</code>"); break;
         case MD_SPAN_DEL: OUT_LIT(r, "</del>"); break;
+        case MD_SPAN_SUPERSCRIPT: OUT_LIT(r, "</sup>"); break;
+        case MD_SPAN_SUBSCRIPT: OUT_LIT(r, "</sub>"); break;
+        case MD_SPAN_MARK: OUT_LIT(r, "</mark>"); break;
         default: break;
     }
     return 0;

@@ -1,5 +1,5 @@
-/* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 844a21847b8b87784d4dec31536c9e5642013d0a */
+/* This is a generated file, edit mdparser.stub.php instead.
+ * Stub hash: d5753fa4e7672bf50dd056ace11e0ee5dde59859 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sourcepos, _IS_BOOL, 0, "false")
@@ -21,6 +21,13 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_MdParser_Options___construct, 0, 0, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, tagfilter, _IS_BOOL, 0, "true")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, headingAnchors, _IS_BOOL, 0, "false")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, nofollowLinks, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, noIndentedCodeBlocks, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, permissiveAtxHeadings, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, collapseWhitespace, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, underline, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, highlight, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, superscript, _IS_BOOL, 0, "false")
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, subscript, _IS_BOOL, 0, "false")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_MdParser_Options_strict, 0, 0, MdParser\\Options, 0)
@@ -104,117 +111,159 @@ static zend_class_entry *register_class_MdParser_Options(void)
 
 	zval property_sourcepos_default_value;
 	ZVAL_UNDEF(&property_sourcepos_default_value);
-	zend_string *property_sourcepos_name = zend_string_init("sourcepos", sizeof("sourcepos") - 1, 1);
+	zend_string *property_sourcepos_name = zend_string_init("sourcepos", sizeof("sourcepos") - 1, true);
 	zend_declare_typed_property(class_entry, property_sourcepos_name, &property_sourcepos_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_sourcepos_name);
+	zend_string_release_ex(property_sourcepos_name, true);
 
 	zval property_hardbreaks_default_value;
 	ZVAL_UNDEF(&property_hardbreaks_default_value);
-	zend_string *property_hardbreaks_name = zend_string_init("hardbreaks", sizeof("hardbreaks") - 1, 1);
+	zend_string *property_hardbreaks_name = zend_string_init("hardbreaks", sizeof("hardbreaks") - 1, true);
 	zend_declare_typed_property(class_entry, property_hardbreaks_name, &property_hardbreaks_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_hardbreaks_name);
+	zend_string_release_ex(property_hardbreaks_name, true);
 
 	zval property_nobreaks_default_value;
 	ZVAL_UNDEF(&property_nobreaks_default_value);
-	zend_string *property_nobreaks_name = zend_string_init("nobreaks", sizeof("nobreaks") - 1, 1);
+	zend_string *property_nobreaks_name = zend_string_init("nobreaks", sizeof("nobreaks") - 1, true);
 	zend_declare_typed_property(class_entry, property_nobreaks_name, &property_nobreaks_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_nobreaks_name);
+	zend_string_release_ex(property_nobreaks_name, true);
 
 	zval property_smart_default_value;
 	ZVAL_UNDEF(&property_smart_default_value);
-	zend_string *property_smart_name = zend_string_init("smart", sizeof("smart") - 1, 1);
+	zend_string *property_smart_name = zend_string_init("smart", sizeof("smart") - 1, true);
 	zend_declare_typed_property(class_entry, property_smart_name, &property_smart_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_smart_name);
+	zend_string_release_ex(property_smart_name, true);
 
 	zval property_unsafe_default_value;
 	ZVAL_UNDEF(&property_unsafe_default_value);
-	zend_string *property_unsafe_name = zend_string_init("unsafe", sizeof("unsafe") - 1, 1);
+	zend_string *property_unsafe_name = zend_string_init("unsafe", sizeof("unsafe") - 1, true);
 	zend_declare_typed_property(class_entry, property_unsafe_name, &property_unsafe_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_unsafe_name);
+	zend_string_release_ex(property_unsafe_name, true);
 
 	zval property_validateUtf8_default_value;
 	ZVAL_UNDEF(&property_validateUtf8_default_value);
-	zend_string *property_validateUtf8_name = zend_string_init("validateUtf8", sizeof("validateUtf8") - 1, 1);
+	zend_string *property_validateUtf8_name = zend_string_init("validateUtf8", sizeof("validateUtf8") - 1, true);
 	zend_declare_typed_property(class_entry, property_validateUtf8_name, &property_validateUtf8_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_validateUtf8_name);
+	zend_string_release_ex(property_validateUtf8_name, true);
 
 	zval property_githubPreLang_default_value;
 	ZVAL_UNDEF(&property_githubPreLang_default_value);
-	zend_string *property_githubPreLang_name = zend_string_init("githubPreLang", sizeof("githubPreLang") - 1, 1);
+	zend_string *property_githubPreLang_name = zend_string_init("githubPreLang", sizeof("githubPreLang") - 1, true);
 	zend_declare_typed_property(class_entry, property_githubPreLang_name, &property_githubPreLang_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_githubPreLang_name);
+	zend_string_release_ex(property_githubPreLang_name, true);
 
 	zval property_liberalHtmlTag_default_value;
 	ZVAL_UNDEF(&property_liberalHtmlTag_default_value);
-	zend_string *property_liberalHtmlTag_name = zend_string_init("liberalHtmlTag", sizeof("liberalHtmlTag") - 1, 1);
+	zend_string *property_liberalHtmlTag_name = zend_string_init("liberalHtmlTag", sizeof("liberalHtmlTag") - 1, true);
 	zend_declare_typed_property(class_entry, property_liberalHtmlTag_name, &property_liberalHtmlTag_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_liberalHtmlTag_name);
+	zend_string_release_ex(property_liberalHtmlTag_name, true);
 
 	zval property_footnotes_default_value;
 	ZVAL_UNDEF(&property_footnotes_default_value);
-	zend_string *property_footnotes_name = zend_string_init("footnotes", sizeof("footnotes") - 1, 1);
+	zend_string *property_footnotes_name = zend_string_init("footnotes", sizeof("footnotes") - 1, true);
 	zend_declare_typed_property(class_entry, property_footnotes_name, &property_footnotes_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_footnotes_name);
+	zend_string_release_ex(property_footnotes_name, true);
 
 	zval property_strikethroughDoubleTilde_default_value;
 	ZVAL_UNDEF(&property_strikethroughDoubleTilde_default_value);
-	zend_string *property_strikethroughDoubleTilde_name = zend_string_init("strikethroughDoubleTilde", sizeof("strikethroughDoubleTilde") - 1, 1);
+	zend_string *property_strikethroughDoubleTilde_name = zend_string_init("strikethroughDoubleTilde", sizeof("strikethroughDoubleTilde") - 1, true);
 	zend_declare_typed_property(class_entry, property_strikethroughDoubleTilde_name, &property_strikethroughDoubleTilde_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_strikethroughDoubleTilde_name);
+	zend_string_release_ex(property_strikethroughDoubleTilde_name, true);
 
 	zval property_tablePreferStyleAttributes_default_value;
 	ZVAL_UNDEF(&property_tablePreferStyleAttributes_default_value);
-	zend_string *property_tablePreferStyleAttributes_name = zend_string_init("tablePreferStyleAttributes", sizeof("tablePreferStyleAttributes") - 1, 1);
+	zend_string *property_tablePreferStyleAttributes_name = zend_string_init("tablePreferStyleAttributes", sizeof("tablePreferStyleAttributes") - 1, true);
 	zend_declare_typed_property(class_entry, property_tablePreferStyleAttributes_name, &property_tablePreferStyleAttributes_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_tablePreferStyleAttributes_name);
+	zend_string_release_ex(property_tablePreferStyleAttributes_name, true);
 
 	zval property_fullInfoString_default_value;
 	ZVAL_UNDEF(&property_fullInfoString_default_value);
-	zend_string *property_fullInfoString_name = zend_string_init("fullInfoString", sizeof("fullInfoString") - 1, 1);
+	zend_string *property_fullInfoString_name = zend_string_init("fullInfoString", sizeof("fullInfoString") - 1, true);
 	zend_declare_typed_property(class_entry, property_fullInfoString_name, &property_fullInfoString_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_fullInfoString_name);
+	zend_string_release_ex(property_fullInfoString_name, true);
 
 	zval property_tables_default_value;
 	ZVAL_UNDEF(&property_tables_default_value);
-	zend_string *property_tables_name = zend_string_init("tables", sizeof("tables") - 1, 1);
+	zend_string *property_tables_name = zend_string_init("tables", sizeof("tables") - 1, true);
 	zend_declare_typed_property(class_entry, property_tables_name, &property_tables_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_tables_name);
+	zend_string_release_ex(property_tables_name, true);
 
 	zval property_strikethrough_default_value;
 	ZVAL_UNDEF(&property_strikethrough_default_value);
-	zend_string *property_strikethrough_name = zend_string_init("strikethrough", sizeof("strikethrough") - 1, 1);
+	zend_string *property_strikethrough_name = zend_string_init("strikethrough", sizeof("strikethrough") - 1, true);
 	zend_declare_typed_property(class_entry, property_strikethrough_name, &property_strikethrough_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_strikethrough_name);
+	zend_string_release_ex(property_strikethrough_name, true);
 
 	zval property_tasklist_default_value;
 	ZVAL_UNDEF(&property_tasklist_default_value);
-	zend_string *property_tasklist_name = zend_string_init("tasklist", sizeof("tasklist") - 1, 1);
+	zend_string *property_tasklist_name = zend_string_init("tasklist", sizeof("tasklist") - 1, true);
 	zend_declare_typed_property(class_entry, property_tasklist_name, &property_tasklist_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_tasklist_name);
+	zend_string_release_ex(property_tasklist_name, true);
 
 	zval property_autolink_default_value;
 	ZVAL_UNDEF(&property_autolink_default_value);
-	zend_string *property_autolink_name = zend_string_init("autolink", sizeof("autolink") - 1, 1);
+	zend_string *property_autolink_name = zend_string_init("autolink", sizeof("autolink") - 1, true);
 	zend_declare_typed_property(class_entry, property_autolink_name, &property_autolink_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_autolink_name);
+	zend_string_release_ex(property_autolink_name, true);
 
 	zval property_tagfilter_default_value;
 	ZVAL_UNDEF(&property_tagfilter_default_value);
-	zend_string *property_tagfilter_name = zend_string_init("tagfilter", sizeof("tagfilter") - 1, 1);
+	zend_string *property_tagfilter_name = zend_string_init("tagfilter", sizeof("tagfilter") - 1, true);
 	zend_declare_typed_property(class_entry, property_tagfilter_name, &property_tagfilter_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_tagfilter_name);
+	zend_string_release_ex(property_tagfilter_name, true);
 
 	zval property_headingAnchors_default_value;
 	ZVAL_UNDEF(&property_headingAnchors_default_value);
-	zend_string *property_headingAnchors_name = zend_string_init("headingAnchors", sizeof("headingAnchors") - 1, 1);
+	zend_string *property_headingAnchors_name = zend_string_init("headingAnchors", sizeof("headingAnchors") - 1, true);
 	zend_declare_typed_property(class_entry, property_headingAnchors_name, &property_headingAnchors_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_headingAnchors_name);
+	zend_string_release_ex(property_headingAnchors_name, true);
 
 	zval property_nofollowLinks_default_value;
 	ZVAL_UNDEF(&property_nofollowLinks_default_value);
-	zend_string *property_nofollowLinks_name = zend_string_init("nofollowLinks", sizeof("nofollowLinks") - 1, 1);
+	zend_string *property_nofollowLinks_name = zend_string_init("nofollowLinks", sizeof("nofollowLinks") - 1, true);
 	zend_declare_typed_property(class_entry, property_nofollowLinks_name, &property_nofollowLinks_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
-	zend_string_release(property_nofollowLinks_name);
+	zend_string_release_ex(property_nofollowLinks_name, true);
+
+	zval property_noIndentedCodeBlocks_default_value;
+	ZVAL_UNDEF(&property_noIndentedCodeBlocks_default_value);
+	zend_string *property_noIndentedCodeBlocks_name = zend_string_init("noIndentedCodeBlocks", sizeof("noIndentedCodeBlocks") - 1, true);
+	zend_declare_typed_property(class_entry, property_noIndentedCodeBlocks_name, &property_noIndentedCodeBlocks_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_noIndentedCodeBlocks_name, true);
+
+	zval property_permissiveAtxHeadings_default_value;
+	ZVAL_UNDEF(&property_permissiveAtxHeadings_default_value);
+	zend_string *property_permissiveAtxHeadings_name = zend_string_init("permissiveAtxHeadings", sizeof("permissiveAtxHeadings") - 1, true);
+	zend_declare_typed_property(class_entry, property_permissiveAtxHeadings_name, &property_permissiveAtxHeadings_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_permissiveAtxHeadings_name, true);
+
+	zval property_collapseWhitespace_default_value;
+	ZVAL_UNDEF(&property_collapseWhitespace_default_value);
+	zend_string *property_collapseWhitespace_name = zend_string_init("collapseWhitespace", sizeof("collapseWhitespace") - 1, true);
+	zend_declare_typed_property(class_entry, property_collapseWhitespace_name, &property_collapseWhitespace_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_collapseWhitespace_name, true);
+
+	zval property_underline_default_value;
+	ZVAL_UNDEF(&property_underline_default_value);
+	zend_string *property_underline_name = zend_string_init("underline", sizeof("underline") - 1, true);
+	zend_declare_typed_property(class_entry, property_underline_name, &property_underline_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_underline_name, true);
+
+	zval property_highlight_default_value;
+	ZVAL_UNDEF(&property_highlight_default_value);
+	zend_string *property_highlight_name = zend_string_init("highlight", sizeof("highlight") - 1, true);
+	zend_declare_typed_property(class_entry, property_highlight_name, &property_highlight_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_highlight_name, true);
+
+	zval property_superscript_default_value;
+	ZVAL_UNDEF(&property_superscript_default_value);
+	zend_string *property_superscript_name = zend_string_init("superscript", sizeof("superscript") - 1, true);
+	zend_declare_typed_property(class_entry, property_superscript_name, &property_superscript_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_superscript_name, true);
+
+	zval property_subscript_default_value;
+	ZVAL_UNDEF(&property_subscript_default_value);
+	zend_string *property_subscript_name = zend_string_init("subscript", sizeof("subscript") - 1, true);
+	zend_declare_typed_property(class_entry, property_subscript_name, &property_subscript_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_BOOL));
+	zend_string_release_ex(property_subscript_name, true);
 
 	return class_entry;
 }
@@ -228,10 +277,10 @@ static zend_class_entry *register_class_MdParser_Parser(void)
 
 	zval property_options_default_value;
 	ZVAL_UNDEF(&property_options_default_value);
-	zend_string *property_options_name = zend_string_init("options", sizeof("options") - 1, 1);
+	zend_string *property_options_name = zend_string_init("options", sizeof("options") - 1, true);
 	zend_string *property_options_class_MdParser_Options = zend_string_init("MdParser\\Options", sizeof("MdParser\\Options")-1, 1);
 	zend_declare_typed_property(class_entry, property_options_name, &property_options_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_CLASS(property_options_class_MdParser_Options, 0, 0));
-	zend_string_release(property_options_name);
+	zend_string_release_ex(property_options_name, true);
 
 	return class_entry;
 }

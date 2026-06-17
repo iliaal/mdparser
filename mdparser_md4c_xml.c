@@ -289,6 +289,10 @@ static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             smart_str_free(&c->lit);
             break;
         case MD_SPAN_DEL: mdx_open(c, "strikethrough"); break;
+        case MD_SPAN_U: mdx_open(c, "underline"); break;
+        case MD_SPAN_SUPERSCRIPT: mdx_open(c, "superscript"); break;
+        case MD_SPAN_SUBSCRIPT: mdx_open(c, "subscript"); break;
+        case MD_SPAN_MARK: mdx_open(c, "highlight"); break;
         case MD_SPAN_FOOTNOTE_REF: mdx_open(c, "footnote_reference"); break;
         default: mdx_open(c, "unknown"); break;
     }
@@ -312,6 +316,10 @@ static int mdx_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
             c->collecting = false;
             break;
         case MD_SPAN_DEL: mdx_close(c, "strikethrough"); break;
+        case MD_SPAN_U: mdx_close(c, "underline"); break;
+        case MD_SPAN_SUPERSCRIPT: mdx_close(c, "superscript"); break;
+        case MD_SPAN_SUBSCRIPT: mdx_close(c, "subscript"); break;
+        case MD_SPAN_MARK: mdx_close(c, "highlight"); break;
         case MD_SPAN_FOOTNOTE_REF: mdx_close(c, "footnote_reference"); break;
         default: mdx_close(c, "unknown"); break;
     }

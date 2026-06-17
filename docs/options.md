@@ -2,11 +2,11 @@
 
 `final readonly class MdParser\Options`
 
-Holds 19 bool toggles that control parser and renderer behavior: 12
-core cmark options, 5 GFM extension toggles, and 2 HTML postprocess
-flags. All fields are readonly after construction, and the class is
-`final` so it can't be subclassed. Use named arguments to set only
-the fields you care about.
+Holds 26 bool toggles that control parser and renderer behavior:
+core parser options, GFM extension toggles, HTML postprocess flags,
+and md4c dialect extensions. All fields are readonly after
+construction, and the class is `final` so it can't be subclassed.
+Use named arguments to set only the fields you care about.
 
 ## Defaults
 
@@ -36,6 +36,17 @@ new Options(
     // HTML postprocess flags
     headingAnchors: false,
     nofollowLinks: false,
+
+    // Parser behavior toggles
+    noIndentedCodeBlocks: false,
+    permissiveAtxHeadings: false,
+    collapseWhitespace: false,
+
+    // md4c dialect extensions (non-CommonMark, non-GFM)
+    underline: false,
+    highlight: false,
+    superscript: false,
+    subscript: false,
 );
 ```
 
@@ -266,6 +277,60 @@ echo (new Parser(new Options(nofollowLinks: true)))
     ->toHtml("[ext](https://example.com)");
 // <p><a rel="nofollow noopener noreferrer" href="https://example.com">ext</a></p>
 ```
+
+## Parser behavior toggles
+
+These map directly to md4c parser flags. They change how the source is
+parsed (not how nodes render), add no new HTML tags, and default off so
+the standard CommonMark + GFM parse is unaffected.
+
+### `noIndentedCodeBlocks: bool = false`
+
+When `true`, 4-space-indented blocks are parsed as regular text instead
+of code blocks. Only fenced code (```` ``` ````) produces `<pre><code>`.
+Useful for content where leading indentation is common prose, not code.
+
+### `permissiveAtxHeadings: bool = false`
+
+When `true`, ATX headings no longer require a space after the `#`, so
+`###hi` becomes `<h3>hi</h3>`. Standard CommonMark requires the space
+and renders `###hi` as a paragraph.
+
+### `collapseWhitespace: bool = false`
+
+When `true`, runs of non-trivial whitespace inside normal text collapse
+to a single space (`a      b` → `a b`). Does not affect code spans or
+code blocks.
+
+## Dialect extensions
+
+These are md4c extensions outside the CommonMark and GFM specs. They are
+opt-in and default off; mdparser's spec-conformance contract holds only
+with all four off. Each renders as a standard semantic HTML tag, so no
+custom elements or scripts are introduced. In `toXml()` / `toAst()` they
+surface as the node types `underline`, `highlight`, `superscript`, and
+`subscript`.
+
+### `underline: bool = false`
+
+When `true`, `_text_` renders as `<u>text</u>`. Note this **disables `_`
+as an emphasis delimiter** (md4c semantics); use `*text*` and `**text**`
+for emphasis and strong when underline is on. `__text__` becomes nested
+underline (`<u><u>text</u></u>`), not strong emphasis.
+
+### `highlight: bool = false`
+
+When `true`, `==text==` renders as `<mark>text</mark>`.
+
+### `superscript: bool = false`
+
+When `true`, `^text^` renders as `<sup>text</sup>`.
+
+### `subscript: bool = false`
+
+When `true`, `~text~` renders as `<sub>text</sub>`. This coexists with
+GFM strikethrough: `~~text~~` still renders as `<del>`, while a single
+`~` pair is subscript.
 
 ## Patterns
 
