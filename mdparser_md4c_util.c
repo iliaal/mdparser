@@ -17,6 +17,7 @@
 #include "php.h"
 
 #include <string.h>
+#include <stdint.h>
 
 #include "entity.h"
 #include "mdparser_md4c_util.h"
@@ -111,6 +112,17 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     size_t i = 0;
     bool clean = true;
     while (i < len) {
+        /* ASCII fast path: skip runs of <0x80 bytes 8 at a time, then 1 at a
+         * time, before falling back to the per-sequence validator. Markdown
+         * is overwhelmingly ASCII, so this avoids a call per byte. */
+        while (i + 8 <= len) {
+            uint64_t w;
+            memcpy(&w, p + i, 8);
+            if (w & 0x8080808080808080ULL) break;
+            i += 8;
+        }
+        while (i < len && p[i] < 0x80) i++;
+        if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
         if (n == 0) { clean = false; break; }
         i += n;

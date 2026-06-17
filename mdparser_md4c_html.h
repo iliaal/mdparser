@@ -37,4 +37,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
 /* Map a non-zero status from mdparser_md4c_render_html to a static message. */
 const char *mdparser_md4c_status_message(int status);
 
+/* Build the process-global escape-classification map. Call once at MINIT. */
+void mdparser_md4c_html_minit(void);
+
 #endif

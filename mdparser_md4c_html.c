@@ -83,6 +83,23 @@ static zend_always_inline void out_append(mdm_ctx *r, const char *s, size_t n)
 }
 #define OUT_LIT(r, lit) out_append((r), "" lit, sizeof(lit) - 1)
 
+/* Escape-classification map. It depends only on fixed character sets, so it
+ * is built once at MINIT instead of rebuilt (256 iterations + strchr scans)
+ * on every render; each render memcpy's it into the per-call context. */
+static char mdm_escape_map_template[256];
+
+void mdparser_md4c_html_minit(void)
+{
+    for (int i = 0; i < 256; i++) {
+        unsigned char ch = (unsigned char)i;
+        mdm_escape_map_template[i] = 0;
+        if (strchr("\"&<>", ch) != NULL)
+            mdm_escape_map_template[i] |= NEED_HTML_ESC_FLAG;
+        if (!ISALNUM(ch) && strchr("~-_.+!*(),%#@?=;:/$", ch) == NULL)
+            mdm_escape_map_template[i] |= NEED_URL_ESC_FLAG;
+    }
+}
+
 /* Conditional newline: append '\n' only if the current buffer is non-empty
  * and does not already end in one. This is the CommonMark reference
  * renderer's `cr()` -- emitting it before every block-element open
@@ -957,15 +974,10 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     r.cur = &r.main;
     r.prev_char = 0;
 
-    for (int i = 0; i < 256; i++) {
-        unsigned char ch = (unsigned char)i;
-        /* Match the CommonMark reference renderer: escape " & < > but NOT ' in text/attributes. Every
-         * emitted attribute is double-quoted, so a literal ' is safe, and
-         * leaving it unescaped matches the CommonMark reference output. */
-        if (strchr("\"&<>", ch) != NULL) r.escape_map[i] |= NEED_HTML_ESC_FLAG;
-        if (!ISALNUM(ch) && strchr("~-_.+!*(),%#@?=;:/$", ch) == NULL)
-            r.escape_map[i] |= NEED_URL_ESC_FLAG;
-    }
+    /* Map is precomputed once at MINIT; copy it in (escape " & < > but not ',
+     * since attributes are double-quoted -- matches the CommonMark reference
+     * renderer). */
+    memcpy(r.escape_map, mdm_escape_map_template, sizeof(r.escape_map));
 
     if (render_opts & MDPARSER_RF_HEADING_ANCHORS)
         mdm_slugs_init(&r.slugs);
@@ -975,6 +987,12 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     const char *use_src = src;
     if (render_opts & MDPARSER_RF_VALIDATE_UTF8)
         use_src = mdparser_md4c_validate_utf8(src, len, &use_len, &owned);
+
+    /* Reserve roughly the input size up front: HTML output is typically
+     * 1-1.5x the markdown, so this skips the early smart_str doublings (and
+     * their cumulative memcpy) on medium/large documents. */
+    if (use_len)
+        smart_str_alloc(&r.main, use_len, 0);
 
     MD_PARSER parser = {
         0,
