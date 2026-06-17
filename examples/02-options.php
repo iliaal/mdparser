@@ -1,6 +1,6 @@
 <?php
 /**
- * Demonstrates Options: smart punctuation, hard breaks, sourcepos.
+ * Demonstrates Options: smart punctuation, hard breaks, nobreaks.
  *
  * Run it:
  *     php -d extension=mdparser.so examples/02-options.php
