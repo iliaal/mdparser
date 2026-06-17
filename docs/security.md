@@ -171,12 +171,13 @@ mdparser does NOT:
   substrings inside another tag's quoted attribute value (`<div
   title='<a href="x">…'>`). Same-origin allow/deny policy and CSP
   are still application concerns.
-- Sanitize `Parser::toAst()` output. The AST is a structural view and
-  preserves link URLs and raw HTML literals byte-for-byte; the
-  rendering-side defenses (`unsafe`, `tagfilter`, scheme stripping)
-  do not apply. Apply your own URL-scheme allowlist and HTML
-  sanitization before emitting HTML built from the AST. See
-  `docs/ast.md`.
+- Sanitize `Parser::toAst()` output. The AST is a structural view: raw
+  HTML literals (`html_block` / `html_inline`) are preserved byte-for-byte,
+  and link/image URLs and titles are entity-decoded but otherwise
+  unsanitized (a `javascript:` URL stays a live `javascript:` string). The
+  rendering-side defenses (`unsafe`, `tagfilter`, scheme stripping) do not
+  apply. Apply your own URL-scheme allowlist and HTML sanitization before
+  emitting HTML built from the AST. See `docs/ast.md`.
 - Detect malicious Unicode homographs, invisible characters, or
   right-to-left override tricks. Markdown is rendered as-is; if you're
   worried about spoofed links you need a separate normalization pass.
