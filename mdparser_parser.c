@@ -289,11 +289,28 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     const char *src = ZSTR_VAL(source);
     size_t src_len = ZSTR_LEN(source);
     smart_str norm = {0};
+
+    /* Single-line fast path: with no line break the per-line ZWSP
+     * normalization reduces to one leading sentinel, so the normalized
+     * buffer is exactly ZWSP+input -- or empty when the line is all blanks
+     * (the loop below defers leading whitespace and emits nothing if no
+     * content follows). Two bulk appends instead of the per-byte loop. */
+    bool single_line = (memchr(src, '\n', src_len) == NULL &&
+                        memchr(src, '\r', src_len) == NULL);
+    if (single_line) {
+        size_t s = 0;
+        while (s < src_len && (src[s] == ' ' || src[s] == '\t')) s++;
+        if (s < src_len) {
+            smart_str_appendl(&norm, zwsp, sizeof(zwsp));
+            smart_str_appendl(&norm, src, src_len);
+        }
+    }
+
     bool need_zwsp = true;
     size_t pending_indent_start = 0;
     size_t pending_indent_len = 0;
 
-    for (size_t i = 0; i < src_len; i++) {
+    for (size_t i = 0; !single_line && i < src_len; i++) {
         char c = src[i];
         if (c == '\r') {
             if (i + 1 < src_len && src[i + 1] == '\n') {
@@ -368,23 +385,32 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         body_src_len = out_len;
     }
 
-    /* Strip remaining ZWSPs (the per-line sentinels we inserted). */
-    zend_string *body_str = zend_string_alloc(body_src_len, 0);
-    char *out = ZSTR_VAL(body_str);
-    size_t out_idx = 0;
-    for (size_t i = 0; i < body_src_len; i++) {
-        if (i + 2 < body_src_len &&
-            (unsigned char)body_src[i] == 0xE2 &&
-            (unsigned char)body_src[i + 1] == 0x80 &&
-            (unsigned char)body_src[i + 2] == 0x8B)
-        {
-            i += 2;
-            continue;
+    /* Strip remaining ZWSPs (the per-line sentinels we inserted). The only
+     * bytes removed are ZWSP (U+200B = E2 80 8B); if the body carries no
+     * 0xE2 lead byte at all -- the common single-line ASCII/Latin case,
+     * where the one wrapper sentinel was already removed above -- there is
+     * nothing to strip, so copy it wholesale and skip the per-byte scan. */
+    zend_string *body_str;
+    if (memchr(body_src, 0xE2, body_src_len) == NULL) {
+        body_str = zend_string_init(body_src, body_src_len, 0);
+    } else {
+        body_str = zend_string_alloc(body_src_len, 0);
+        char *out = ZSTR_VAL(body_str);
+        size_t out_idx = 0;
+        for (size_t i = 0; i < body_src_len; i++) {
+            if (i + 2 < body_src_len &&
+                (unsigned char)body_src[i] == 0xE2 &&
+                (unsigned char)body_src[i + 1] == 0x80 &&
+                (unsigned char)body_src[i + 2] == 0x8B)
+            {
+                i += 2;
+                continue;
+            }
+            out[out_idx++] = body_src[i];
         }
-        out[out_idx++] = body_src[i];
+        out[out_idx] = '\0';
+        ZSTR_LEN(body_str) = out_idx;
     }
-    out[out_idx] = '\0';
-    ZSTR_LEN(body_str) = out_idx;
 
     zend_string_release(rendered_zs);
     RETVAL_STR(body_str);
