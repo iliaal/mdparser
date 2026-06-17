@@ -125,7 +125,6 @@ mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It d
 - Table of contents
 - YAML front matter
 - Mentions (`@user`)
-- LaTeX math (`$$...$$`)
 - Emoji (`:smile:`)
 - Custom admonition containers (`::: warning`)
 

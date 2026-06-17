@@ -90,9 +90,11 @@ echo $parser->toHtml('<script>alert(1)</script>');
 // &lt;script&gt;alert(1)&lt;/script&gt;
 ```
 
-Safe mode lets through `http:`, `https:`, `mailto:`, `tel:`, `ftp:`,
-and `data:image/{png,jpeg,gif,webp}` URLs. See `docs/security.md` for
-the full list and reasoning.
+Safe mode lets through `http:`, `https:`, `mailto:`, `tel:`, and `ftp:`
+URLs. `data:image/{png,jpeg,gif,webp}` is permitted only as an image
+source (`<img src>`), never as a link (`<a href>`) destination — a
+navigable `data:` document is rejected. See `docs/security.md` for the
+full list and reasoning.
 
 ### Unsafe mode
 

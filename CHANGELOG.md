@@ -7,57 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Parsing backend swapped from cmark-gfm to md4c. The public API
+  (`MdParser\Parser`, `MdParser\Options`, and the four render methods)
+  is unchanged, but the engine underneath is now md4c, a single-file
+  streaming CommonMark + GFM parser compiled directly into the
+  extension. This brings native CommonMark 0.31 conformance and removes
+  the cmark-gfm dependency entirely.
+- `headingAnchors` and `nofollowLinks` are now applied in-stream as the
+  renderer emits each node, not as a separate string pass over the
+  finished HTML. They act only on Markdown-derived headings and links;
+  raw HTML passed through under `unsafe: true` is emitted verbatim and
+  never rewritten. This resolves the 0.3.0 byte-collision limitation: a
+  raw `<h1>x</h1>` and a later Markdown `# x` no longer fight over the
+  `id`.
+- Source positions are gone (md4c exposes none). `sourcepos` and a few
+  former cmark renderer options (`githubPreLang`, `liberalHtmlTag`,
+  `strikethroughDoubleTilde`, `tablePreferStyleAttributes`,
+  `fullInfoString`) are accepted for API compatibility but inert.
+
 ### Added
 
+- md4c dialect options, each opt-in and default off: `latexMath`
+  (`$inline$` and `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers`
+  (`>!text!<`), `underline`, `highlight` (`==text==`), `superscript`
+  (`^text^`), and `subscript` (`~text~`). Each surfaces in `toXml()` and
+  `toAst()` as its own node type.
+- Parser-behavior toggles mapping to md4c flags: `noIndentedCodeBlocks`,
+  `permissiveAtxHeadings`, and `collapseWhitespace`.
 - PHP 8.2 support (lowered the minimum from 8.3).
 
 ### Fixed
 
-- `nofollowLinks`: a skip-region opener (`<!--`, `<script>`, ...) inside an
-  `href` value in raw HTML under `unsafe: true` fabricated a skip range to
-  end-of-document, silently stripping `rel="nofollow"` from every later
-  link and `id` from every later heading. Regression test:
-  `tests/044_nofollow_attr_opener.phpt`.
-- `headingAnchors`: an unterminated raw tag truncated the precomputed
-  skip list while the apply pass kept honoring later skip regions; the
-  desync silently dropped the `id` of a heading whose fingerprint also
-  appeared in such a region. Regression test:
-  `tests/045_skiplist_unterminated_tag.phpt`.
-- Module lifecycle: a second MINIT after MSHUTDOWN in the same process
-  (embedded SAPI cycle, a dlclose that doesn't unload) failed with
-  E_CORE_ERROR because cmark's one-shot registration guards survived
-  `cmark_release_plugins()`. The vendored guards are now resettable and
-  the extension-create functions idempotent. Regression test:
-  `tests/043_mshutdown_reminit_registry.phpt`.
-- `headingAnchors`: a skip-region opener (`<!--`, `<script>`, ...) inside
-  a quoted attribute value of raw HTML under `unsafe: true` fabricated a
-  skip range to end-of-document, silently stripping the `id` from every
-  later heading. Regression test: `tests/042_anchor_skiplist_attr_opener.phpt`.
-- `headingAnchors`: under `unsafe: true` with `tagfilter: false`, a
-  heading whose standalone fingerprint matched inside a tag attribute
-  value in raw HTML could freeze the anchor pass's heading cursor,
-  silently stripping the `id` from every heading after the collision.
-  The cursor now resyncs before each match attempt, so a stepped-over
-  fingerprint no longer cascades. Regression test:
-  `tests/038_anchor_attr_fingerprint.phpt`.
-- `headingAnchors`: a heading whose fingerprint could not be located
-  (e.g. its own body contains an inline raw-text element, so the
-  fingerprint straddles a skip region carved from itself) ran the shared
-  offset-resolution cursor to end-of-document, silently stripping the
-  `id` from every later heading. The cursor is now restored on a miss,
-  so one unresolvable heading no longer cascades. Regression test:
-  `tests/039_anchor_offset_cascade.phpt`.
-- Postprocess (`nofollowLinks` / `headingAnchors`): an unterminated raw
-  tag (e.g. an unbalanced quote in raw HTML under `unsafe: true`) made
-  the rewrite loop abandon all remaining transforms, dropping `rel` and
-  `id` injection for the rest of the document. The loop now treats the
-  stray `<` as a literal and keeps scanning. Regression test:
-  `tests/041_postprocess_unterminated_tag.phpt`.
-- `toInlineHtml`: a Parser built with `sourcepos: true` emitted a
-  `data-sourcepos` attribute on the `<p>` wrapper, defeating the
-  wrapper-strip and leaking `<p ...>` into the otherwise wrapper-free
-  inline output. The inline render now masks `sourcepos` off. Regression
-  test: `tests/040_inline_sourcepos.phpt`.
+- Code spans whose interior line ends in whitespace now render the
+  correct number of spaces, bringing CommonMark 0.31 conformance to a
+  clean 652/652. Carried as a local md4c patch (`vendor/VENDOR.md`),
+  submitted upstream as mity/md4c#378.
+- `toXml()` and `toAst()` cap nesting depth at `MDPARSER_MAX_AST_DEPTH`
+  (1000), so a tiny deeply-nested input can no longer amplify into
+  multi-megabyte output or exhaust memory; `toHtml()` is linear and
+  uncapped.
+- `toXml()` and `toAst()` entity-decode attribute bytes (link/image
+  URLs, titles) instead of leaking `&amp;`-encoded text, and `toXml()`
+  replaces XML-1.0-illegal control characters with U+FFFD so the output
+  stays well-formed.
+- `headingAnchors` slugs now include entity-decoded heading text, so
+  `# &copy;` and `# Caf&eacute;` produce the expected slug.
+
+### Performance
+
+- The HTML, XML, and AST renderers consume md4c's callbacks directly,
+  with a precomputed HTML-escape map, an ASCII fast path in UTF-8
+  validation, pre-sized output buffers, a scratch-free decode path for
+  plain attribute URLs, and a single-line fast path for `toInlineHtml()`.
 
 ## [0.3.0] - 2026-05-06
 
