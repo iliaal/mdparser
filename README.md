@@ -6,9 +6,9 @@
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-green.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Follow @iliaa](https://img.shields.io/badge/Follow-@iliaa-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/follow?screen_name=iliaa)
 
-![mdparser: ~5-9× faster than pure-PHP](images/mdparser-hero.jpg)
+![mdparser: ~10-20× faster than pure-PHP](images/mdparser-hero.jpg)
 
-Native C CommonMark + GitHub Flavored Markdown parser for PHP. ~5-9× faster than pure-PHP alternatives (Parsedown, cebe, michelf) on a clean optimized build, targeting CommonMark 0.31 (652/652 spec examples pass; see `docs/spec-coverage.md`). GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.2 minimum, OO API with `final` classes and `readonly` options.
+Native C CommonMark + GitHub Flavored Markdown parser for PHP. ~10-20× faster than pure-PHP alternatives (Parsedown, cebe, michelf) on a clean optimized build, targeting CommonMark 0.31 (652/652 spec examples pass; see `docs/spec-coverage.md`). GFM extensions: tables, strikethrough, task lists, autolinks, tagfilter. Installable via [PIE](https://github.com/php/pie) (the PHP Foundation's PECL successor); ships as a single `.so`. PHP 8.2 minimum, OO API with `final` classes and `readonly` options.
 
 ## 📦 Install
 
@@ -84,11 +84,11 @@ Against the major pure-PHP Markdown libraries, on PHP 8.4 (clean optimized build
 
 | Corpus | mdparser ops/sec | Best pure-PHP ops/sec | Speedup |
 |---|--:|--:|--:|
-| 200 B  | ~225,000 | ~26,000 (Parsedown)  | ~9× |
-| 1.8 KB | ~41,000  | ~5,900 (cebe/GitHub) | ~7× |
-| 200 KB | ~497     | ~99 (cebe/GitHub)    | ~5× |
+| 200 B  | ~530,000 | ~26,000 (Parsedown)  | ~20× |
+| 1.8 KB | ~110,000 | ~6,000 (cebe/GitHub) | ~19× |
+| 200 KB | ~980     | ~95 (cebe/GitHub)    | ~10× |
 
-~5-9× faster across the corpora (up to ~18× vs the slowest), from small messages to full 200 KB spec documents. [`bench/README.md`](bench/README.md) is the source of truth: methodology, all parsers, caveats, league/commonmark notes, and how to reproduce. (Always benchmark a clean optimized PHP build — a debug/ASan build inflates these numbers.)
+~10-20× faster across the corpora (up to ~45× vs the slowest), from small messages to full 200 KB spec documents. [`bench/README.md`](bench/README.md) is the source of truth: methodology, all parsers, caveats, league/commonmark notes, and how to reproduce. (Always benchmark a clean optimized PHP build — a debug/ASan build inflates these numbers.)
 
 ## ✨ Feature matrix
 

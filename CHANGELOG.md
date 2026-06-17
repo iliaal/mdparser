@@ -60,7 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The HTML, XML, and AST renderers consume md4c's callbacks directly,
   with a precomputed HTML-escape map, an ASCII fast path in UTF-8
   validation, pre-sized output buffers, a scratch-free decode path for
-  plain attribute URLs, and a single-line fast path for `toInlineHtml()`.
+  plain attribute URLs (HTML and XML), and a single-line fast path for
+  `toInlineHtml()`.
+- `toAst()` interns the recurring node keys (`type`, `children`) and the
+  node-type values once at module init instead of allocating and hashing
+  them per node, cutting allocator and hash-table work on the AST path
+  (about 15% faster on a 200 KB document on a clean optimized build).
 
 ## [0.3.0] - 2026-05-06
 

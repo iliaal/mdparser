@@ -6,39 +6,40 @@ inputs. Results are reproducible locally with the commands below.
 
 ## TL;DR
 
-mdparser is **~5-9x faster** than the fastest pure-PHP CommonMark
+mdparser is **~10-20x faster** than the fastest pure-PHP CommonMark
 libraries on all three corpora we measure (200 B, 1.8 KB, 200 KB), and
-up to ~18x faster than the slowest.
+up to ~45x faster than the slowest. (The previous cmark-gfm backend was
+~5-9x; the md4c migration roughly doubled throughput.)
 
 | Corpus | mdparser ops/sec | Best pure-PHP ops/sec | Speedup |
 |---|--:|--:|--:|
-| 200 B   | ~225,000 | ~26,000 (Parsedown)  | ~9x |
-| 1.8 KB  | ~41,000  | ~5,900 (cebe/GitHub) | ~7x |
-| 200 KB  | ~497     | ~99 (cebe/GitHub)    | ~5x |
+| 200 B   | ~530,000 | ~26,000 (Parsedown)  | ~20x |
+| 1.8 KB  | ~110,000 | ~6,000 (cebe/GitHub) | ~19x |
+| 200 KB  | ~980     | ~95 (cebe/GitHub)    | ~10x |
 
 The 200 KB corpus is CommonMark's own `spec.txt` (our
-`tests/fixtures/commonmark-spec.txt`). mdparser handles ~500 full
+`tests/fixtures/commonmark-spec.txt`). mdparser handles ~980 full
 spec-sized documents per second on a single core.
 
 ## Full results
 
-Latest measurement, iters=300, warmup=5, PHP 8.4.22-dev (NTS) on Linux
+Latest measurement, iters=300, warmup=30, PHP 8.4.22-dev (NTS) on Linux
 WSL2, with all parsers at their default configuration:
 
 | Parser | Corpus | Size | Mean (ms) | Ops/sec | Speedup |
 |---|---|--:|--:|--:|--:|
-| mdparser | small | 200 B | 0.004 | 225668 | — |
-| parsedown | small | 200 B | 0.038 | 26268 | 8.6x |
-| cebe/markdown | small | 200 B | 0.043 | 23143 | 9.8x |
-| michelf | small | 200 B | 0.077 | 12934 | 17.4x |
-| mdparser | medium | 1.8 KB | 0.024 | 40923 | — |
-| parsedown | medium | 1.8 KB | 0.220 | 4551 | 9.0x |
-| cebe/markdown | medium | 1.8 KB | 0.171 | 5855 | 7.0x |
-| michelf | medium | 1.8 KB | 0.445 | 2246 | 18.2x |
-| mdparser | large | 200.2 KB | 2.010 | 497 | — |
-| parsedown | large | 200.2 KB | 11.429 | 87 | 5.7x |
-| cebe/markdown | large | 200.2 KB | 10.028 | 99 | 5.0x |
-| michelf | large | 200.2 KB | 22.054 | 45 | 11.0x |
+| mdparser | small | 200 B | 0.002 | 535494 | — |
+| parsedown | small | 200 B | 0.037 | 27391 | 19.5x |
+| cebe/markdown | small | 200 B | 0.041 | 24331 | 22.0x |
+| michelf | small | 200 B | 0.077 | 12933 | 41.4x |
+| mdparser | medium | 1.8 KB | 0.009 | 107940 | — |
+| parsedown | medium | 1.8 KB | 0.225 | 4449 | 24.3x |
+| cebe/markdown | medium | 1.8 KB | 0.176 | 5694 | 19.0x |
+| michelf | medium | 1.8 KB | 0.419 | 2388 | 45.2x |
+| mdparser | large | 200.2 KB | 1.024 | 976 | — |
+| parsedown | large | 200.2 KB | 11.253 | 88 | 11.0x |
+| cebe/markdown | large | 200.2 KB | 11.083 | 90 | 10.8x |
+| michelf | large | 200.2 KB | 22.531 | 44 | 22.0x |
 
 **Speedup column reads as "X times slower than mdparser".** Higher
 numbers = mdparser wins more decisively. The comparison is fair in
