@@ -174,6 +174,9 @@ static void mdparser_options_populate_object(zend_object *this_obj,
         ZVAL_BOOL(&tmp, values[i]);
         zend_update_property(mdparser_options_ce, this_obj,
             f->name, f->name_len, &tmp);
+        /* On a readonly-reentry violation the first write throws; stop so the
+         * reported property is the first failure, not the last field. */
+        if (EG(exception)) return;
     }
 }
 

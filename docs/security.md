@@ -77,24 +77,24 @@ echo $p->toHtml('![logo](data:image/png;base64,iVBORw0KGgo=)');
 // <p><img src="data:image/png;base64,iVBORw0KGgo=" alt="logo" /></p>
 ```
 
-### Raw HTML replacement
+### Raw HTML escaping
 
-Any raw HTML block or inline tag gets replaced with
-`<!-- raw HTML omitted -->`. The text content inside the tag is
-preserved (because stripping just the tags could still leak useful
-information), but script tags don't execute.
+Any raw HTML block or inline tag is HTML-escaped: `<` becomes `&lt;`,
+`>` becomes `&gt;`, so the markup renders as visible text instead of
+live elements. The content is preserved verbatim (escaped), and no tag
+executes.
 
 ```php
 echo $p->toHtml('<script>alert(1)</script>');
-// <!-- raw HTML omitted -->
+// &lt;script&gt;alert(1)&lt;/script&gt;
 
-echo $p->toHtml('before <script>alert(1)</script> after');
-// <p>before <!-- raw HTML omitted -->alert(1)<!-- raw HTML omitted --> after</p>
+echo $p->toHtml('before <b>x</b> after');
+// <p>before &lt;b&gt;x&lt;/b&gt; after</p>
 ```
 
-This is more aggressive than just escaping `<` — the whole tag is
-removed so even a clever scheme that targets a specific parser quirk
-can't get through.
+Escaping (rather than stripping) keeps the output faithful to the
+input while neutralizing every tag — there is no parser-quirk gap for a
+crafted tag to slip through.
 
 ## Tag filter (GFM, default-on)
 

@@ -52,7 +52,10 @@ static void mdx_indent(mdx_ctx *c)
 
 #define X_LIT(c, lit) smart_str_appendl(&(c)->out, "" lit, sizeof(lit) - 1)
 
-/* XML-escape into the output buffer (& < > and, for attrs, "). */
+/* XML-escape into the output buffer (& < > and, for attrs, "). C0 control
+ * bytes other than tab/LF/CR are illegal in XML 1.0 character data, so they
+ * are replaced with U+FFFD (matching the NULLCHAR policy) -- emitting them
+ * raw would make the whole document unparseable. */
 static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
 {
     size_t beg = 0, i = 0;
@@ -63,7 +66,11 @@ static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
             case '<': rep = "&lt;"; break;
             case '>': rep = "&gt;"; break;
             case '"': if (attr) rep = "&quot;"; break;
-            default: break;
+            default:
+                if ((unsigned char)s[i] < 0x20
+                    && s[i] != '\t' && s[i] != '\n' && s[i] != '\r')
+                    rep = "\xef\xbf\xbd";
+                break;
         }
         if (rep) {
             if (i > beg) smart_str_appendl(b, s + beg, i - beg);
@@ -185,7 +192,20 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             c->depth++;
             break;
         }
-        case MD_BLOCK_LI: mdx_open(c, "item"); break;
+        case MD_BLOCK_LI: {
+            MD_BLOCK_LI_DETAIL *d = detail;
+            mdx_indent(c);
+            if (d->is_task) {
+                X_LIT(c, "<item checked=\"");
+                smart_str_appends(&c->out,
+                    (d->task_mark == 'x' || d->task_mark == 'X') ? "true" : "false");
+                X_LIT(c, "\">\n");
+            } else {
+                X_LIT(c, "<item>\n");
+            }
+            c->depth++;
+            break;
+        }
         case MD_BLOCK_HR: mdx_indent(c); X_LIT(c, "<thematic_break />\n"); break;
         case MD_BLOCK_H: {
             int w = snprintf(buf, sizeof(buf), "<heading level=\"%u\">\n",
@@ -217,9 +237,27 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_TBODY: mdx_open(c, "table_body"); break;
         case MD_BLOCK_TR: mdx_open(c, "table_row"); break;
         case MD_BLOCK_TH:
-        case MD_BLOCK_TD: mdx_open(c, "table_cell"); break;
+        case MD_BLOCK_TD: {
+            MD_ALIGN al = ((MD_BLOCK_TD_DETAIL *)detail)->align;
+            const char *name = al == MD_ALIGN_LEFT ? "left"
+                : al == MD_ALIGN_CENTER ? "center"
+                : al == MD_ALIGN_RIGHT ? "right" : NULL;
+            mdx_indent(c);
+            X_LIT(c, "<table_cell");
+            if (name) { X_LIT(c, " align=\""); smart_str_appends(&c->out, name); smart_str_appendc(&c->out, '"'); }
+            X_LIT(c, ">\n");
+            c->depth++;
+            break;
+        }
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: mdx_open(c, "footnote_section"); break;
-        case MD_BLOCK_FOOTNOTE_DEF: mdx_open(c, "footnote_definition"); break;
+        case MD_BLOCK_FOOTNOTE_DEF: {
+            int w = snprintf(buf, sizeof(buf), "<footnote_definition id=\"%u\">\n",
+                ((MD_BLOCK_FOOTNOTE_DEF_DETAIL *)detail)->id);
+            mdx_indent(c);
+            smart_str_appendl(&c->out, buf, (size_t)w);
+            c->depth++;
+            break;
+        }
         default: mdx_open(c, "unknown"); break;
     }
     return 0;
@@ -314,7 +352,15 @@ static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             c->depth++;
             break;
         }
-        case MD_SPAN_FOOTNOTE_REF: mdx_open(c, "footnote_reference"); break;
+        case MD_SPAN_FOOTNOTE_REF: {
+            char fbuf[64];
+            int w = snprintf(fbuf, sizeof(fbuf), "<footnote_reference id=\"%u\">\n",
+                ((MD_SPAN_FOOTNOTE_REF_DETAIL *)detail)->id);
+            mdx_indent(c);
+            smart_str_appendl(&c->out, fbuf, (size_t)w);
+            c->depth++;
+            break;
+        }
         default: mdx_open(c, "unknown"); break;
     }
     return 0;

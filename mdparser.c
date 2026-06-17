@@ -31,6 +31,14 @@ PHP_MINIT_FUNCTION(mdparser)
     mdparser_exception_register_class();
     mdparser_options_register_class();
     mdparser_parser_register_class();
+
+    /* Reject dynamic properties: Options is readonly and Parser exposes only
+     * a readonly $options, so a typo'd `$o->headingAnchor = true` should be a
+     * hard Error, not a silently-ignored dynamic property the parser never
+     * reads. (gen_stub's readonly-class flag does not imply this for internal
+     * classes.) */
+    mdparser_options_ce->ce_flags |= ZEND_ACC_NO_DYNAMIC_PROPERTIES;
+    mdparser_parser_ce->ce_flags |= ZEND_ACC_NO_DYNAMIC_PROPERTIES;
     return SUCCESS;
 }
 

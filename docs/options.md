@@ -62,16 +62,15 @@ postprocess passes.
 
 ### `sourcepos: bool = false`
 
-When `true`, every rendered HTML element gets a `data-sourcepos` attribute
-pointing at the source line/column range it came from. Useful for
-round-tripping edits or building editor integrations.
+**Accepted but inert.** The md4c backend does not expose source
+positions, so this option has no effect — no `data-sourcepos` attributes
+are emitted regardless of its value. It is retained for API
+compatibility and may be removed in a future major version.
 
 ```php
 echo (new Parser(new Options(sourcepos: true)))->toHtml("# hi\n");
-// <h1 data-sourcepos="1:1-1:4">hi</h1>
+// <h1>hi</h1>   (sourcepos has no effect)
 ```
-
-Adds per-node overhead; leave off unless you need the positions.
 
 ### `hardbreaks: bool = false`
 
@@ -117,8 +116,8 @@ echo (new Parser(new Options(smart: true)))
 
 **Security-relevant.** When `false` (default), dangerous URL schemes in
 links and images are stripped to empty, and raw HTML in markdown is
-replaced with `<!-- raw HTML omitted -->`. When `true`, raw HTML and
-all URL schemes pass through verbatim.
+HTML-escaped (rendered as visible text). When `true`, raw HTML and all
+URL schemes pass through verbatim.
 
 Use `true` only for input you fully trust. See `docs/security.md` for
 the threat model.
@@ -134,32 +133,21 @@ Leave on unless you know your input is pre-validated UTF-8.
 
 ### `githubPreLang: bool = true`
 
-Controls the HTML form of fenced code blocks with a language info
-string.
+**Accepted but inert.** The md4c backend always renders a fenced code
+block with a language as `<pre><code class="language-X">` (the
+CommonMark spec form); this option does not change that. Retained for
+API compatibility.
 
 ```php
-$md = "```php\necho 1;\n```";
-
-// githubPreLang: true (default) — matches GitHub's rendering
-echo (new Parser())->toHtml($md);
-// <pre lang="php"><code>echo 1;
-// </code></pre>
-
-// githubPreLang: false — matches the CommonMark spec form
-echo (new Parser(new Options(githubPreLang: false)))->toHtml($md);
+echo (new Parser())->toHtml("```php\necho 1;\n```");
 // <pre><code class="language-php">echo 1;
 // </code></pre>
 ```
 
-Both forms are valid; the difference is presentation. The CommonMark
-spec examples use the second form, so the mdparser spec conformance
-test passes `false`. For real output consumed by GitHub-style
-stylesheets, leave it on.
-
 ### `liberalHtmlTag: bool = false`
 
-When `true`, the HTML tag scanner is more permissive — accepts malformed
-tags that a strict parser would reject. Off by default.
+**Accepted but inert.** Had no md4c equivalent after the backend
+migration; the value is ignored. Retained for API compatibility.
 
 ### `footnotes: bool = false`
 
@@ -181,20 +169,21 @@ When `false`, `[^1]` and `[^1]: ...` parse as literal text.
 
 ### `strikethroughDoubleTilde: bool = false`
 
-By default, single tildes are allowed to delimit strikethrough
-(`~strike~`). When `true`, only double tildes are allowed (`~~strike~~`).
-Use for stricter GFM compliance.
+**Accepted but inert.** md4c's strikethrough does not expose a
+single-vs-double-tilde toggle; the value is ignored. Retained for API
+compatibility.
 
 ### `tablePreferStyleAttributes: bool = false`
 
-When `true`, table cell alignment uses `style="text-align: left"`
-attributes instead of the older `align="left"`. Relevant if your
-downstream HTML consumer is picky.
+**Accepted but inert.** Table cell alignment always renders as
+`align="..."`; this option does not switch it to `style`. Retained for
+API compatibility.
 
 ### `fullInfoString: bool = false`
 
-When `true`, the full code fence info string (everything after the
-language tag) is preserved in a `data-meta` attribute. Default drops it.
+**Accepted but inert.** The full info string is not exposed as a
+`data-meta` attribute; the value is ignored. Retained for API
+compatibility.
 
 ## GFM extension toggles
 

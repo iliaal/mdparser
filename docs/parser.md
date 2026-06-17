@@ -78,8 +78,8 @@ echo $parser->toHtml("| a | b |\n|---|---|\n| 1 | 2 |\n");
 
 By default, dangerous URL schemes (`javascript:`, `vbscript:`,
 `data:text/html`, ...) are stripped to empty `href`/`src`, and raw HTML
-is replaced with `<!-- raw HTML omitted -->`. This is the right default
-for rendering untrusted input.
+is HTML-escaped so it renders as visible text rather than live markup.
+This is the right default for rendering untrusted input.
 
 ```php
 $parser = new Parser();
@@ -87,7 +87,7 @@ echo $parser->toHtml('[xss](javascript:alert(1))');
 // <p><a href="">xss</a></p>
 
 echo $parser->toHtml('<script>alert(1)</script>');
-// <!-- raw HTML omitted -->
+// &lt;script&gt;alert(1)&lt;/script&gt;
 ```
 
 Safe mode lets through `http:`, `https:`, `mailto:`, `tel:`, `ftp:`,
