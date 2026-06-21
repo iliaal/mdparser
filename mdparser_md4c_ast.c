@@ -40,7 +40,7 @@ const char *mdparser_md4c_ast_status_message(int status)
     switch (status) {
         case MDA_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDA_ERR_DEPTH: return "mdparser: AST nesting exceeds maximum depth";
-        default: return NULL;
+        default: return "mdparser: unknown error";
     }
 }
 
@@ -161,6 +161,13 @@ static bool mda_push(mda_ctx *c, zval *node)
 /* Pop the top node and append it to its parent. */
 static void mda_pop(mda_ctx *c)
 {
+    /* stack[0] is the document root and is never popped under md4c's
+     * balanced enter/leave contract; guard the underflow defensively so a
+     * future renderer change or contract break can't index stack[-1]. */
+    if (c->depth < 1) {
+        c->error = MDA_ERR_PARSE;
+        return;
+    }
     zval node = c->stack[c->depth];
     ZVAL_UNDEF(&c->stack[c->depth]);
     c->depth--;
@@ -168,28 +175,6 @@ static void mda_pop(mda_ctx *c)
 }
 
 /* ---- entity decoding for text leaves --------------------------------- */
-
-static void mda_append_cp(smart_str *b, unsigned cp)
-{
-    if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
-        smart_str_appendl(b, "\xef\xbf\xbd", 3);
-        return;
-    }
-    if (cp <= 0x7f) { smart_str_appendc(b, (char)cp); }
-    else if (cp <= 0x7ff) {
-        smart_str_appendc(b, (char)(0xc0 | (cp >> 6)));
-        smart_str_appendc(b, (char)(0x80 | (cp & 0x3f)));
-    } else if (cp <= 0xffff) {
-        smart_str_appendc(b, (char)(0xe0 | (cp >> 12)));
-        smart_str_appendc(b, (char)(0x80 | ((cp >> 6) & 0x3f)));
-        smart_str_appendc(b, (char)(0x80 | (cp & 0x3f)));
-    } else {
-        smart_str_appendc(b, (char)(0xf0 | (cp >> 18)));
-        smart_str_appendc(b, (char)(0x80 | ((cp >> 12) & 0x3f)));
-        smart_str_appendc(b, (char)(0x80 | ((cp >> 6) & 0x3f)));
-        smart_str_appendc(b, (char)(0x80 | (cp & 0x3f)));
-    }
-}
 
 static void mda_append_entity(smart_str *b, const char *text, MD_SIZE size)
 {
@@ -203,13 +188,13 @@ static void mda_append_entity(smart_str *b, const char *text, MD_SIZE size)
         } else {
             for (MD_SIZE i = 2; i < size - 1; i++) cp = cp * 10 + (text[i] - '0');
         }
-        mda_append_cp(b, cp);
+        mdparser_md4c_append_cp(b, cp);
         return;
     }
     const ENTITY *e = entity_lookup(text, size);
     if (e) {
-        mda_append_cp(b, e->codepoints[0]);
-        if (e->codepoints[1]) mda_append_cp(b, e->codepoints[1]);
+        mdparser_md4c_append_cp(b, e->codepoints[0]);
+        if (e->codepoints[1]) mdparser_md4c_append_cp(b, e->codepoints[1]);
     } else {
         smart_str_appendl(b, text, size);
     }

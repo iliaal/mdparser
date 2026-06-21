@@ -39,7 +39,7 @@ const char *mdparser_md4c_xml_status_message(int status)
     switch (status) {
         case MDX_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDX_ERR_DEPTH: return "mdparser: XML nesting exceeds maximum depth";
-        default: return NULL;
+        default: return "mdparser: unknown error";
     }
 }
 

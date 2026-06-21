@@ -22,6 +22,11 @@
  * U+10FFFF ceiling (RFC 3629). */
 size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail);
 
+/* Append codepoint `cp` to `out` as UTF-8, substituting U+FFFD for NUL,
+ * surrogates, and out-of-range values. Shared by the attribute decoder and
+ * the AST text-leaf entity decoder. */
+void mdparser_md4c_append_cp(smart_str *out, unsigned cp);
+
 /* validateUtf8 pre-pass shared by every md4c render path (HTML/XML/AST).
  * md4c never validates UTF-8; this restores the U+FFFD substitution for
  * invalid sequences. If `src` is already clean, returns `src` and sets

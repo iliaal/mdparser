@@ -34,7 +34,7 @@ const char *mdparser_md4c_status_message(int status)
         case MDM_ERR_PARSE:
             return "mdparser: md4c parser failed";
         default:
-            return NULL;
+            return "mdparser: unknown error";
     }
 }
 
@@ -376,6 +376,51 @@ static bool mdm_is_left_quote_context(unsigned char before)
         || before == '{' || before == '<' || before == '"' || before == '\'';
 }
 
+/* Unicode White_Space members above U+007F (Zs category + line/paragraph
+ * separators). Quote direction must treat these as left context, but
+ * prev_char only carries one byte, so a trailing multibyte space would
+ * otherwise present its 0x80-0xBF tail byte and read as right context. */
+static bool mdm_is_unicode_space(unsigned cp)
+{
+    switch (cp) {
+        case 0x00A0: case 0x1680:
+        case 0x2000: case 0x2001: case 0x2002: case 0x2003:
+        case 0x2004: case 0x2005: case 0x2006: case 0x2007:
+        case 0x2008: case 0x2009: case 0x200A:
+        case 0x2028: case 0x2029: case 0x202F: case 0x205F:
+        case 0x3000:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Quote-context byte for the trailing codepoint of a just-emitted run. For
+ * ASCII the byte is the context directly. For a trailing multibyte sequence
+ * the raw tail byte (0x80-0xBF) always reads as right context, which is right
+ * for letters/symbols but wrong for Unicode spaces; decode the final
+ * codepoint and map those to ' ' so a following quote still opens. */
+static unsigned char mdm_trailing_quote_char(const char *p, size_t n)
+{
+    if (n == 0) return 0;
+    unsigned char last = (unsigned char)p[n - 1];
+    if (last < 0x80) return last;
+    size_t i = n - 1;
+    while (i > 0 && ((unsigned char)p[i] & 0xC0) == 0x80) i--;
+    unsigned char lead = (unsigned char)p[i];
+    size_t seqlen = n - i;
+    unsigned cp = 0;
+    if ((lead & 0xE0) == 0xC0 && seqlen >= 2)
+        cp = ((lead & 0x1Fu) << 6) | ((unsigned char)p[i + 1] & 0x3Fu);
+    else if ((lead & 0xF0) == 0xE0 && seqlen >= 3)
+        cp = ((lead & 0x0Fu) << 12) | (((unsigned char)p[i + 1] & 0x3Fu) << 6)
+            | ((unsigned char)p[i + 2] & 0x3Fu);
+    else if ((lead & 0xF8) == 0xF0 && seqlen >= 4)
+        cp = ((lead & 0x07u) << 18) | (((unsigned char)p[i + 1] & 0x3Fu) << 12)
+            | (((unsigned char)p[i + 2] & 0x3Fu) << 6) | ((unsigned char)p[i + 3] & 0x3Fu);
+    return mdm_is_unicode_space(cp) ? ' ' : last;
+}
+
 /* Render `data` as normal text with smart-punctuation transforms.
  * Anything not transformed is HTML-escaped. */
 static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
@@ -426,7 +471,7 @@ static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
         }
         if (i > beg) {
             mdm_escape_html(r, data + beg, i - beg);
-            r->prev_char = (unsigned char)data[i - 1];
+            r->prev_char = mdm_trailing_quote_char(data + beg, i - beg);
         }
     }
 }
@@ -765,6 +810,10 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
      * every block open; doing the same reproduces its inter-block whitespace
      * (notably `<li>\n<block>`). */
     mdm_cr(r);
+    /* A new block starts a fresh SmartyPants quote context; otherwise the
+     * previous block's trailing character bleeds in and a leading quote
+     * renders as a closing quote (e.g. a paragraph that opens with "..."). */
+    r->prev_char = 0;
     switch (type) {
         case MD_BLOCK_DOC: break;
         case MD_BLOCK_QUOTE: OUT_LIT(r, "<blockquote>\n"); break;
@@ -984,20 +1033,20 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
              * (e.g. `&amp;` -> '&' is right-context; `&#32;` -> ' ' is left),
              * not a blanket 0 which would force an opening quote. */
             if (r->cur->s && ZSTR_LEN(r->cur->s) > 0)
-                r->prev_char = (unsigned char)ZSTR_VAL(r->cur->s)[ZSTR_LEN(r->cur->s) - 1];
+                r->prev_char = mdm_trailing_quote_char(ZSTR_VAL(r->cur->s), ZSTR_LEN(r->cur->s));
             break;
         case MD_TEXT_CODE:
         case MD_TEXT_LATEXMATH:
             /* Verbatim TeX / code: HTML-escape, never SmartyPants. */
             mdm_escape_html(r, text, size);
-            r->prev_char = size ? (unsigned char)text[size - 1] : r->prev_char;
+            if (size) r->prev_char = mdm_trailing_quote_char(text, size);
             break;
         default:  /* MD_TEXT_NORMAL */
             if (r->render_opts & MDPARSER_RF_SMART) {
                 mdm_render_smart(r, text, size);
             } else {
                 mdm_escape_html(r, text, size);
-                if (size) r->prev_char = (unsigned char)text[size - 1];
+                if (size) r->prev_char = mdm_trailing_quote_char(text, size);
             }
             break;
     }

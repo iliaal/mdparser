@@ -32,7 +32,7 @@ static unsigned mdu_hex_val(char ch)
 
 /* Append a codepoint as UTF-8, substituting U+FFFD for NUL / surrogates /
  * out-of-range values. */
-static void mdu_append_cp(smart_str *out, unsigned cp)
+void mdparser_md4c_append_cp(smart_str *out, unsigned cp)
 {
     unsigned char u[4];
     if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
@@ -74,7 +74,7 @@ void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
             }
             for (int k = 0; k < 2; k++) {
                 if (k == 1 && cps[k] == 0) break;
-                mdu_append_cp(out, cps[k]);
+                mdparser_md4c_append_cp(out, cps[k]);
             }
         } else {
             smart_str_appendl(out, text, sz);
@@ -154,8 +154,28 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
         *out_len = len;
         return src;
     }
-    /* Worst case: every byte becomes a 3-byte U+FFFD. */
-    char *dst = emalloc(len * 3 + 1);
+    /* Size the rebuild buffer exactly: valid bytes pass through, each invalid
+     * byte expands to a 3-byte U+FFFD. This counting pass mirrors the rebuild
+     * loop below, so it avoids the len*3 worst case (768 MB at the 256 MB
+     * input cap) when only a handful of bytes are invalid. */
+    size_t out_size = 0;
+    i = 0;
+    while (i < len) {
+        size_t beg = i;
+        while (i + 8 <= len) {
+            uint64_t w;
+            memcpy(&w, p + i, 8);
+            if (w & 0x8080808080808080ULL) break;
+            i += 8;
+        }
+        while (i < len && p[i] < 0x80) i++;
+        out_size += i - beg;
+        if (i >= len) break;
+        size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
+        if (n == 0) { out_size += 3; i++; }
+        else { out_size += n; i += n; }
+    }
+    char *dst = emalloc(out_size + 1);
     size_t o = 0;
     i = 0;
     while (i < len) {

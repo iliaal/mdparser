@@ -28,6 +28,14 @@
 
 zend_class_entry *mdparser_parser_ce;
 
+/* Each render path casts the post-validation byte length to md4c's MD_SIZE
+ * (a 32-bit unsigned) for md_parse(). The input-size cap keeps every length
+ * far inside that range; assert it at compile time so a future cap bump can't
+ * silently reintroduce truncation. Portable negative-array idiom stands in
+ * for _Static_assert, which MSVC rejects in default C mode. */
+typedef char mdparser_input_cap_fits_md_size[
+    (MDPARSER_MAX_INPUT_SIZE <= (size_t)(MD_SIZE)-1) ? 1 : -1];
+
 static zend_object_handlers mdparser_parser_handlers;
 
 static zend_object *mdparser_parser_create(zend_class_entry *ce)
