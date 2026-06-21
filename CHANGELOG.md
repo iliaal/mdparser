@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SmartyPants (`smart` option) now opens a quote at the start of a block instead of inheriting the previous block's trailing character.
+- SmartyPants (`smart` option) now treats a trailing multibyte Unicode space (U+00A0 and friends) before a quote as a space, so the quote opens.
+- The UTF-8 validation pre-pass sizes its sanitized buffer to the exact output instead of up to 3x the input length.
+
 ## [0.4.1] - 2026-06-17
 
 ### Added
