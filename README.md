@@ -88,7 +88,7 @@ Against the major pure-PHP Markdown libraries, on PHP 8.4 (clean optimized build
 | 1.8 KB | ~110,000 | ~6,000 (cebe/GitHub) | ~19× |
 | 200 KB | ~980     | ~95 (cebe/GitHub)    | ~10× |
 
-~10-20× faster across the corpora (up to ~45× vs the slowest), from small messages to full 200 KB spec documents. [`bench/README.md`](bench/README.md) is the source of truth: methodology, all parsers, caveats, league/commonmark notes, and how to reproduce. (Always benchmark a clean optimized PHP build — a debug/ASan build inflates these numbers.)
+~10-20× faster across the corpora (up to ~45× vs the slowest), from small messages to full 200 KB spec documents. [`bench/README.md`](bench/README.md) is the source of truth: methodology, all parsers, caveats, league/commonmark notes, and how to reproduce. (Always benchmark a clean optimized PHP build; a debug/ASan build inflates these numbers.)
 
 ## ✨ Feature matrix
 
@@ -140,7 +140,7 @@ These are real features. They're just out of scope for a CommonMark+GFM core par
 `Options::unsafe = true` tells the renderer to pass raw HTML through verbatim instead of escaping or stripping it. The contract for this mode is that you own the input: it is yours, or it comes from a pipeline you trust. `headingAnchors` and `nofollowLinks` are applied in-stream as md4c parses the source, so they touch only Markdown-derived nodes; raw HTML you write directly is emitted verbatim and is never rewritten:
 
 - **Heading anchors apply to Markdown headings only.** A `# heading` gets an `id` slug. A raw `<h1>x</h1>` block written directly in the source (possible under `unsafe: true, tagfilter: false`) is raw HTML, not a parsed heading node, so it is emitted untouched and gets no id. A raw heading and a later Markdown heading with the same text do not collide.
-- **`nofollowLinks` applies to Markdown links only.** Inline links, reference links, and autolinks get `rel="nofollow noopener noreferrer"`; in-document fragment anchors (`href="#..."`, including footnote references and backrefs) are skipped. A raw `<a href="...">` written directly in the source is passed through verbatim rather than rewritten — sanitize raw HTML yourself if you allow it.
+- **`nofollowLinks` applies to Markdown links only.** Inline links, reference links, and autolinks get `rel="nofollow noopener noreferrer"`; in-document fragment anchors (`href="#..."`, including footnote references and backrefs) are skipped. A raw `<a href="...">` written directly in the source is passed through verbatim rather than rewritten. Sanitize raw HTML yourself if you allow it.
 
 ### Structural outputs are unsanitized
 
