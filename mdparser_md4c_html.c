@@ -418,6 +418,11 @@ static unsigned char mdm_trailing_quote_char(const char *p, size_t n)
     else if ((lead & 0xF8) == 0xF0 && seqlen >= 4)
         cp = ((lead & 0x07u) << 18) | (((unsigned char)p[i + 1] & 0x3Fu) << 12)
             | (((unsigned char)p[i + 2] & 0x3Fu) << 6) | ((unsigned char)p[i + 3] & 0x3Fu);
+    /* U+200B (ZWSP) is category Cf, not White_Space, so it is absent from
+     * mdm_is_unicode_space; but toInlineHtml prefixes each physical line with a
+     * ZWSP as a block-suppression sentinel, and a quote right after it should
+     * still open, so treat it as left context here. */
+    if (cp == 0x200B) return ' ';
     return mdm_is_unicode_space(cp) ? ' ' : last;
 }
 
@@ -1017,7 +1022,8 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
     switch (type) {
         case MD_TEXT_NULLCHAR: mdm_append_codepoint(r, 0x0000); break;
         case MD_TEXT_BR:
-            OUT_LIT(r, "<br />\n");
+            if (r->image_nesting_level > 0) OUT_LIT(r, " ");
+            else OUT_LIT(r, "<br />\n");
             r->prev_char = 0;
             break;
         case MD_TEXT_SOFTBR:
