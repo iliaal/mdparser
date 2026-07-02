@@ -185,7 +185,6 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
 static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
-    char buf[64];
     /* Cap nesting: indentation is 2*depth spaces per line, so unbounded depth
      * makes a tiny input produce quadratic XML (a DoS amplifier). Aborting
      * here mirrors the toAst depth cap and fails with a clean exception. */
@@ -203,11 +202,13 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_OL: {
             MD_BLOCK_OL_DETAIL *d = detail;
             mdx_indent(c);
-            int w = snprintf(buf, sizeof(buf),
-                "<list type=\"ordered\" start=\"%u\" delim=\"%s\" tight=\"%s\">\n",
-                d->start, d->mark_delimiter == ')' ? "paren" : "period",
-                d->is_tight ? "true" : "false");
-            smart_str_appendl(&c->out, buf, (size_t)w);
+            X_LIT(c, "<list type=\"ordered\" start=\"");
+            smart_str_append_unsigned(&c->out, d->start);
+            X_LIT(c, "\" delim=\"");
+            smart_str_appends(&c->out, d->mark_delimiter == ')' ? "paren" : "period");
+            X_LIT(c, "\" tight=\"");
+            smart_str_appends(&c->out, d->is_tight ? "true" : "false");
+            X_LIT(c, "\">\n");
             c->depth++;
             break;
         }
@@ -227,10 +228,10 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         }
         case MD_BLOCK_HR: mdx_indent(c); X_LIT(c, "<thematic_break />\n"); break;
         case MD_BLOCK_H: {
-            int w = snprintf(buf, sizeof(buf), "<heading level=\"%u\">\n",
-                ((MD_BLOCK_H_DETAIL *)detail)->level);
             mdx_indent(c);
-            smart_str_appendl(&c->out, buf, (size_t)w);
+            X_LIT(c, "<heading level=\"");
+            smart_str_append_unsigned(&c->out, ((MD_BLOCK_H_DETAIL *)detail)->level);
+            X_LIT(c, "\">\n");
             c->depth++;
             break;
         }
@@ -270,10 +271,10 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         }
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: mdx_open(c, "footnote_section"); break;
         case MD_BLOCK_FOOTNOTE_DEF: {
-            int w = snprintf(buf, sizeof(buf), "<footnote_definition id=\"%u\">\n",
-                ((MD_BLOCK_FOOTNOTE_DEF_DETAIL *)detail)->id);
             mdx_indent(c);
-            smart_str_appendl(&c->out, buf, (size_t)w);
+            X_LIT(c, "<footnote_definition id=\"");
+            smart_str_append_unsigned(&c->out, ((MD_BLOCK_FOOTNOTE_DEF_DETAIL *)detail)->id);
+            X_LIT(c, "\">\n");
             c->depth++;
             break;
         }
@@ -381,11 +382,10 @@ static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             break;
         }
         case MD_SPAN_FOOTNOTE_REF: {
-            char fbuf[64];
-            int w = snprintf(fbuf, sizeof(fbuf), "<footnote_reference id=\"%u\">\n",
-                ((MD_SPAN_FOOTNOTE_REF_DETAIL *)detail)->id);
             mdx_indent(c);
-            smart_str_appendl(&c->out, fbuf, (size_t)w);
+            X_LIT(c, "<footnote_reference id=\"");
+            smart_str_append_unsigned(&c->out, ((MD_SPAN_FOOTNOTE_REF_DETAIL *)detail)->id);
+            X_LIT(c, "\">\n");
             c->depth++;
             break;
         }

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The CommonMark XML serializer (`toXml`) no longer overflows a fixed 64-byte stack buffer on an ordered list with a wide start number; the `<list>`, `<heading>`, and footnote tags now stream directly instead of through a truncating `snprintf`. Wide starts previously truncated the tag, embedded a NUL byte, and (at the widest md4c parses) read past the buffer into stack memory.
 - SmartyPants (`smart` option) now opens a quote at the start of a block instead of inheriting the previous block's trailing character.
 - SmartyPants (`smart` option) now treats a trailing multibyte Unicode space (U+00A0 and friends) before a quote as a space, so the quote opens.
 - The UTF-8 validation pre-pass sizes its sanitized buffer to the exact output instead of up to 3x the input length.
