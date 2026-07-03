@@ -15,13 +15,13 @@ if test "$PHP_MDPARSER" != "no"; then
 
   dnl md4c (https://github.com/mity/md4c, MIT) is the parsing backend. It is
   dnl a single-file push parser plus its bundled HTML entity table; the HTML
-  dnl renderer ships too but we use our own callback renderer (safe-mode,
-  dnl heading anchors, nofollow, smart punctuation). entity.c is still needed
-  dnl for named-entity decoding. See .plan/md4c-migration.md and vendor/VENDOR.md.
+  dnl renderer (md4c-html.c) is vendored but not compiled; we use our own
+  dnl callback renderer (safe-mode, heading anchors, nofollow, smart
+  dnl punctuation). entity.c is still needed for named-entity decoding.
+  dnl See .plan/md4c-migration.md and vendor/VENDOR.md.
   MD4C_SRC_DIR=vendor/md4c
   MD4C_SOURCES="\
     $MD4C_SRC_DIR/md4c.c \
-    $MD4C_SRC_DIR/md4c-html.c \
     $MD4C_SRC_DIR/entity.c"
 
   WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c mdparser_md4c_xml.c mdparser_md4c_util.c"

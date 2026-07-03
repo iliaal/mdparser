@@ -7,9 +7,9 @@ if (PHP_MDPARSER != "no") {
 
     // md4c (https://github.com/mity/md4c, MIT): single-file push parser plus
     // its bundled HTML entity table. entity.c is needed for named-entity
-    // decoding; we use our own callback renderer over md4c (md4c-html.c ships
-    // but is not the active renderer). Keep in sync with config.m4.
-    var md4c_sources = "md4c.c md4c-html.c entity.c";
+    // decoding; we use our own callback renderer (md4c-html.c is vendored but
+    // not compiled). Keep in sync with config.m4.
+    var md4c_sources = "md4c.c entity.c";
 
     var wrapper_sources = "mdparser.c mdparser_parser.c mdparser_options.c " +
         "mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c " +

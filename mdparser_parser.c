@@ -246,6 +246,54 @@ PHP_METHOD(MdParser_Parser, toAst)
     }
 }
 
+/* True when a physical line's first non-indent byte can open a block rule.
+ * Used to skip per-line ZWSP insertion when every line is inline-safe. */
+static bool mdparser_inline_line_starts_block(const char *line, size_t len)
+{
+    size_t i = 0;
+    while (i < len && (line[i] == ' ' || line[i] == '\t')) {
+        i++;
+    }
+    if (i >= len) {
+        return false;
+    }
+    char c = line[i];
+    if (c == '#' || c == '>' || c == '<' || c == '|' || c == '=') {
+        return true;
+    }
+    if (c == '-' || c == '+' || c == '*' || c == '`' || c == '_') {
+        return true;
+    }
+    if (c >= '0' && c <= '9') {
+        return true;
+    }
+    return false;
+}
+
+/* Scan for any line that needs a per-line ZWSP sentinel. */
+static bool mdparser_inline_needs_per_line_zwsp(const char *src, size_t src_len)
+{
+    size_t i = 0;
+    while (i < src_len) {
+        size_t line_beg = i;
+        while (i < src_len && src[i] != '\n' && src[i] != '\r') {
+            i++;
+        }
+        if (mdparser_inline_line_starts_block(src + line_beg, i - line_beg)) {
+            return true;
+        }
+        if (i < src_len && src[i] == '\r') {
+            i++;
+            if (i < src_len && src[i] == '\n') {
+                i++;
+            }
+        } else if (i < src_len) {
+            i++;
+        }
+    }
+    return false;
+}
+
 /* Parsedown::line() semantics: render `source` as inline-only HTML
  * without the `<p>` wrapper, and suppress all block-level constructs
  * so `# h` / `- a` / `> q` / `1. x` render as literal text.
@@ -316,6 +364,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         }
     }
 
+    bool per_line_zwsp = !single_line && mdparser_inline_needs_per_line_zwsp(src, src_len);
     bool need_zwsp = true;
     size_t pending_indent_start = 0;
     size_t pending_indent_len = 0;
@@ -335,7 +384,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
                 continue;
             }
             smart_str_appendc(&norm, '\n');
-            need_zwsp = true;
+            need_zwsp = per_line_zwsp;
             continue;
         }
         if (need_zwsp && (c == ' ' || c == '\t')) {

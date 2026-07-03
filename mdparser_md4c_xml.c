@@ -54,7 +54,22 @@ typedef struct {
 
 static void mdx_indent(mdx_ctx *c)
 {
-    for (int i = 0; i < c->depth; i++) smart_str_appendl(&c->out, "  ", 2);
+    int d = c->depth;
+    if (d <= 0) {
+        return;
+    }
+    /* Bulk-append up to 64 levels (128 spaces) from the stack; deeper
+     * nesting falls back to the loop (capped by MDPARSER_MAX_AST_DEPTH). */
+    if (d <= 64) {
+        char spaces[128];
+        size_t n = (size_t)d * 2;
+        memset(spaces, ' ', n);
+        smart_str_appendl(&c->out, spaces, n);
+        return;
+    }
+    for (int i = 0; i < d; i++) {
+        smart_str_appendl(&c->out, "  ", 2);
+    }
 }
 
 #define X_LIT(c, lit) smart_str_appendl(&(c)->out, "" lit, sizeof(lit) - 1)
@@ -63,8 +78,26 @@ static void mdx_indent(mdx_ctx *c)
  * bytes other than tab/LF/CR are illegal in XML 1.0 character data, so they
  * are replaced with U+FFFD (matching the NULLCHAR policy) -- emitting them
  * raw would make the whole document unparseable. */
+static bool mdx_needs_escape(const char *s, size_t n, bool attr)
+{
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        if (c == '&' || c == '<' || c == '>' || (attr && c == '"')) {
+            return true;
+        }
+        if ((unsigned char)c < 0x20 && c != '\t' && c != '\n' && c != '\r') {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
 {
+    if (!mdx_needs_escape(s, n, attr)) {
+        smart_str_appendl(b, s, n);
+        return;
+    }
     size_t beg = 0, i = 0;
     for (; i < n; i++) {
         const char *rep = NULL;

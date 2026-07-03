@@ -91,6 +91,15 @@ enum {
 static zend_string *mda_k_type;
 static zend_string *mda_k_children;
 static zend_string *mda_types[MDA_T__COUNT];
+static zend_string *mda_s_list_bullet;
+static zend_string *mda_s_list_ordered;
+static zend_string *mda_s_delim_none;
+static zend_string *mda_s_delim_period;
+static zend_string *mda_s_delim_paren;
+static zend_string *mda_s_align_left;
+static zend_string *mda_s_align_center;
+static zend_string *mda_s_align_right;
+static zend_string *mda_s_align_none;
 
 void mdparser_md4c_ast_minit(void)
 {
@@ -99,6 +108,15 @@ void mdparser_md4c_ast_minit(void)
 #define MDA_T_INIT(id) mda_types[MDA_T_##id] = zend_string_init_interned(#id, sizeof(#id) - 1, 1);
     MDA_NODE_TYPES(MDA_T_INIT)
 #undef MDA_T_INIT
+    mda_s_list_bullet = zend_string_init_interned("bullet", sizeof("bullet") - 1, 1);
+    mda_s_list_ordered = zend_string_init_interned("ordered", sizeof("ordered") - 1, 1);
+    mda_s_delim_none = zend_string_init_interned("none", sizeof("none") - 1, 1);
+    mda_s_delim_period = zend_string_init_interned("period", sizeof("period") - 1, 1);
+    mda_s_delim_paren = zend_string_init_interned("paren", sizeof("paren") - 1, 1);
+    mda_s_align_left = zend_string_init_interned("left", sizeof("left") - 1, 1);
+    mda_s_align_center = zend_string_init_interned("center", sizeof("center") - 1, 1);
+    mda_s_align_right = zend_string_init_interned("right", sizeof("right") - 1, 1);
+    mda_s_align_none = zend_string_init_interned("none", sizeof("none") - 1, 1);
 }
 
 /* ---- node helpers ---------------------------------------------------- */
@@ -202,13 +220,13 @@ static void mda_append_entity(smart_str *b, const char *text, MD_SIZE size)
 
 /* ---- callbacks ------------------------------------------------------- */
 
-static const char *mda_align_name(MD_ALIGN a)
+static zend_string *mda_align_str(MD_ALIGN a)
 {
     switch (a) {
-        case MD_ALIGN_LEFT: return "left";
-        case MD_ALIGN_CENTER: return "center";
-        case MD_ALIGN_RIGHT: return "right";
-        default: return "none";
+        case MD_ALIGN_LEFT: return mda_s_align_left;
+        case MD_ALIGN_CENTER: return mda_s_align_center;
+        case MD_ALIGN_RIGHT: return mda_s_align_right;
+        default: return mda_s_align_none;
     }
 }
 
@@ -224,19 +242,20 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_QUOTE: mda_new_node(&n, MDA_T_block_quote); break;
         case MD_BLOCK_UL: {
             mda_new_node(&n, MDA_T_list);
-            add_assoc_string(&n, "list_type", "bullet");
+            add_assoc_str(&n, "list_type", mda_s_list_bullet);
             add_assoc_long(&n, "list_start", 0);
             add_assoc_bool(&n, "list_tight", ((MD_BLOCK_UL_DETAIL *)detail)->is_tight);
-            add_assoc_string(&n, "list_delim", "none");
+            add_assoc_str(&n, "list_delim", mda_s_delim_none);
             break;
         }
         case MD_BLOCK_OL: {
             MD_BLOCK_OL_DETAIL *d = detail;
             mda_new_node(&n, MDA_T_list);
-            add_assoc_string(&n, "list_type", "ordered");
+            add_assoc_str(&n, "list_type", mda_s_list_ordered);
             add_assoc_long(&n, "list_start", d->start);
             add_assoc_bool(&n, "list_tight", d->is_tight);
-            add_assoc_string(&n, "list_delim", d->mark_delimiter == ')' ? "paren" : "period");
+            add_assoc_str(&n, "list_delim",
+                d->mark_delimiter == ')' ? mda_s_delim_paren : mda_s_delim_period);
             break;
         }
         case MD_BLOCK_LI: {
@@ -273,7 +292,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             zval aligns;
             array_init(&aligns);
             for (unsigned i = 0; i < ((MD_BLOCK_TABLE_DETAIL *)detail)->col_count; i++)
-                add_next_index_string(&aligns, "none"); /* refined from header cells */
+                add_next_index_str(&aligns, mda_s_align_none); /* refined from header cells */
             add_assoc_zval(&n, "alignments", &aligns);
             break;
         }
@@ -289,7 +308,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             zval *aligns = mda_table_alignments(c);
             if (aligns) {
                 zval av;
-                ZVAL_STRING(&av, mda_align_name(((MD_BLOCK_TD_DETAIL *)detail)->align));
+                ZVAL_STR(&av, mda_align_str(((MD_BLOCK_TD_DETAIL *)detail)->align));
                 zend_hash_index_update(Z_ARRVAL_P(aligns), c->th_col, &av);
             }
             c->th_col++;
