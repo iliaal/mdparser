@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-03
+
+### Changed
+
+- `toAst` and `toInlineHtml` are faster on multi-line input (interned AST metadata strings; per-line zero-width-space insertion is skipped when no line can open a block). Output is byte-identical.
+
 ### Fixed
 
 - The CommonMark XML serializer (`toXml`) no longer overflows a fixed 64-byte stack buffer on an ordered list with a wide start number; the `<list>`, `<heading>`, and footnote tags now stream directly instead of through a truncating `snprintf`. Wide starts previously truncated the tag, embedded a NUL byte, and (at the widest md4c parses) read past the buffer into stack memory.
@@ -15,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The UTF-8 validation pre-pass sizes its sanitized buffer to the exact output instead of up to 3x the input length.
 - A hard line break inside image alt text now renders as a space instead of literal `<br />` markup in the attribute value.
 - SmartyPants (`smart` option) now opens a quote at the start of a line under `toInlineHtml`; the zero-width-space line sentinel is treated as a space rather than flipping the quote to a closing one.
+- `toInlineHtml` now renders a tilde-fenced code block (`~~~`) on a continuation line as literal text instead of leaking a block-level `<pre><code>`; backtick fences were already suppressed.
 
 ## [0.4.1] - 2026-06-17
 
@@ -472,7 +479,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.1...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.2...HEAD
+[0.4.2]: https://github.com/iliaal/mdparser/releases/tag/0.4.2
 [0.4.1]: https://github.com/iliaal/mdparser/releases/tag/0.4.1
 [0.4.0]: https://github.com/iliaal/mdparser/releases/tag/0.4.0
 [0.3.0]: https://github.com/iliaal/mdparser/releases/tag/0.3.0
