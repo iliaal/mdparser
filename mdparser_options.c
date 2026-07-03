@@ -87,7 +87,7 @@ typedef struct {
  * accepted-but-inert (kept for API compatibility): sourcepos (md4c exposes
  * no source positions), githubPreLang, liberalHtmlTag, strikethroughDoubleTilde,
  * tablePreferStyleAttributes, and fullInfoString (legacy renderer options with
- * no md4c equivalent). See .plan/md4c-migration.md. */
+ * no md4c equivalent). */
 #define F(name_, mpf_, mro_, def_) \
     { name_, sizeof(name_) - 1, mpf_, mro_, def_ }
 

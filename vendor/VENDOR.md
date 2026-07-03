@@ -89,7 +89,6 @@ live in `MD_FLAG_*` (`md4c.h`).
 ## History
 
 This extension previously embedded cmark-gfm, which built a heap AST and
-walked it to render. The migration to md4c (a streaming parser) is
-documented in `.plan/md4c-migration.md`. The cmark-gfm rebase postmortem
-that motivated leaving that ecosystem is at
+walked it to render, and was migrated to md4c (a streaming parser). The
+cmark-gfm rebase postmortem that motivated leaving that ecosystem is at
 `~/ai/wiki/debugging/cmark-gfm-rebase.md`.

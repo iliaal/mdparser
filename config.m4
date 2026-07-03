@@ -18,7 +18,7 @@ if test "$PHP_MDPARSER" != "no"; then
   dnl renderer (md4c-html.c) is vendored but not compiled; we use our own
   dnl callback renderer (safe-mode, heading anchors, nofollow, smart
   dnl punctuation). entity.c is still needed for named-entity decoding.
-  dnl See .plan/md4c-migration.md and vendor/VENDOR.md.
+  dnl See vendor/VENDOR.md.
   MD4C_SRC_DIR=vendor/md4c
   MD4C_SOURCES="\
     $MD4C_SRC_DIR/md4c.c \
