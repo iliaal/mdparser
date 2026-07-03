@@ -130,11 +130,10 @@ echo $parser->toXml("# hi");
 // </document>
 ```
 
-The XML is CommonMark XML, emitted by a streaming serializer in this
-extension. The format matches what cmark-gfm's `--to xml` historically
-produced, so existing XML consumers work unchanged. md4c exposes no
-source positions, so the `<document>` tree carries no `sourcepos`
-attributes.
+The XML is CommonMark XML (the `commonmark.org/xml/1.0` schema shown
+above), emitted by a streaming serializer in this extension. md4c
+exposes no source positions, so the `<document>` tree carries no
+`sourcepos` attributes.
 
 ## `toAst(string $source): array`
 

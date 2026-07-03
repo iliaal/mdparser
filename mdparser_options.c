@@ -86,8 +86,8 @@ typedef struct {
 /* Fields with md4c_pflag==0 && md4c_ropt==0 have no md4c analog and are
  * accepted-but-inert (kept for API compatibility): sourcepos (md4c exposes
  * no source positions), githubPreLang, liberalHtmlTag, strikethroughDoubleTilde,
- * tablePreferStyleAttributes, fullInfoString (former cmark-renderer quirks).
- * See .plan/md4c-migration.md. */
+ * tablePreferStyleAttributes, and fullInfoString (legacy renderer options with
+ * no md4c equivalent). See .plan/md4c-migration.md. */
 #define F(name_, mpf_, mro_, def_) \
     { name_, sizeof(name_) - 1, mpf_, mro_, def_ }
 

@@ -25,9 +25,9 @@
 #include "mdparser_md4c_util.h"
 #include "mdparser_md4c_ast.h"
 
-/* Stack-based md4c -> PHP-array AST builder. Mirrors the legacy cmark AST
- * shape (type names + per-node fields) MINUS source positions, which md4c
- * does not expose. Each open block/span is a node array on `stack`; on
+/* Stack-based md4c -> PHP-array AST builder. Node type names and per-node
+ * fields are documented in docs/ast.md; there are no source positions (md4c
+ * does not expose any). Each open block/span is a node array on `stack`; on
  * leave the node is appended to its parent's "children". Leaf literals
  * (code/code_block/html) accumulate from text callbacks into `litbuf`. */
 
@@ -147,8 +147,8 @@ static void mda_new_node(zval *out, int type)
 }
 
 /* Store an MD_ATTRIBUTE (destination/title/info) under `key`, entity-decoded.
- * The legacy cmark AST exposed decoded URLs/titles, so resolve md4c's typed
- * substrings rather than storing the raw &amp;-encoded bytes. */
+ * The AST contract exposes decoded URLs/titles (see docs/ast.md), so resolve
+ * md4c's typed substrings rather than storing the raw &amp;-encoded bytes. */
 static void mda_add_attr(zval *node, const char *key, const MD_ATTRIBUTE *a)
 {
     const char *p;
