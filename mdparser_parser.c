@@ -261,7 +261,7 @@ static bool mdparser_inline_line_starts_block(const char *line, size_t len)
     if (c == '#' || c == '>' || c == '<' || c == '|' || c == '=') {
         return true;
     }
-    if (c == '-' || c == '+' || c == '*' || c == '`' || c == '_') {
+    if (c == '-' || c == '+' || c == '*' || c == '`' || c == '~' || c == '_') {
         return true;
     }
     if (c >= '0' && c <= '9') {
