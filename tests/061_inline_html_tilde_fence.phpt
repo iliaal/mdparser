@@ -1,15 +1,14 @@
 --TEST--
-toInlineHtml suppresses tilde-fenced code on continuation lines (ZWSP block-start detection)
+toInlineHtml suppresses block starts on continuation lines (per-line ZWSP)
 --EXTENSIONS--
 mdparser
 --FILE--
 <?php
 
-/* Regression: toInlineHtml skips per-line ZWSP insertion when no physical line
- * can open a block rule (a perf fast path). The block-start detector enumerated
- * every fence/list/heading lead byte except '~', so a `~~~` continuation line
- * escaped protection and opened a fenced code block -- breaking the inline-only
- * contract. Backtick fences were already covered; tilde fences must match. */
+/* Regression: md4c has no inline-only mode, so toInlineHtml normalizes
+ * multiline input by putting a ZWSP sentinel on every retained line. This keeps
+ * continuation-line block starts literal and prevents later paragraphs from
+ * consuming reference definitions. */
 
 $p = new MdParser\Parser;
 
@@ -34,8 +33,20 @@ eq("tilde fence first line stays inline",
    trim($p->toInlineHtml("~~~\ncode\n~~~")),
    "~~~\ncode\n~~~");
 
+// A colon-led GFM table underline on a continuation line also opens a block in
+// md4c unless the line gets its own ZWSP sentinel.
+eq("colon-led table underline continuation stays inline",
+   trim($p->toInlineHtml("a | b\n:--|:--\nc | d")),
+   "a | b\n:--|:--\nc | d");
+
+eq("blank-line reference definition stays inline",
+   trim($p->toInlineHtml("hello\n\n[label]: /evil\n\nsee [x][label]")),
+   "hello\n[label]: /evil\nsee [x][label]");
+
 ?>
 --EXPECT--
 OK: tilde fence continuation stays inline
 OK: backtick fence continuation stays inline
 OK: tilde fence first line stays inline
+OK: colon-led table underline continuation stays inline
+OK: blank-line reference definition stays inline

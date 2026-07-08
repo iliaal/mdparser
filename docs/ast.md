@@ -316,6 +316,17 @@ Appears with `Options(wikiLinks: true)`, for `[[target]]` and
 ]
 ```
 
+### `footnote_reference`, `footnote_definition`
+
+Appear with `Options(footnotes: true)`. Both nodes carry the numeric
+footnote id in `literal`; `footnote_definition` is a block node and
+`footnote_reference` is inline.
+
+```php
+['type' => 'footnote_reference', 'literal' => '1']
+['type' => 'footnote_definition', 'literal' => '1', 'children' => [...]]
+```
+
 ## Source positions
 
 The AST carries no source positions. md4c exposes no line or column
@@ -357,10 +368,6 @@ See `examples/03-ast-toc.php` for a complete version.
 - `custom_block` / `custom_inline` types — md4c has no third-party
   extension node system, so there are no caller-defined node types and
   none of these appear in the output.
-- `footnote_definition` and `footnote_reference` — these appear when
-  `Options(footnotes: true)` is set, as block-level and inline nodes
-  respectively. The shape is `['type' => 'footnote_reference',
-  'children' => [['type' => 'text', 'literal' => '1']]]` etc.
 - Any node type beyond what's documented here. The reachable set is
   fixed: the CommonMark block and inline types, the GFM types (table,
   strikethrough, tasklist), and the md4c dialect extension types above

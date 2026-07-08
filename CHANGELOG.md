@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `MdParser\Options::permissive()` no longer flips the inert
+  `liberalHtmlTag` compatibility flag; the preset is now only
+  `unsafe: true` plus `tagfilter: false`.
+
+### Fixed
+
+- `Parser::toInlineHtml()` now protects every retained physical line from
+  md4c block starts, so continuation lines cannot emit block-level tables
+  or consume link reference definitions after blank lines.
+- Raw HTML inside image alt text is now attribute-escaped even under
+  `unsafe: true`, preventing trusted raw HTML from breaking out of
+  `alt="..."`.
+- Heading anchors now treat soft and hard line breaks in setext heading
+  text as word separators when building slugs.
+- The AST and XML renderers now fail closed if md4c ever violates the
+  expected balanced enter/leave callback contract.
+- Raw entity and attribute decoding is now shared across the HTML, XML,
+  and AST renderers, keeping URL filtering and structural destination
+  output on one decoder path.
+- Documentation now matches the md4c backend for URL scheme filtering,
+  `validateUtf8: false`, spoiler syntax, footnote AST nodes, PHP version
+  support, licensing, and vendored-source build layout.
+
 ## [0.4.2] - 2026-07-03
 
 ### Changed
@@ -59,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - md4c dialect options, each opt-in and default off: `latexMath`
   (`$inline$` and `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers`
-  (`>!text!<`), `underline`, `highlight` (`==text==`), `superscript`
+  (`||text||`), `underline`, `highlight` (`==text==`), `superscript`
   (`^text^`), and `subscript` (`~text~`). Each surfaces in `toXml()` and
   `toAst()` as its own node type.
 - Parser-behavior toggles mapping to md4c flags: `noIndentedCodeBlocks`,
@@ -283,10 +308,9 @@ raw HTML headings can collide with real ones. Pinned in
   common deployment patterns. `strict()` is the standard defaults
   plus `autolink: false` so bare URLs in untrusted input stay inert
   text. `github()` adds `footnotes: true` to match github.com's
-  rendered feature set. `permissive()` sets `unsafe: true`,
-  `tagfilter: false`, `liberalHtmlTag: true` for trusted input where
-  raw HTML should pass through. All three coexist with the full
-  17-bool named-argument constructor.
+  rendered feature set. `permissive()` sets `unsafe: true` and
+  `tagfilter: false` for trusted input where raw HTML should pass
+  through. All three coexist with the full named-argument constructor.
 - Hard cap on input size (`MDPARSER_MAX_INPUT_SIZE`, 256 MB). Inputs
   past the cap throw `MdParser\Exception` at the wrapper boundary
   rather than depending on cmark's `int32_t` `bufsize_t` edge.

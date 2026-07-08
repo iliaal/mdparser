@@ -132,7 +132,6 @@ static void mdm_escape_html(mdm_ctx *r, const char *data, size_t size)
             switch (data[off]) {
                 case '"':  OUT_LIT(r, "&quot;"); break;
                 case '&':  OUT_LIT(r, "&amp;");  break;
-                case '\'': OUT_LIT(r, "&#x27;"); break;
                 case '<':  OUT_LIT(r, "&lt;");   break;
                 case '>':  OUT_LIT(r, "&gt;");   break;
             }
@@ -591,58 +590,6 @@ static void mdm_render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
     }
 }
 
-/* Decode an entity reference to raw UTF-8 bytes into `out` (no escaping).
- * Used for entities inside URL attributes, which must be percent-escaped
- * after decoding -- not HTML-escaped. Unknown entities pass through raw. */
-static void mdm_decode_entity_raw(smart_str *out, const char *text, MD_SIZE size)
-{
-    unsigned char u[4];
-    unsigned cps[2] = {0, 0};
-    if (size > 3 && text[1] == '#') {
-        if (text[2] == 'x' || text[2] == 'X')
-            for (MD_SIZE i = 3; i < size - 1; i++) cps[0] = 16 * cps[0] + mdm_hex_val(text[i]);
-        else
-            for (MD_SIZE i = 2; i < size - 1; i++) cps[0] = 10 * cps[0] + (text[i] - '0');
-    } else {
-        const ENTITY *e = entity_lookup(text, size);
-        if (!e) { smart_str_appendl(out, text, size); return; }
-        cps[0] = e->codepoints[0];
-        cps[1] = e->codepoints[1];
-    }
-    for (int k = 0; k < 2; k++) {
-        unsigned cp = cps[k];
-        if (k == 1 && cp == 0) break;
-        if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
-            smart_str_appendl(out, "\xef\xbf\xbd", 3);
-            continue;
-        }
-        size_t n;
-        if (cp <= 0x7f) { n = 1; u[0] = cp; }
-        else if (cp <= 0x7ff) { n = 2; u[0] = 0xc0 | (cp >> 6); u[1] = 0x80 | (cp & 0x3f); }
-        else if (cp <= 0xffff) { n = 3; u[0] = 0xe0 | (cp >> 12); u[1] = 0x80 | ((cp >> 6) & 0x3f); u[2] = 0x80 | (cp & 0x3f); }
-        else { n = 4; u[0] = 0xf0 | (cp >> 18); u[1] = 0x80 | ((cp >> 12) & 0x3f); u[2] = 0x80 | ((cp >> 6) & 0x3f); u[3] = 0x80 | (cp & 0x3f); }
-        smart_str_appendl(out, (char *)u, n);
-    }
-}
-
-/* Fully entity-decode an attribute to raw bytes (no escaping). Used to
- * canonicalize a URL before the scheme filter sees it. */
-static void mdm_attr_decode_raw(smart_str *out, const MD_ATTRIBUTE *attr)
-{
-    for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
-        MD_TEXTTYPE type = attr->substr_types[i];
-        MD_OFFSET off = attr->substr_offsets[i];
-        MD_SIZE sz = attr->substr_offsets[i + 1] - off;
-        const char *text = attr->text + off;
-        if (type == MD_TEXT_ENTITY)
-            mdm_decode_entity_raw(out, text, sz);
-        else if (type == MD_TEXT_NULLCHAR)
-            smart_str_appendl(out, "\xef\xbf\xbd", 3);
-        else
-            smart_str_appendl(out, text, sz);
-    }
-}
-
 /* Emit already-decoded URL bytes safely: run the scheme filter (safe mode)
  * then percent-escape. `image_context` selects whether data: image URLs are
  * permitted (<img src> only). */
@@ -663,7 +610,7 @@ static void mdm_render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool imag
         return;
     }
     smart_str raw = {0};
-    mdm_attr_decode_raw(&raw, attr);
+    mdparser_md4c_decode_attr(&raw, attr);
     mdm_emit_decoded_url(r, raw.s ? ZSTR_VAL(raw.s) : "",
         raw.s ? ZSTR_LEN(raw.s) : 0, image_context);
     smart_str_free(&raw);
@@ -723,7 +670,7 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
     const char *hp;
     size_t hn;
     if (!mdparser_md4c_attr_plain(&d->href, &hp, &hn)) {
-        mdm_attr_decode_raw(&href, &d->href);
+        mdparser_md4c_decode_attr(&href, &d->href);
         hp = href.s ? ZSTR_VAL(href.s) : "";
         hn = href.s ? ZSTR_LEN(href.s) : 0;
     }
@@ -756,7 +703,7 @@ static void mdm_render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *
     const char *hp;
     size_t hn;
     if (!mdparser_md4c_attr_plain(&d->target, &hp, &hn)) {
-        mdm_attr_decode_raw(&href, &d->target);
+        mdparser_md4c_decode_attr(&href, &d->target);
         hp = href.s ? ZSTR_VAL(href.s) : "";
         hn = href.s ? ZSTR_LEN(href.s) : 0;
     }
@@ -796,7 +743,7 @@ static void mdm_render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DET
     size_t n;
     smart_str raw = {0};
     if (!mdparser_md4c_attr_plain(&d->type, &p, &n)) {
-        mdm_attr_decode_raw(&raw, &d->type);
+        mdparser_md4c_decode_attr(&raw, &d->type);
         p = raw.s ? ZSTR_VAL(raw.s) : "";
         n = raw.s ? ZSTR_LEN(raw.s) : 0;
     }
@@ -1016,7 +963,9 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
         if (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE)
             smart_str_appendl(&r->heading_text, text, size);
         else if (type == MD_TEXT_ENTITY)
-            mdm_decode_entity_raw(&r->heading_text, text, size);
+            mdparser_md4c_decode_entity(&r->heading_text, text, size);
+        else if (type == MD_TEXT_SOFTBR || type == MD_TEXT_BR)
+            smart_str_appendc(&r->heading_text, ' ');
     }
 
     switch (type) {
@@ -1032,7 +981,10 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             else OUT_LIT(r, "\n");
             r->prev_char = 0;
             break;
-        case MD_TEXT_HTML: mdm_render_raw_html(r, text, size); break;
+        case MD_TEXT_HTML:
+            if (r->image_nesting_level > 0) mdm_escape_html(r, text, size);
+            else mdm_render_raw_html(r, text, size);
+            break;
         case MD_TEXT_ENTITY:
             mdm_render_entity(r, text, size);
             /* Seed quote context from the byte the entity actually rendered

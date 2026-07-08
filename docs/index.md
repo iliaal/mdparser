@@ -13,7 +13,7 @@ AST), zero external runtime dependencies.
   from source, platform notes, Windows binaries
 - **[parser.md](parser.md)** — `MdParser\Parser` class: `toHtml`,
   `toXml`, `toAst`, constructor, error model
-- **[options.md](options.md)** — `MdParser\Options` class: all 29 bool
+- **[options.md](options.md)** — `MdParser\Options` class: all 30 bool
   fields documented (core parser toggles, GFM extension toggles, two HTML
   output flags, parser-behavior toggles, and md4c dialect
   extensions), per-option examples of the output change

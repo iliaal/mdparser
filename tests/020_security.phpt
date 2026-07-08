@@ -167,12 +167,48 @@ assertHtml(
     $unsafe->toHtml("<script>alert(1)</script>")
 );
 
+$tagfilterTags = [
+    "title", "textarea", "style", "xmp", "iframe",
+    "noembed", "noframes", "script", "plaintext",
+];
+$tagfilterWrappedTags = ["xmp" => true, "noembed" => true, "plaintext" => true];
+foreach ($tagfilterTags as $tag) {
+    $expected = "&lt;$tag>x&lt;/$tag>";
+    if (isset($tagfilterWrappedTags[$tag])) {
+        $expected = "<p>$expected</p>";
+    }
+
+    assertHtml(
+        "unsafe+tagfilter: $tag tag escaped",
+        $expected,
+        $unsafe->toHtml("<$tag>x</$tag>")
+    );
+
+    $upper = strtoupper($tag);
+    $expected = "&lt;$upper>x&lt;/$upper>";
+    if (isset($tagfilterWrappedTags[$tag])) {
+        $expected = "<p>$expected</p>";
+    }
+
+    assertHtml(
+        "unsafe+tagfilter: $upper tag escaped",
+        $expected,
+        $unsafe->toHtml("<$upper>x</$upper>")
+    );
+}
+
 // === unsafe=true + tagfilter=false: all raw HTML passes verbatim ===
 
 assertHtml(
     "unsafe+no_tagfilter: raw script passes verbatim",
     '<script>alert(1)</script>',
     $unsafeNoFilter->toHtml("<script>alert(1)</script>")
+);
+
+assertHtml(
+    "unsafe+no_tagfilter: raw HTML in image alt is attribute-escaped",
+    '<p><img src="https://example.com/a.png" alt="x &lt;span title=&quot;y&quot;&gt;" /></p>',
+    $unsafeNoFilter->toHtml('![x <span title="y">](https://example.com/a.png)')
 );
 ?>
 --EXPECT--
@@ -198,4 +234,23 @@ OK: safe: inline script tags escaped, text content remains
 OK: safe: iframe escaped
 OK: unsafe: javascript URL in link passes
 OK: unsafe+tagfilter: script tag escaped
+OK: unsafe+tagfilter: title tag escaped
+OK: unsafe+tagfilter: TITLE tag escaped
+OK: unsafe+tagfilter: textarea tag escaped
+OK: unsafe+tagfilter: TEXTAREA tag escaped
+OK: unsafe+tagfilter: style tag escaped
+OK: unsafe+tagfilter: STYLE tag escaped
+OK: unsafe+tagfilter: xmp tag escaped
+OK: unsafe+tagfilter: XMP tag escaped
+OK: unsafe+tagfilter: iframe tag escaped
+OK: unsafe+tagfilter: IFRAME tag escaped
+OK: unsafe+tagfilter: noembed tag escaped
+OK: unsafe+tagfilter: NOEMBED tag escaped
+OK: unsafe+tagfilter: noframes tag escaped
+OK: unsafe+tagfilter: NOFRAMES tag escaped
+OK: unsafe+tagfilter: script tag escaped
+OK: unsafe+tagfilter: SCRIPT tag escaped
+OK: unsafe+tagfilter: plaintext tag escaped
+OK: unsafe+tagfilter: PLAINTEXT tag escaped
 OK: unsafe+no_tagfilter: raw script passes verbatim
+OK: unsafe+no_tagfilter: raw HTML in image alt is attribute-escaped

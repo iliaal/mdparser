@@ -22,11 +22,11 @@ vendor/
     └── LICENSE.md               MIT
 ```
 
-`config.m4` compiles `md4c.c`, `md4c-html.c`, and `entity.c`. mdparser
-uses its **own** callback renderer for `toHtml()` (safe-mode URL
-filtering, heading anchors, nofollow, SmartyPants); md4c's bundled
-`md4c-html.c` renderer is not the active HTML path. `entity.c` is used
-for named-entity decoding in our renderers.
+`config.m4` compiles `md4c.c` and `entity.c`; `md4c-html.c` is vendored
+for refresh parity but is not compiled. mdparser uses its **own**
+callback renderer for `toHtml()` (safe-mode URL filtering, heading
+anchors, nofollow, SmartyPants). `entity.c` is used for named-entity
+decoding in our renderers.
 
 ## Pins
 

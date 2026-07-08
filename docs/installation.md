@@ -6,7 +6,7 @@ directly into the extension shared object.
 
 ## Requirements
 
-- PHP 8.3 or later
+- PHP 8.2 or later
 - A C compiler (GCC, Clang, or MSVC)
 - `phpize` and `php-config` (usually from `php-dev` or `php8.x-dev`)
 - GNU Make on Unix; Visual Studio on Windows

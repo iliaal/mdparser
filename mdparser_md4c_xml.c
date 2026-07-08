@@ -20,7 +20,6 @@
 #include <string.h>
 
 #include "md4c.h"
-#include "entity.h"
 #include "php_mdparser.h"
 #include "mdparser_md4c_util.h"
 #include "mdparser_md4c_xml.h"
@@ -88,52 +87,12 @@ static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
     if (i > beg) smart_str_appendl(b, s + beg, i - beg);
 }
 
-static void mdx_append_cp(smart_str *b, unsigned cp)
-{
-    if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
-        smart_str_appendl(b, "\xef\xbf\xbd", 3);
-        return;
-    }
-    if (cp <= 0x7f) smart_str_appendc(b, (char)cp);
-    else if (cp <= 0x7ff) {
-        smart_str_appendc(b, (char)(0xc0 | (cp >> 6)));
-        smart_str_appendc(b, (char)(0x80 | (cp & 0x3f)));
-    } else if (cp <= 0xffff) {
-        smart_str_appendc(b, (char)(0xe0 | (cp >> 12)));
-        smart_str_appendc(b, (char)(0x80 | ((cp >> 6) & 0x3f)));
-        smart_str_appendc(b, (char)(0x80 | (cp & 0x3f)));
-    } else {
-        smart_str_appendc(b, (char)(0xf0 | (cp >> 18)));
-        smart_str_appendc(b, (char)(0x80 | ((cp >> 12) & 0x3f)));
-        smart_str_appendc(b, (char)(0x80 | ((cp >> 6) & 0x3f)));
-        smart_str_appendc(b, (char)(0x80 | (cp & 0x3f)));
-    }
-}
-
 /* Decode an entity reference into `tmp` (raw UTF-8), then XML-escape it
  * into the output. */
 static void mdx_emit_entity(mdx_ctx *c, const char *text, MD_SIZE size)
 {
     smart_str tmp = {0};
-    if (size > 3 && text[1] == '#') {
-        unsigned cp = 0;
-        if (text[2] == 'x' || text[2] == 'X')
-            for (MD_SIZE i = 3; i < size - 1; i++) {
-                char ch = text[i];
-                cp = cp * 16 + (ch <= '9' ? ch - '0' : (ch | 0x20) - 'a' + 10);
-            }
-        else
-            for (MD_SIZE i = 2; i < size - 1; i++) cp = cp * 10 + (text[i] - '0');
-        mdx_append_cp(&tmp, cp);
-    } else {
-        const ENTITY *e = entity_lookup(text, size);
-        if (e) {
-            mdx_append_cp(&tmp, e->codepoints[0]);
-            if (e->codepoints[1]) mdx_append_cp(&tmp, e->codepoints[1]);
-        } else {
-            smart_str_appendl(&tmp, text, size);
-        }
-    }
+    mdparser_md4c_decode_entity(&tmp, text, size);
     smart_str_0(&tmp);
     if (tmp.s) mdx_escape(&c->out, ZSTR_VAL(tmp.s), ZSTR_LEN(tmp.s), false);
     smart_str_free(&tmp);
@@ -150,6 +109,10 @@ static void mdx_open(mdx_ctx *c, const char *tag)
 
 static void mdx_close(mdx_ctx *c, const char *tag)
 {
+    if (c->depth <= 1) {
+        c->error = MDX_ERR_PARSE;
+        return;
+    }
     c->depth--;
     mdx_indent(c);
     smart_str_appendl(&c->out, "</", 2);
@@ -287,7 +250,7 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         default: mdx_open(c, "unknown"); break;
     }
-    return 0;
+    return c->error ? 1 : 0;
 }
 
 static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
@@ -328,7 +291,7 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_ADMONITION: mdx_close(c, "admonition"); break;
         default: mdx_close(c, "unknown"); break;
     }
-    return 0;
+    return c->error ? 1 : 0;
 }
 
 static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
@@ -422,7 +385,7 @@ static int mdx_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_FOOTNOTE_REF: mdx_close(c, "footnote_reference"); break;
         default: mdx_close(c, "unknown"); break;
     }
-    return 0;
+    return c->error ? 1 : 0;
 }
 
 static int mdx_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *userdata)
@@ -498,9 +461,12 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     smart_str_free(&c.lit);
     if (owned) efree((void *)use_src);
 
-    if (rc != 0) {
+    if (c.error != 0 || rc != 0 || c.depth != 1) {
+        if (c.error == 0) {
+            c.error = MDX_ERR_PARSE;
+        }
         smart_str_free(&c.out);
-        *status = c.error ? c.error : MDX_ERR_PARSE;
+        *status = c.error;
         return NULL;
     }
 

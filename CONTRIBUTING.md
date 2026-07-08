@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- PHP 8.3 or later (debug build recommended for development:
+- PHP 8.2 or later (debug build recommended for development:
   `--enable-debug`)
 - C compiler: GCC 11+, Clang 14+, or MSVC 2019+
 - `phpize` and `php-config` (from `php-dev` or `php8.x-dev`)
@@ -49,7 +49,7 @@ Before filing, try to reproduce against the latest `master` branch.
 
 6. Verify zero compiler warnings (`--enable-mdparser-dev` sets
    `-Wall -Wextra`; the CI treats any warning as a build failure) and
-   that all 17+ tests pass.
+   that the full PHPT suite passes.
 7. Validate the package manifest didn't regress:
 
    ```sh
@@ -87,8 +87,9 @@ Before filing, try to reproduce against the latest `master` branch.
 
 ### Code style
 
-- Wrapper `.c` files use tab indentation and the file header block
-  from `mdparser.c`. PHP License 3.01.
+- Hand-written wrapper `.c` files use 4-space indentation and the file
+  header block from `mdparser.c`. BSD 3-Clause license. Generated and
+  vendored files keep their native style.
 - Method implementations use `PHP_METHOD(MdParser_Class, name)` and
   `ZEND_PARSE_PARAMETERS_NONE()` for zero-arg methods.
 - Class registration goes through `mdparser_arginfo.h` (generated
@@ -103,10 +104,11 @@ Before filing, try to reproduce against the latest `master` branch.
 
 ### Vendored md4c
 
-`vendor/md4c/` is a clean upstream copy of md4c — no patches, no
-cherry-picks, no hand-edited build shims. Keep it that way. md4c
-targets CommonMark 0.31 natively, so there's no spec gap to bridge
-in the vendored sources.
+`vendor/md4c/` is a mostly clean upstream copy of md4c. It carries the
+single local code-span whitespace patch documented in `vendor/VENDOR.md`;
+do not add cherry-picks or hand-edited build shims. md4c targets
+CommonMark 0.31 natively, so there's no spec gap to bridge in the
+vendored sources.
 
 Refreshing md4c is a drop-in file swap:
 
@@ -168,4 +170,4 @@ For maintainers cutting a new version:
 ### License
 
 By submitting a patch you agree to license your contribution under
-the same license as the project (PHP License 3.01).
+the same license as the project (BSD 3-Clause).

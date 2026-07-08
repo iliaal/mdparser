@@ -43,11 +43,12 @@ $html = $pg->toHtml("here[^1]\n\n[^1]: the note\n");
 check("github: footnote reference rendered",
     str_contains($html, '<sup><a href="#fn-1"'));
 
-// === permissive: unsafe + no tagfilter + liberal HTML ===
+// === permissive: unsafe + no tagfilter; inert legacy flags stay at defaults ===
 $p = MdParser\Options::permissive();
 check("permissive: unsafe=true",        $p->unsafe === true);
 check("permissive: tagfilter=false",    $p->tagfilter === false);
-check("permissive: liberalHtmlTag=true", $p->liberalHtmlTag === true);
+check("permissive: liberalHtmlTag=false (inert default)",
+    $p->liberalHtmlTag === false);
 check("permissive: validateUtf8=true (inherited from default)",
     $p->validateUtf8 === true);
 
@@ -89,7 +90,7 @@ OK: github: tagfilter=true
 OK: github: footnote reference rendered
 OK: permissive: unsafe=true
 OK: permissive: tagfilter=false
-OK: permissive: liberalHtmlTag=true
+OK: permissive: liberalHtmlTag=false (inert default)
 OK: permissive: validateUtf8=true (inherited from default)
 OK: permissive: raw HTML passes through
 OK: presets return distinct instances

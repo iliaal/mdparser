@@ -21,7 +21,7 @@ $mb = 1024 * 1024;
 $over = str_repeat("a", 257 * $mb);
 echo "built oversized input: ", strlen($over), " bytes\n";
 
-foreach (["toHtml", "toXml", "toAst"] as $method) {
+foreach (["toHtml", "toInlineHtml", "toXml", "toAst"] as $method) {
     try {
         $parser->$method($over);
         echo "FAIL: $method did not throw on oversized input\n";
@@ -49,6 +49,7 @@ echo "1 MB input renders: ", (str_starts_with($html, "<p>word ") ? "ok" : "FAIL"
 --EXPECTF--
 built oversized input: 269484032 bytes
 OK: toHtml threw MdParser\Exception with size message
+OK: toInlineHtml threw MdParser\Exception with size message
 OK: toXml threw MdParser\Exception with size message
 OK: toAst threw MdParser\Exception with size message
 1 MB input renders: ok

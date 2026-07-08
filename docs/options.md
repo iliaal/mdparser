@@ -2,7 +2,7 @@
 
 `final readonly class MdParser\Options`
 
-Holds 29 bool toggles that control parser and renderer behavior:
+Holds 30 bool toggles that control parser and renderer behavior:
 core parser options, GFM extension toggles, HTML output flags (heading
 anchors, nofollow), and md4c dialect extensions. All fields are readonly after
 construction, and the class is `final` so it can't be subclassed.
@@ -92,9 +92,10 @@ echo (new Parser(new Options(hardbreaks: true)))->toHtml($md);
 
 ### `nobreaks: bool = false`
 
-When `true`, single newlines inside paragraphs become literal spaces
-instead of passing through as newlines. Mutually exclusive with
-`hardbreaks`.
+When `true`, soft line breaks inside paragraphs become literal spaces
+instead of passing through as newlines. If both `hardbreaks` and
+`nobreaks` are true, `hardbreaks` wins because md4c emits hard line
+break callbacks, not soft break callbacks.
 
 ### `smart: bool = false`
 
@@ -127,8 +128,7 @@ the threat model.
 
 When `true` (default), invalid UTF-8 byte sequences are replaced with
 U+FFFD (�) before parsing. When `false`, invalid bytes are passed
-through to the parser, which will eventually reject them with an
-exception.
+through to the parser and can appear unchanged in output.
 
 Leave on unless you know your input is pre-validated UTF-8.
 

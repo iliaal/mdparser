@@ -31,6 +31,26 @@ ok("AST link url is entity-decoded",
 ok("HTML href unchanged",
    str_contains($p->toHtml($md), 'href="http://a.com?a=1&amp;b=2"'));
 
+// HTML URL filtering, AST, and XML must all see the same entity-decoded
+// destination bytes. If any path forgets to decode before its own policy,
+// this can become a live javascript: URL or a double-encoded structural value.
+$evil = "[x](javascript&colon;alert&lpar;1&rpar;)";
+ok("HTML href filter sees entity-decoded scheme",
+   str_contains($p->toHtml($evil), '<a href="">x</a>'));
+ok("XML destination decodes entities before escaping",
+   str_contains($p->toXml($evil), 'destination="javascript:alert(1)"'));
+ok("AST url decodes entities",
+   $p->toAst($evil)['children'][0]['children'][0]['url'] === 'javascript:alert(1)');
+
+// Heading slugs share the same raw entity decoding; entity and literal text
+// produce the same id.
+ok("HTML heading slug decodes named and numeric entities",
+   str_contains(
+       (new MdParser\Parser(new MdParser\Options(headingAnchors: true)))
+           ->toHtml("# A&amp;B &#x43;\n"),
+       'id="ab-c"'
+   ));
+
 // Code-fence info string: same decode path.
 $cb = "```c&amp;c\nx\n```";
 ok("XML code_block info single-encoded",
@@ -63,6 +83,10 @@ OK: XML link destination single-encoded
 OK: XML link destination NOT double-encoded
 OK: AST link url is entity-decoded
 OK: HTML href unchanged
+OK: HTML href filter sees entity-decoded scheme
+OK: XML destination decodes entities before escaping
+OK: AST url decodes entities
+OK: HTML heading slug decodes named and numeric entities
 OK: XML code_block info single-encoded
 OK: AST code_block info decoded
 OK: XML wikilink destination single-encoded

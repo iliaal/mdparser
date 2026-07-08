@@ -20,7 +20,6 @@
 #include <string.h>
 
 #include "md4c.h"
-#include "entity.h"
 #include "php_mdparser.h"
 #include "mdparser_md4c_util.h"
 #include "mdparser_md4c_ast.h"
@@ -177,45 +176,20 @@ static bool mda_push(mda_ctx *c, zval *node)
 }
 
 /* Pop the top node and append it to its parent. */
-static void mda_pop(mda_ctx *c)
+static bool mda_pop(mda_ctx *c)
 {
     /* stack[0] is the document root and is never popped under md4c's
      * balanced enter/leave contract; guard the underflow defensively so a
      * future renderer change or contract break can't index stack[-1]. */
     if (c->depth < 1) {
         c->error = MDA_ERR_PARSE;
-        return;
+        return false;
     }
     zval node = c->stack[c->depth];
     ZVAL_UNDEF(&c->stack[c->depth]);
     c->depth--;
     mda_append_child(c, &node);
-}
-
-/* ---- entity decoding for text leaves --------------------------------- */
-
-static void mda_append_entity(smart_str *b, const char *text, MD_SIZE size)
-{
-    if (size > 3 && text[1] == '#') {
-        unsigned cp = 0;
-        if (text[2] == 'x' || text[2] == 'X') {
-            for (MD_SIZE i = 3; i < size - 1; i++) {
-                char ch = text[i];
-                cp = cp * 16 + (ch <= '9' ? ch - '0' : (ch | 0x20) - 'a' + 10);
-            }
-        } else {
-            for (MD_SIZE i = 2; i < size - 1; i++) cp = cp * 10 + (text[i] - '0');
-        }
-        mdparser_md4c_append_cp(b, cp);
-        return;
-    }
-    const ENTITY *e = entity_lookup(text, size);
-    if (e) {
-        mdparser_md4c_append_cp(b, e->codepoints[0]);
-        if (e->codepoints[1]) mdparser_md4c_append_cp(b, e->codepoints[1]);
-    } else {
-        smart_str_appendl(b, text, size);
-    }
+    return true;
 }
 
 /* ---- callbacks ------------------------------------------------------- */
@@ -357,11 +331,9 @@ static int mda_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 c->litbuf.s ? ZSTR_LEN(c->litbuf.s) : 0);
             smart_str_free(&c->litbuf);
             c->collecting = false;
-            mda_pop(c);
-            return 0;
+            return mda_pop(c) ? 0 : 1;
         default:
-            mda_pop(c);
-            return 0;
+            return mda_pop(c) ? 0 : 1;
     }
 }
 
@@ -431,8 +403,7 @@ static int mda_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         smart_str_free(&c->litbuf);
         c->collecting = false;
     }
-    mda_pop(c);
-    return 0;
+    return mda_pop(c) ? 0 : 1;
 }
 
 static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *userdata)
@@ -455,7 +426,7 @@ static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             break;
         case MD_TEXT_ENTITY: {
             smart_str b = {0};
-            mda_append_entity(&b, text, size);
+            mdparser_md4c_decode_entity(&b, text, size);
             smart_str_0(&b);
             mda_new_node(&n, MDA_T_text);
             add_assoc_stringl(&n, "literal", b.s ? ZSTR_VAL(b.s) : "", b.s ? ZSTR_LEN(b.s) : 0);
@@ -507,12 +478,15 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     if (owned) efree((void *)use_src);
     smart_str_free(&c.litbuf);
 
-    if (c.error == MDA_ERR_DEPTH || rc != 0) {
+    if (c.error != MDA_OK || rc != 0 || c.depth != 0) {
+        if (c.error == MDA_OK) {
+            c.error = MDA_ERR_PARSE;
+        }
         /* Free the whole partial tree (stack[0] plus any still-open nodes). */
         for (int i = 0; i <= c.depth; i++) {
             if (Z_TYPE(c.stack[i]) != IS_UNDEF) zval_ptr_dtor(&c.stack[i]);
         }
-        *status = c.error ? c.error : MDA_ERR_PARSE;
+        *status = c.error;
         return;
     }
 

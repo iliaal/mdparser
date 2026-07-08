@@ -101,10 +101,10 @@ final readonly class Options
     public static function github(): Options {}
 
     /**
-     * Trusted-input preset: raw HTML passthrough (unsafe: true),
-     * tagfilter disabled, and liberal HTML tag parsing. Use only when
-     * the markdown source is authored by you or comes from a trusted
-     * pipeline; this preset explicitly disables the XSS safety net.
+     * Trusted-input preset: raw HTML passthrough (unsafe: true) with
+     * tagfilter disabled. Use only when the markdown source is authored
+     * by you or comes from a trusted pipeline; this preset explicitly
+     * disables the XSS safety net.
      */
     public static function permissive(): Options {}
 }

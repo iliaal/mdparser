@@ -49,6 +49,29 @@ void mdparser_md4c_append_cp(smart_str *out, unsigned cp)
                              smart_str_appendl(out, (char *)u, 4); }
 }
 
+void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size)
+{
+    unsigned cps[2] = {0, 0};
+    if (size > 3 && text[1] == '#') {
+        if (text[2] == 'x' || text[2] == 'X')
+            for (MD_SIZE k = 3; k < size - 1; k++) cps[0] = 16 * cps[0] + mdu_hex_val(text[k]);
+        else
+            for (MD_SIZE k = 2; k < size - 1; k++) cps[0] = 10 * cps[0] + (text[k] - '0');
+    } else {
+        const ENTITY *e = entity_lookup(text, size);
+        if (e == NULL) {
+            smart_str_appendl(out, text, size);
+            return;
+        }
+        cps[0] = e->codepoints[0];
+        cps[1] = e->codepoints[1];
+    }
+    for (int k = 0; k < 2; k++) {
+        if (k == 1 && cps[k] == 0) break;
+        mdparser_md4c_append_cp(out, cps[k]);
+    }
+}
+
 void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
 {
     if (attr == NULL || attr->text == NULL) return;
@@ -60,22 +83,7 @@ void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
         if (type == MD_TEXT_NULLCHAR) {
             smart_str_appendl(out, "\xef\xbf\xbd", 3);
         } else if (type == MD_TEXT_ENTITY) {
-            unsigned cps[2] = {0, 0};
-            if (sz > 3 && text[1] == '#') {
-                if (text[2] == 'x' || text[2] == 'X')
-                    for (MD_SIZE k = 3; k < sz - 1; k++) cps[0] = 16 * cps[0] + mdu_hex_val(text[k]);
-                else
-                    for (MD_SIZE k = 2; k < sz - 1; k++) cps[0] = 10 * cps[0] + (text[k] - '0');
-            } else {
-                const ENTITY *e = entity_lookup(text, sz);
-                if (e == NULL) { smart_str_appendl(out, text, sz); continue; }
-                cps[0] = e->codepoints[0];
-                cps[1] = e->codepoints[1];
-            }
-            for (int k = 0; k < 2; k++) {
-                if (k == 1 && cps[k] == 0) break;
-                mdparser_md4c_append_cp(out, cps[k]);
-            }
+            mdparser_md4c_decode_entity(out, text, sz);
         } else {
             smart_str_appendl(out, text, sz);
         }

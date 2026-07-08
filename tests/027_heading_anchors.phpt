@@ -48,6 +48,14 @@ $h = $p->toHtml("# Foo, Bar -- Baz!\n");
 check("punctuation dropped, spaces collapsed",
     str_contains($h, 'id="foo-bar-baz"'));
 
+// Soft and hard line breaks in headings separate words in the slug.
+$h = $p->toHtml("Foo\nBar\n===\n");
+check("setext softbreak contributes slug separator",
+    str_contains($h, '<h1 id="foo-bar">Foo' . "\n" . 'Bar</h1>'));
+$h = $p->toHtml("Foo\\\nBar\n===\n");
+check("setext hardbreak contributes slug separator",
+    str_contains($h, '<h1 id="foo-bar">Foo<br />' . "\n" . 'Bar</h1>'));
+
 // non-ASCII bytes pass through
 $h = $p->toHtml("# 日本語\n");
 check("UTF-8 multibyte preserved", str_contains($h, 'id="日本語"'));
@@ -114,6 +122,8 @@ OK: dedup many duplicates reaches final suffix
 OK: formatting stripped from slug
 OK: formatting preserved in body
 OK: punctuation dropped, spaces collapsed
+OK: setext softbreak contributes slug separator
+OK: setext hardbreak contributes slug separator
 OK: UTF-8 multibyte preserved
 OK: all-punctuation: no id attr
 OK: empty + real: real still gets slug

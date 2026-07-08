@@ -45,6 +45,11 @@ $nb = new MdParser\Parser(new MdParser\Options(nobreaks: true));
 echo "-- nobreaks --\n";
 echo $nb->toHtml("line one\nline two"), "\n";
 
+// hardbreaks wins when both flags are enabled: nobreaks only changes softbreaks.
+$bothBreaks = new MdParser\Parser(new MdParser\Options(hardbreaks: true, nobreaks: true));
+echo "-- hardbreaks+nobreaks --\n";
+echo $bothBreaks->toHtml("line one\nline two"), "\n";
+
 // strikethroughDoubleTilde=true: single-tilde ~x~ is no longer strike,
 // only double-tilde ~~x~~ renders as <del>
 $sdt = new MdParser\Parser(new MdParser\Options(strikethroughDoubleTilde: true));
@@ -61,8 +66,7 @@ $fis = new MdParser\Parser(new MdParser\Options(fullInfoString: true));
 echo "-- fullInfoString --\n";
 echo $fis->toHtml("```php title=x linenums\nx\n```\n"), "\n";
 
-// liberalHtmlTag: accept non-strict tag names (e.g. <div{x}>) as raw HTML.
-// unsafe=true is required for raw HTML to pass through at all.
+// liberalHtmlTag is accepted but inert under the md4c backend.
 $lib = new MdParser\Parser(new MdParser\Options(unsafe: true, liberalHtmlTag: true));
 $strict = new MdParser\Parser(new MdParser\Options(unsafe: true, liberalHtmlTag: false));
 echo "-- liberalHtmlTag=true --\n";
@@ -100,6 +104,10 @@ line two</p>
 -- nobreaks --
 <p>line one line two</p>
 
+-- hardbreaks+nobreaks --
+<p>line one<br />
+line two</p>
+
 -- strikethroughDoubleTilde --
 <p><del>one</del> and <del>two</del></p>
 
@@ -128,4 +136,3 @@ line two</p>
 
 -- liberalHtmlTag=false --
 <p>&lt;div{onclick}&gt;x</div></p>
-

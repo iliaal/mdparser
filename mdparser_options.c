@@ -321,12 +321,11 @@ PHP_METHOD(MdParser_Options, permissive)
 
     bool v[MDPARSER_OPTIONS_FIELD_COUNT];
     mdparser_options_seed_defaults(v);
-    /* Trusted-input mode: raw HTML passes through, tagfilter is off,
-     * liberal tag parsing is on. Explicitly disables the XSS safety
-     * net -- only for markdown the caller authored themselves. */
+    /* Trusted-input mode: raw HTML passes through and tagfilter is off.
+     * Explicitly disables the XSS safety net -- only for markdown the
+     * caller authored themselves. */
     v[MDOPT_UNSAFE] = true;
     v[MDOPT_TAGFILTER] = false;
-    v[MDOPT_LIBERAL_HTML_TAG] = true;
 
     object_init_ex(return_value, mdparser_options_ce);
     mdparser_options_populate_object(Z_OBJ_P(return_value), v);

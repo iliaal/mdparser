@@ -77,7 +77,7 @@ mdparser exposes each as an opt-in `Options` flag, all defaulting to
 | Highlight | `highlight` | `==text==` |
 | Superscript | `superscript` | `^text^` |
 | Subscript | `subscript` | `~text~` |
-| Spoilers | `spoilers` | `>!text!<` |
+| Spoilers | `spoilers` | `||text||` |
 | LaTeX math | `latexMath` | `$inline$` and `$$block$$` |
 | Wiki links | `wikiLinks` | `[[target]]` |
 
