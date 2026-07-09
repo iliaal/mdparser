@@ -7,30 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-09
+
 ### Changed
 
-- `MdParser\Options::permissive()` no longer flips the inert
-  `liberalHtmlTag` compatibility flag; the preset is now only
-  `unsafe: true` plus `tagfilter: false`.
+- `Options::permissive()` no longer sets the inert `liberalHtmlTag` flag;
+  the preset is now just `unsafe: true` plus `tagfilter: false`.
 
 ### Fixed
 
-- `Parser::toInlineHtml()` now protects every retained physical line from
-  md4c block starts, so continuation lines cannot emit block-level tables
-  or consume link reference definitions after blank lines.
-- Raw HTML inside image alt text is now attribute-escaped even under
-  `unsafe: true`, preventing trusted raw HTML from breaking out of
-  `alt="..."`.
-- Heading anchors now treat soft and hard line breaks in setext heading
-  text as word separators when building slugs.
-- The AST and XML renderers now fail closed if md4c ever violates the
-  expected balanced enter/leave callback contract.
-- Raw entity and attribute decoding is now shared across the HTML, XML,
-  and AST renderers, keeping URL filtering and structural destination
-  output on one decoder path.
-- Documentation now matches the md4c backend for URL scheme filtering,
-  `validateUtf8: false`, spoiler syntax, footnote AST nodes, PHP version
-  support, licensing, and vendored-source build layout.
+- `toInlineHtml()` no longer leaks block-level tables or swallows link
+  reference definitions on continuation lines.
+- Raw HTML in image alt text is now attribute-escaped under `unsafe: true`,
+  closing an `alt="..."` breakout.
+- Heading-anchor slugs now treat soft and hard line breaks as word
+  separators.
+- The AST and XML renderers fail closed on a broken md4c enter/leave
+  callback contract instead of emitting a partial tree.
+- Raw entity and attribute decoding is shared across the HTML, XML, and
+  AST paths, unifying URL filtering on one decoder.
+- Docs corrected to match the md4c backend: URL scheme filtering,
+  `validateUtf8: false`, spoiler syntax, footnotes, PHP version, license.
 
 ## [0.4.2] - 2026-07-03
 
@@ -503,7 +500,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.2...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.4.3...HEAD
+[0.4.3]: https://github.com/iliaal/mdparser/releases/tag/0.4.3
 [0.4.2]: https://github.com/iliaal/mdparser/releases/tag/0.4.2
 [0.4.1]: https://github.com/iliaal/mdparser/releases/tag/0.4.1
 [0.4.0]: https://github.com/iliaal/mdparser/releases/tag/0.4.0

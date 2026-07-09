@@ -13,7 +13,7 @@
 #ifndef PHP_MDPARSER_H
 #define PHP_MDPARSER_H
 
-#define PHP_MDPARSER_VERSION "0.4.2"
+#define PHP_MDPARSER_VERSION "0.4.3"
 
 /* Bundled md4c version: release-0.5.3 plus master commit 755ce49
  * (vendored 2026-06-17). Keep in sync with vendor/VENDOR.md. */
