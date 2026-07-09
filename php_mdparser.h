@@ -30,11 +30,11 @@ extern zend_module_entry mdparser_module_entry;
 
 #include "php.h"
 
-/* PHP 8.3 compat shim for zend_register_internal_class_with_flags
+/* Pre-8.4 compat shim for zend_register_internal_class_with_flags
  * (added in 8.4). gen_stub.php emits the 8.4+ variant when it sees
- * `final readonly class` in the stub, but we still target 8.3.
+ * `final readonly class` in the stub, but we still target 8.2+.
  * Providing a static inline fallback keeps the generated arginfo.h
- * unchanged and lets 8.3 builds compile and link. */
+ * unchanged and lets 8.2/8.3 builds compile and link. */
 #if PHP_VERSION_ID < 80400
 static inline zend_class_entry *zend_register_internal_class_with_flags(
     zend_class_entry *class_entry,
