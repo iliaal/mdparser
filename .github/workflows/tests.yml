@@ -210,7 +210,6 @@ jobs:
 
       - name: Run tests under ASAN
         run: |
-          export LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so)
           export TEST_PHP_EXECUTABLE=/tmp/php-asan/bin/php
           export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export NO_INTERACTION=1
