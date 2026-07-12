@@ -92,7 +92,7 @@ final readonly class Options
     public static function strict(): Options {}
 
     /**
-     * GitHub-flavored preset: standard defaults plus footnotes on, to
+     * GitHub-flavored preset: standard defaults plus footnotes and alerts, to
      * match the feature set github.com renders for README files and
      * issue comments. Everything else (tables, strikethrough,
      * tasklist, autolink, tagfilter) is already on in the default

@@ -17,6 +17,10 @@
 #include "zend_smart_str.h"
 #include "md4c.h"
 
+/* Speculative output capacity helps ordinary documents but must not scale to
+ * the full size of sparse input whose rendered form is tiny. */
+#define MDPARSER_INITIAL_OUTPUT_RESERVE_MAX ((size_t)(1024UL * 1024UL))
+
 /* Expected length (1..4) of the UTF-8 sequence starting at p, 0 if invalid.
  * Validates continuation bytes, overlong forms, surrogates, and the
  * U+10FFFF ceiling (RFC 3629). */

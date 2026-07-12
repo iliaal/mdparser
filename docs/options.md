@@ -377,7 +377,7 @@ field. With the option off, `> [!NOTE]` stays a plain blockquote.
 ### GitHub comment rendering (GFM)
 
 ```php
-new Options(); // defaults are already right for this
+Options::github();
 ```
 
 ### Strict spec compliance

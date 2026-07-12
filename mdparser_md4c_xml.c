@@ -47,7 +47,6 @@ typedef struct {
     int depth;
     int in_thead;
     bool collecting;   /* code/code_block/html literal */
-    smart_str lit;
     int error;
 } mdx_ctx;
 
@@ -205,14 +204,12 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             if (d->lang.text) mdx_attr(c, "info", &d->lang);
             X_LIT(c, " xml:space=\"preserve\">");
             c->collecting = true;
-            smart_str_free(&c->lit);
             break;
         }
         case MD_BLOCK_HTML:
             mdx_indent(c);
             X_LIT(c, "<html_block xml:space=\"preserve\">");
             c->collecting = true;
-            smart_str_free(&c->lit);
             break;
         case MD_BLOCK_P: mdx_open(c, "paragraph"); break;
         case MD_BLOCK_TABLE: mdx_open(c, "table"); break;
@@ -266,17 +263,11 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_HR: break;
         case MD_BLOCK_H: mdx_close(c, "heading"); break;
         case MD_BLOCK_CODE:
-            smart_str_0(&c->lit);
-            if (c->lit.s) mdx_escape(&c->out, ZSTR_VAL(c->lit.s), ZSTR_LEN(c->lit.s), false);
             X_LIT(c, "</code_block>\n");
-            smart_str_free(&c->lit);
             c->collecting = false;
             break;
         case MD_BLOCK_HTML:
-            smart_str_0(&c->lit);
-            if (c->lit.s) mdx_escape(&c->out, ZSTR_VAL(c->lit.s), ZSTR_LEN(c->lit.s), false);
             X_LIT(c, "</html_block>\n");
-            smart_str_free(&c->lit);
             c->collecting = false;
             break;
         case MD_BLOCK_P: mdx_close(c, "paragraph"); break;
@@ -325,7 +316,6 @@ static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             mdx_indent(c);
             X_LIT(c, "<code xml:space=\"preserve\">");
             c->collecting = true;
-            smart_str_free(&c->lit);
             break;
         case MD_SPAN_DEL: mdx_open(c, "strikethrough"); break;
         case MD_SPAN_U: mdx_open(c, "underline"); break;
@@ -367,10 +357,7 @@ static int mdx_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_A: mdx_close(c, "link"); break;
         case MD_SPAN_IMG: mdx_close(c, "image"); break;
         case MD_SPAN_CODE:
-            smart_str_0(&c->lit);
-            if (c->lit.s) mdx_escape(&c->out, ZSTR_VAL(c->lit.s), ZSTR_LEN(c->lit.s), false);
             X_LIT(c, "</code>\n");
-            smart_str_free(&c->lit);
             c->collecting = false;
             break;
         case MD_SPAN_DEL: mdx_close(c, "strikethrough"); break;
@@ -392,7 +379,7 @@ static int mdx_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 {
     mdx_ctx *c = userdata;
     if (c->collecting) {
-        smart_str_appendl(&c->lit, text, size);
+        mdx_escape(&c->out, text, size, false);
         return 0;
     }
     switch (type) {
@@ -451,14 +438,15 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     if (validate_utf8)
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
-    /* CommonMark XML is markup-heavy (indentation + open/close tags), so the
-     * output runs well over the input; reserve ~2x up front to skip the early
-     * smart_str doublings. */
-    if (use_len)
-        smart_str_alloc(&c.out, use_len * 2, 0);
+    /* Reserve about twice the input size up to 1 MiB. This covers ordinary
+     * markup-heavy output without amplifying sparse large inputs. */
+    if (use_len) {
+        size_t reserve = use_len <= MDPARSER_INITIAL_OUTPUT_RESERVE_MAX / 2
+            ? use_len * 2 : MDPARSER_INITIAL_OUTPUT_RESERVE_MAX;
+        smart_str_alloc(&c.out, reserve, 0);
+    }
 
     int rc = md_parse(use_src, (MD_SIZE)use_len, &parser, &c);
-    smart_str_free(&c.lit);
     if (owned) efree((void *)use_src);
 
     if (c.error != 0 || rc != 0 || c.depth != 1) {

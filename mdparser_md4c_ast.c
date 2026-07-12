@@ -325,11 +325,7 @@ static int mda_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: return 0;
         case MD_BLOCK_CODE:
         case MD_BLOCK_HTML:
-            smart_str_0(&c->litbuf);
-            add_assoc_stringl(mda_top(c), "literal",
-                c->litbuf.s ? ZSTR_VAL(c->litbuf.s) : "",
-                c->litbuf.s ? ZSTR_LEN(c->litbuf.s) : 0);
-            smart_str_free(&c->litbuf);
+            add_assoc_str(mda_top(c), "literal", smart_str_extract(&c->litbuf));
             c->collecting = false;
             return mda_pop(c) ? 0 : 1;
         default:
@@ -396,11 +392,7 @@ static int mda_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
     mda_ctx *c = userdata;
     (void)detail;
     if (type == MD_SPAN_CODE) {
-        smart_str_0(&c->litbuf);
-        add_assoc_stringl(mda_top(c), "literal",
-            c->litbuf.s ? ZSTR_VAL(c->litbuf.s) : "",
-            c->litbuf.s ? ZSTR_LEN(c->litbuf.s) : 0);
-        smart_str_free(&c->litbuf);
+        add_assoc_str(mda_top(c), "literal", smart_str_extract(&c->litbuf));
         c->collecting = false;
     }
     return mda_pop(c) ? 0 : 1;

@@ -47,7 +47,9 @@ eq("AST admonition_type", $node["admonition_type"], "note");
 
 // Default (off): GitHub alert syntax stays a plain blockquote.
 $def = new MdParser\Parser();
-echo (str_contains($def->toHtml($md), "admonition") ? "FAIL" : "OK"), ": admonitions off by default (blockquote)\n";
+eq("admonitions off by default (blockquote)",
+   trim($def->toHtml($md)),
+   "<blockquote>\n<p>[!NOTE]\nBody.</p>\n</blockquote>");
 
 ?>
 --EXPECT--

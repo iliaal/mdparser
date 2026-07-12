@@ -29,9 +29,10 @@ $html = $ps->toHtml("visit https://example.com today\n");
 check("strict: bare URL not auto-linked",
     !str_contains($html, '<a href="https://example.com"'));
 
-// === github: defaults + footnotes=true ===
+// === github: defaults + GitHub-specific extensions ===
 $g = MdParser\Options::github();
 check("github: footnotes=true",  $g->footnotes === true);
+check("github: admonitions=true", $g->admonitions === true);
 check("github: unsafe=false",    $g->unsafe === false);
 check("github: tables=true",     $g->tables === true);
 check("github: autolink=true",   $g->autolink === true);
@@ -42,6 +43,10 @@ $pg = new MdParser\Parser($g);
 $html = $pg->toHtml("here[^1]\n\n[^1]: the note\n");
 check("github: footnote reference rendered",
     str_contains($html, '<sup><a href="#fn-1"'));
+
+$html = $pg->toHtml("> [!NOTE]\n> Body.\n");
+check("github: alert rendered",
+    str_contains($html, '<div class="admonition-note">'));
 
 // === permissive: unsafe + no tagfilter; inert legacy flags stay at defaults ===
 $p = MdParser\Options::permissive();
@@ -83,11 +88,13 @@ OK: strict: strikethrough=true
 OK: strict: validateUtf8=true
 OK: strict: bare URL not auto-linked
 OK: github: footnotes=true
+OK: github: admonitions=true
 OK: github: unsafe=false
 OK: github: tables=true
 OK: github: autolink=true
 OK: github: tagfilter=true
 OK: github: footnote reference rendered
+OK: github: alert rendered
 OK: permissive: unsafe=true
 OK: permissive: tagfilter=false
 OK: permissive: liberalHtmlTag=false (inert default)

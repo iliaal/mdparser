@@ -1,9 +1,17 @@
 ARG_ENABLE("mdparser", "Enable mdparser (CommonMark + GFM) support", "no");
+ARG_ENABLE("mdparser-dev", "Upgrade wrapper warnings to /WX (development builds)", "no");
 
 if (PHP_MDPARSER != "no") {
+    if (PHP_VERSION < 8 || (PHP_VERSION == 8 && PHP_MINOR_VERSION < 2)) {
+        ERROR("mdparser requires PHP 8.2 or newer");
+    }
+
     var md4c_src_dir = "vendor/md4c";
 
     ADD_FLAG("CFLAGS_MDPARSER", "/I" + configure_module_dirname + "\\" + md4c_src_dir);
+    if (PHP_MDPARSER_DEV == "yes") {
+        ADD_FLAG("CFLAGS_MDPARSER", "/WX");
+    }
 
     // md4c (https://github.com/mity/md4c, MIT): single-file push parser plus
     // its bundled HTML entity table. entity.c is needed for named-entity

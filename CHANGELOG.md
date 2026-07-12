@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Enabled GitHub-style alerts as well as footnotes in `Options::github()`.
+
+### Fixed
+
+- Fixed SmartyPants quote context after decoded entities.
+- Avoided repeated 100,000-suffix scans after heading ID exhaustion and reduced scratch memory for large headings.
+- Reduced peak HTML, XML, and AST memory for sparse input and large code or HTML literals.
+
+### For contributors
+
+- Made CI reject crashed, unloadable, and all-skipped PHPT runs.
+- Made benchmark and release helpers reject invalid or inconsistent inputs with a nonzero status.
+- Added the PHP 8.2 floor and warnings-as-errors development mode to Windows builds.
+
 ## [0.4.3] - 2026-07-09
 
 ### Changed

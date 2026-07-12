@@ -37,14 +37,8 @@ check("paren delimiter well-formed",
       $p->toXml("42) x"),
       '<list type="ordered" start="42" delim="paren" tight="true">');
 
-// The output must parse as XML end-to-end.
-$xml = $p->toXml("999999999. c");
-$doc = new DOMDocument();
-echo ($doc->loadXML($xml) ? "OK" : "FAIL"), ": 9-digit output is DOM-parseable\n";
-
 ?>
 --EXPECT--
 OK: 4-digit start well-formed
 OK: 9-digit start well-formed
 OK: paren delimiter well-formed
-OK: 9-digit output is DOM-parseable

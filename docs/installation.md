@@ -97,9 +97,9 @@ echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
 ## Configure options
 
 - `--enable-mdparser` — required, builds the extension.
-- `--enable-mdparser-dev` — optional, adds `-Wall -Wextra
-  -Wno-unused-parameter` to the wrapper-code compile line. Use during
-  development; don't use for release builds.
+- `--enable-mdparser-dev` — optional, treats wrapper compiler warnings as
+  errors and enables stricter prototype checks. Use during development;
+  don't use for release builds.
 
 ## Platform notes
 
@@ -133,11 +133,18 @@ After installing, run a self-test:
 ```php
 <?php
 $p = new MdParser\Parser();
-assert($p->toHtml("# Hello") === "<h1>Hello</h1>\n");
-assert($p->toHtml("~~strike~~") === "<p><del>strike</del></p>\n");
 $ast = $p->toAst("# Hi");
-assert($ast['type'] === 'document');
-assert($ast['children'][0]['type'] === 'heading');
+
+$ok = $p->toHtml("# Hello") === "<h1>Hello</h1>\n"
+    && $p->toHtml("~~strike~~") === "<p><del>strike</del></p>\n"
+    && $ast['type'] === 'document'
+    && $ast['children'][0]['type'] === 'heading';
+
+if (!$ok) {
+    fwrite(STDERR, "mdparser self-test failed\n");
+    exit(1);
+}
+
 echo "mdparser " . phpversion('mdparser') . " OK\n";
 ```
 

@@ -306,10 +306,10 @@ PHP_METHOD(MdParser_Options, github)
 
     bool v[MDPARSER_OPTIONS_FIELD_COUNT];
     mdparser_options_seed_defaults(v);
-    /* github.com's renderer supports [^ref] / [^ref]: syntax; the
-     * rest of the default set (tables/strike/tasklist/autolink/
-     * tagfilter/githubPreLang) already matches github. */
+    /* github.com's renderer supports footnotes and [!NOTE]-style alerts;
+     * the rest of the default set already matches github. */
     v[MDOPT_FOOTNOTES] = true;
+    v[MDOPT_ADMONITIONS] = true;
 
     object_init_ex(return_value, mdparser_options_ce);
     mdparser_options_populate_object(Z_OBJ_P(return_value), v);

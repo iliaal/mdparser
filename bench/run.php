@@ -30,6 +30,19 @@ $warmup     = (int)($opts['warmup']  ?? 5);
 $parserList = isset($opts['parsers']) ? explode(',', $opts['parsers']) : null;
 $format     = $opts['format'] ?? 'table';
 
+if ($iters < 1) {
+    fwrite(STDERR, "--iters must be at least 1\n");
+    exit(2);
+}
+if ($warmup < 0) {
+    fwrite(STDERR, "--warmup must be at least 0\n");
+    exit(2);
+}
+if (!in_array($format, ['table', 'json', 'md'], true)) {
+    fwrite(STDERR, "--format must be one of: table, json, md\n");
+    exit(2);
+}
+
 $parsers = [
     'mdparser' => function (string $md): string {
         static $p = null;
@@ -75,7 +88,17 @@ if (extension_loaded('mbstring') || array_key_exists('league', $opts)) {
 }
 
 if ($parserList !== null) {
+    $unknown = array_diff($parserList, array_keys($parsers));
+    if ($unknown !== []) {
+        fwrite(STDERR, "Unknown parser(s): " . implode(', ', $unknown) . "\n");
+        exit(2);
+    }
     $parsers = array_intersect_key($parsers, array_flip($parserList));
+}
+
+if ($parsers === []) {
+    fwrite(STDERR, "No parsers selected\n");
+    exit(2);
 }
 
 $corpora = [];
@@ -142,10 +165,18 @@ foreach ($results as &$row) {
 }
 unset($row);
 
+$hasErrors = false;
+foreach ($results as $row) {
+    if (isset($row['error'])) {
+        $hasErrors = true;
+        break;
+    }
+}
+
 // Output.
 if ($format === 'json') {
     echo json_encode($results, JSON_PRETTY_PRINT), "\n";
-    exit(0);
+    exit($hasErrors ? 1 : 0);
 }
 
 function fmt_size(int $n): string {
@@ -170,7 +201,7 @@ if ($format === 'md') {
             $r['parser'], $r['corpus'], fmt_size($r['size']),
             $r['mean_ms'], (int)$r['ops_sec'], $speedup);
     }
-    exit(0);
+    exit($hasErrors ? 1 : 0);
 }
 
 // Plain text table.
@@ -191,3 +222,5 @@ foreach ($results as $r) {
         $r['parser'], $r['corpus'], fmt_size($r['size']),
         $r['mean_ms'], (int)$r['ops_sec'], $speedup);
 }
+
+exit($hasErrors ? 1 : 0);

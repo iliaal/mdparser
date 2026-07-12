@@ -17,6 +17,7 @@
 #include "php.h"
 #include "zend_smart_str.h"
 
+#include <limits.h>
 #include <string.h>
 
 #include "md4c.h"
@@ -211,7 +212,7 @@ static void mdm_append_codepoint_escaped(mdm_ctx *r, unsigned cp)
 /* Render an entity reference (text like "&amp;" / "&#x41;") as its UTF-8
  * codepoint(s) with HTML-escaping, or escaped-verbatim if unknown. Always
  * HTML-safe output. */
-static void mdm_render_entity(mdm_ctx *r, const char *text, size_t size)
+static unsigned mdm_render_entity(mdm_ctx *r, const char *text, size_t size)
 {
     if (size > 3 && text[1] == '#') {
         unsigned cp = 0;
@@ -221,16 +222,17 @@ static void mdm_render_entity(mdm_ctx *r, const char *text, size_t size)
             for (size_t i = 2; i < size - 1; i++) cp = 10 * cp + (text[i] - '0');
         }
         mdm_append_codepoint_escaped(r, cp);
-        return;
+        return cp;
     }
     const ENTITY *ent = entity_lookup(text, size);
     if (ent != NULL) {
         mdm_append_codepoint_escaped(r, ent->codepoints[0]);
         if (ent->codepoints[1]) mdm_append_codepoint_escaped(r, ent->codepoints[1]);
-        return;
+        return ent->codepoints[1] ? ent->codepoints[1] : ent->codepoints[0];
     }
     /* Unknown entity: escape the raw text (never emit a bare '&'). */
     mdm_escape_html(r, text, size);
+    return UINT_MAX;
 }
 
 /* ===================================================================
@@ -425,6 +427,17 @@ static unsigned char mdm_trailing_quote_char(const char *p, size_t n)
     return mdm_is_unicode_space(cp) ? ' ' : last;
 }
 
+static unsigned char mdm_codepoint_quote_char(unsigned cp)
+{
+    if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff))
+        return 0x80;  /* rendered U+FFFD is right context */
+    if (cp < 0x80)
+        return (unsigned char)cp;
+    if (cp == 0x200B || mdm_is_unicode_space(cp))
+        return ' ';
+    return 0x80;
+}
+
 /* Render `data` as normal text with smart-punctuation transforms.
  * Anything not transformed is HTML-escaped. */
 static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
@@ -487,7 +500,22 @@ static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
 static char *mdm_slugify(const char *text, size_t len)
 {
     static const char hex[] = "0123456789abcdef";
-    char *out = emalloc(len * 3 + 1);
+    size_t extra = 0;
+    for (size_t i = 0; i < len;) {
+        unsigned char c = (unsigned char)text[i];
+        if (c < 0x80) {
+            i++;
+            continue;
+        }
+        size_t n = mdparser_md4c_utf8_seqlen((const unsigned char *)text + i, len - i);
+        if (n != 0) {
+            i += n;
+        } else {
+            extra += 2;  /* one invalid byte becomes three %xx bytes */
+            i++;
+        }
+    }
+    char *out = emalloc(len + extra + 1);
     size_t o = 0;
     bool prev_dash = true;
     size_t i = 0;
@@ -547,6 +575,12 @@ static char *mdm_slug_unique(mdm_slugs *s, char *base)
     }
     zval *nx = zend_hash_str_find(&s->next_suffix, base, blen);
     zend_long start = nx ? Z_LVAL_P(nx) : 1;
+    if (start < 1) {
+        efree(base);
+        char *empty = emalloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
     char *cand = emalloc(blen + 24);
     for (zend_long n = start; n <= 100000; n++) {
         int w = snprintf(cand, blen + 24, "%s-" ZEND_LONG_FMT, base, n);
@@ -560,6 +594,9 @@ static char *mdm_slug_unique(mdm_slugs *s, char *base)
             return cand;
         }
     }
+    zval exhausted;
+    ZVAL_LONG(&exhausted, -1);
+    zend_hash_str_update(&s->next_suffix, base, blen, &exhausted);
     efree(cand);
     efree(base);
     char *empty = emalloc(1);
@@ -834,6 +871,7 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                     r->heading_text.s ? ZSTR_VAL(r->heading_text.s) : "",
                     r->heading_text.s ? ZSTR_LEN(r->heading_text.s) : 0);
                 char *slug = mdm_slug_unique(&r->slugs, base);
+                smart_str_free(&r->heading_text);
                 /* strlen, not snprintf's return value: a truncating snprintf
                  * returns the would-be length, and (size_t)w would then
                  * over-read past the buffer. md4c caps the level at 6 so no
@@ -985,14 +1023,18 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             if (r->image_nesting_level > 0) mdm_escape_html(r, text, size);
             else mdm_render_raw_html(r, text, size);
             break;
-        case MD_TEXT_ENTITY:
-            mdm_render_entity(r, text, size);
+        case MD_TEXT_ENTITY: {
+            unsigned cp = mdm_render_entity(r, text, size);
             /* Seed quote context from the byte the entity actually rendered
              * (e.g. `&amp;` -> '&' is right-context; `&#32;` -> ' ' is left),
              * not a blanket 0 which would force an opening quote. */
-            if (r->cur->s && ZSTR_LEN(r->cur->s) > 0)
+            if (cp != UINT_MAX) {
+                r->prev_char = mdm_codepoint_quote_char(cp);
+            } else if (r->cur->s && ZSTR_LEN(r->cur->s) > 0) {
                 r->prev_char = mdm_trailing_quote_char(ZSTR_VAL(r->cur->s), ZSTR_LEN(r->cur->s));
+            }
             break;
+        }
         case MD_TEXT_CODE:
         case MD_TEXT_LATEXMATH:
             /* Verbatim TeX / code: HTML-escape, never SmartyPants. */
@@ -1034,11 +1076,14 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     if (render_opts & MDPARSER_RF_VALIDATE_UTF8)
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
-    /* Reserve roughly the input size up front: HTML output is typically
-     * 1-1.5x the markdown, so this skips the early smart_str doublings (and
-     * their cumulative memcpy) on medium/large documents. */
-    if (use_len)
-        smart_str_alloc(&r.main, use_len, 0);
+    /* Reserve up to 1 MiB based on the input size. This skips early smart_str
+     * growth for ordinary documents without making sparse large inputs pay
+     * for output they never produce. */
+    if (use_len) {
+        size_t reserve = use_len < MDPARSER_INITIAL_OUTPUT_RESERVE_MAX
+            ? use_len : MDPARSER_INITIAL_OUTPUT_RESERVE_MAX;
+        smart_str_alloc(&r.main, reserve, 0);
+    }
 
     MD_PARSER parser = {
         0,

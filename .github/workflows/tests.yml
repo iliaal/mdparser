@@ -75,13 +75,11 @@ jobs:
           export TEST_PHP_EXECUTABLE=$(which php)
           export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export NO_INTERACTION=1
-          RESULT=$(php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1) || true
-          echo "$RESULT"
-          FAILED=$(printf '%s\n' "$RESULT" | awk '/Tests failed/ { print $4; exit }')
-          if [ "${FAILED:-1}" -gt 0 ]; then
-            echo "::error::$FAILED test(s) failed"
-            exit 1
-          fi
+          set +e
+          php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
 
   linux-zts:
     name: PHP ${{ matrix.php }} ZTS - Linux (canary)
@@ -114,13 +112,11 @@ jobs:
           export TEST_PHP_EXECUTABLE=$(which php)
           export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export NO_INTERACTION=1
-          RESULT=$(php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1) || true
-          echo "$RESULT"
-          FAILED=$(printf '%s\n' "$RESULT" | awk '/Tests failed/ { print $4; exit }')
-          if [ "${FAILED:-1}" -gt 0 ]; then
-            echo "::error::$FAILED test(s) failed under ZTS"
-            exit 1
-          fi
+          set +e
+          php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
 
   macos:
     name: PHP ${{ matrix.php }} - macOS
@@ -150,13 +146,11 @@ jobs:
           export TEST_PHP_EXECUTABLE=$(which php)
           export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export NO_INTERACTION=1
-          RESULT=$(php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1) || true
-          echo "$RESULT"
-          FAILED=$(printf '%s\n' "$RESULT" | awk '/Tests failed/ { print $4; exit }')
-          if [ "${FAILED:-1}" -gt 0 ]; then
-            echo "::error::$FAILED test(s) failed"
-            exit 1
-          fi
+          set +e
+          php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
 
   asan:
     name: PHP ${{ matrix.php }} - ASAN
@@ -220,8 +214,8 @@ jobs:
           export TEST_PHP_EXECUTABLE=/tmp/php-asan/bin/php
           export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export NO_INTERACTION=1
-          /tmp/php-asan/bin/php run-tests.php --show-diff --asan -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/test-output.txt || true
-          if grep -qP 'Tests failed\s*:\s*[1-9]' /tmp/test-output.txt; then
-            echo "::error::Tests failed under ASAN"
-            exit 1
-          fi
+          set +e
+          /tmp/php-asan/bin/php run-tests.php --show-diff --asan -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
