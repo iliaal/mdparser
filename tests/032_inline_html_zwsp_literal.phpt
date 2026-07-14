@@ -1,15 +1,12 @@
 --TEST--
-toInlineHtml strips literal U+200B from user input (documented behavior)
+toInlineHtml preserves literal U+200B from user input
 --EXTENSIONS--
 mdparser
 --FILE--
 <?php
 $p = new MdParser\Parser;
 
-// AD-801: U+200B (zero-width space) in user input is collateral damage of
-// the per-line ZWSP sentinel mechanism in toInlineHtml. Pin the documented
-// data-loss so a future change to the strip loop breaks the test
-// deliberately rather than silently corrupting user input.
+// The internal line sentinel must not collide with user-provided bytes.
 $zwsp = "\xE2\x80\x8B";
 $src  = "a{$zwsp}b{$zwsp}c";
 $out  = $p->toInlineHtml($src);
@@ -24,7 +21,7 @@ var_dump($p->toInlineHtml("- not a list"));
 var_dump($p->toInlineHtml("> not a quote"));
 ?>
 --EXPECT--
-string(3) "abc"
+string(9) "a​b​c"
 string(11) "hello world"
 string(15) "# not a heading"
 string(12) "- not a list"

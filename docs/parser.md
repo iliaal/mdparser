@@ -199,11 +199,11 @@ All render methods can throw `MdParser\Exception` (final, extends
   (256 MB) throw before md4c ever sees them. `toAst()` builds the node
   array on a fixed-depth stack and throws if nesting exceeds
   `MDPARSER_MAX_AST_DEPTH` (1000) — adversarial inputs like `> ` × 50000
-  hit this. `toXml()` applies the same depth cap: its 2-spaces-per-level
-  indentation makes a tiny deeply-nested input produce quadratic output,
-  so it throws past `MDPARSER_MAX_AST_DEPTH` rather than amplify. `toHtml()`
-  streams md4c's callbacks straight to output (no indentation, output
-  linear in input) and is not depth-capped.
+  hit this. `toXml()` applies the same structural depth cap and limits visual
+  indentation to 32 levels, preserving the complete tree without letting
+  whitespace grow quadratically near the cap. `toHtml()` streams md4c's
+  callbacks straight to output (no indentation, output linear in input) and
+  is not depth-capped.
 - **md4c / render null path.** The rare case where `md_parse()` reports
   failure, or the renderer returns `NULL`, raises an exception identifying
   the renderer failure.
@@ -237,8 +237,11 @@ and does not show up in `memory_get_usage()`. The wrapper's own output
 buffers — the rendered HTML/XML string, the AST arrays — use Zend MM
 (`emalloc`/`efree`) and are accounted normally.
 
-So `memory_limit` will not stop md4c mid-parse on a pathological input.
-The guard for that is the 256 MB input-size cap
+So `memory_limit` does not account for md4c's own working buffers. It can still
+interrupt a parse when an HTML/XML output buffer or AST allocation crosses the
+limit; the wrapper catches that bailout at md4c's parse frame, frees md4c's
+libc allocations, cleans up renderer state, and then resumes the PHP bailout.
+The primary bound on parse-side memory is the 256 MB input-size cap
 (`MDPARSER_MAX_INPUT_SIZE`), which throws `MdParser\Exception` before
 md4c sees the source. If a libc allocation itself fails, the process
 behaves the way any failed `malloc` does in the SAPI; the wrapper

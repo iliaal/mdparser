@@ -24,6 +24,7 @@
 #include "entity.h"
 #include "mdparser_md4c_html.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_vendor.h"
 
 /* Status codes returned via the *status out-param. */
 #define MDM_OK            0
@@ -67,6 +68,7 @@ typedef struct {
     /* SmartyPants quote context: last normal-text byte emitted (0 at
      * start / after a structural boundary we treat as left-context). */
     unsigned char prev_char;
+    bool inline_line_start;
 } mdm_ctx;
 
 #define NEED_HTML_ESC_FLAG 0x1
@@ -131,6 +133,7 @@ static void mdm_escape_html(mdm_ctx *r, const char *data, size_t size)
         if (off > beg) out_append(r, data + beg, off - beg);
         if (off < size) {
             switch (data[off]) {
+                case '\0': OUT_LIT(r, "\xef\xbf\xbd"); break;
                 case '"':  OUT_LIT(r, "&quot;"); break;
                 case '&':  OUT_LIT(r, "&amp;");  break;
                 case '<':  OUT_LIT(r, "&lt;");   break;
@@ -994,6 +997,16 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
 
+    if (r->inline_line_start && type == MD_TEXT_NORMAL && size > 0) {
+        r->inline_line_start = false;
+        if (text[0] == ';') {
+            text++;
+            size--;
+            r->prev_char = ' ';
+            if (size == 0) return 0;
+        }
+    }
+
     /* While buffering a heading, also accumulate plain text for the slug.
      * Entities are decoded to their raw bytes so `# &copy;` slugs the same
      * as a literal `# ©` (otherwise the heading would get no id at all). */
@@ -1012,12 +1025,16 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             if (r->image_nesting_level > 0) OUT_LIT(r, " ");
             else OUT_LIT(r, "<br />\n");
             r->prev_char = 0;
+            if (r->render_opts & MDPARSER_RF_INLINE_SENTINEL)
+                r->inline_line_start = true;
             break;
         case MD_TEXT_SOFTBR:
             if (r->image_nesting_level > 0) OUT_LIT(r, " ");
             else if (r->render_opts & MDPARSER_RF_NOBREAKS) OUT_LIT(r, " ");
             else OUT_LIT(r, "\n");
             r->prev_char = 0;
+            if (r->render_opts & MDPARSER_RF_INLINE_SENTINEL)
+                r->inline_line_start = true;
             break;
         case MD_TEXT_HTML:
             if (r->image_nesting_level > 0) mdm_escape_html(r, text, size);
@@ -1065,6 +1082,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     r.render_opts = render_opts;
     r.cur = &r.main;
     r.prev_char = 0;
+    r.inline_line_start = (render_opts & MDPARSER_RF_INLINE_SENTINEL) != 0;
 
     if (render_opts & MDPARSER_RF_HEADING_ANCHORS)
         mdm_slugs_init(&r.slugs);
@@ -1097,12 +1115,19 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
         NULL
     };
 
-    int rc = md_parse(use_src, (MD_SIZE)use_len, &parser, &r);
+    bool bailed_out;
+    int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &r,
+        &bailed_out);
 
     if (owned) efree((void *)use_src);
     smart_str_free(&r.heading_html);
     smart_str_free(&r.heading_text);
     mdm_slugs_destroy(&r.slugs);
+
+    if (bailed_out) {
+        smart_str_free(&r.main);
+        zend_bailout();
+    }
 
     if (rc != 0) {
         smart_str_free(&r.main);

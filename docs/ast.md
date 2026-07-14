@@ -3,16 +3,19 @@
 `Parser::toAst(string $source): array` returns a nested PHP array
 representation of the parsed document tree. Each node is an associative
 array with at minimum a `type` key. Container nodes (document, block
-quote, list, etc.) have a `children` key holding an ordered array of
-child nodes. Leaf nodes carry type-specific fields such as `literal`,
-`url`, or `level`.
+quote, list, etc.) add a `children` key lazily when their first child is
+emitted; an empty container omits the key. When present, `children` holds an
+ordered array of child nodes. Leaf nodes carry type-specific fields such as
+`literal`, `url`, or `level`.
 
 The AST is assembled in C directly from md4c's parser callbacks: as
 md4c emits enter/leave block, enter/leave span, and text events, the
 builder pushes and pops nodes on a zval stack and fills in each node's
 fields as the event arrives. There is no intermediate document tree and
 no string re-parsing, so building the array is roughly as fast as
-`toHtml`.
+`toHtml`. Adjacent normal/entity/NUL text callbacks are coalesced into one
+`text` node so parser callback fragmentation does not multiply PHP array
+overhead.
 
 > **Security: the AST is unsanitized.** Link / image `url` fields and
 > `html_block` / `html_inline` `literal` fields are preserved
@@ -47,6 +50,9 @@ no string re-parsing, so building the array is roughly as fast as
 ### `document`
 
 Root container. Only appears once, at the top level.
+
+An empty document is `['type' => 'document']`; the `children` key shown below
+appears when the document contains at least one block.
 
 ```php
 ['type' => 'document', 'children' => [...]]

@@ -35,9 +35,14 @@ git config --global --add safe.directory /mdparser
 git config --global --add safe.directory /mdparser/.git
 git clone -q file:///mdparser /tmp/src
 cd /tmp/src
-echo "HEAD: $(git log --oneline -1)"
-echo "tag:  $(git describe --tags --always)"
-ls composer.json config.m4 php_mdparser.h | head
+HEAD_DESCRIPTION=$(git log --oneline -1)
+TAG_DESCRIPTION=$(git describe --tags --always)
+echo "HEAD: ${HEAD_DESCRIPTION}"
+echo "tag:  ${TAG_DESCRIPTION}"
+for required_file in composer.json config.m4 php_mdparser.h; do
+	test -f "${required_file}"
+	echo "${required_file}"
+done
 echo
 
 echo "---- 3. Install Composer ----"
@@ -58,40 +63,36 @@ echo "---- 5. pie install (against Packagist, real-user path) ----"
 # already serves the new version. This is the canonical user install:
 # `pie install iliaal/mdparser` resolves to the freshly-tagged release,
 # picks up the prebuilt zip when a matching <php-ver, arch, libc> lane
-# exists on the release, and falls back to source-build otherwise. The
-# manual phpize+make+install fallback in Step 6 below covers the
-# source-build path that PIE's composer-default lane exercises.
-PIE_OK=0
+# exists on the release, and falls back to PIE's composer-default source
+# build otherwise. Either path must succeed through PIE itself.
 echo "   pie install iliaal/mdparser"
+set +e
 pie install \
-    --with-php-config=/usr/local/bin/php-config \
-    --auto-install-build-tools \
-    iliaal/mdparser 2>&1 | tee /tmp/pie.out | tail -25 || true
-
-if php -m | grep -qi mdparser; then
-    PIE_OK=1
-    echo "   PIE install: success"
+	--with-php-config=/usr/local/bin/php-config \
+	--auto-install-build-tools \
+	iliaal/mdparser >/tmp/pie.out 2>&1
+PIE_STATUS=$?
+set -e
+tail -25 /tmp/pie.out
+if ((PIE_STATUS != 0)); then
+	echo "   PIE install failed with status ${PIE_STATUS}" >&2
+	exit "${PIE_STATUS}"
 fi
-
-echo "   overall PIE result: PIE_OK=$PIE_OK"
+if ! php -m | grep -qi mdparser; then
+	echo "   PIE exited successfully but mdparser is not loaded" >&2
+	exit 1
+fi
+echo "   PIE install: success"
 echo
 
-echo "---- 6. Verify extension loads ----"
-if [ "$PIE_OK" = "0" ]; then
-    echo "   *** PIE did not install the extension; falling back to manual phpize+make+install ***"
-    cd /tmp/src
-    phpize >/dev/null
-    ./configure --enable-mdparser >/dev/null
-    make -j"$(nproc)" 2>&1 | tail -3
-    make install 2>&1 | tail -3
-    docker-php-ext-enable mdparser
-    echo "   [fallback] manual install SUCCEEDED"
-fi
+echo "---- 6. Verify PIE-installed extension loads ----"
 php -m | grep -i mdparser
 php -r 'echo "mdparser version: ", phpversion("mdparser"), PHP_EOL;'
 echo
 
 echo "---- 7. Functional smoke test ----"
+# The PHP code is intentionally literal.
+# shellcheck disable=SC2016
 php -r '
 $p = new MdParser\Parser();
 $out = $p->toHtml("# Hello");

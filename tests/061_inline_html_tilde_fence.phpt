@@ -1,14 +1,14 @@
 --TEST--
-toInlineHtml suppresses block starts on continuation lines (per-line ZWSP)
+toInlineHtml suppresses block starts on continuation lines
 --EXTENSIONS--
 mdparser
 --FILE--
 <?php
 
 /* Regression: md4c has no inline-only mode, so toInlineHtml normalizes
- * multiline input by putting a ZWSP sentinel on every retained line. This keeps
- * continuation-line block starts literal and prevents later paragraphs from
- * consuming reference definitions. */
+ * multiline input by putting a consumed punctuation sentinel on every retained
+ * line. This keeps continuation-line block starts literal and prevents later
+ * paragraphs from consuming reference definitions. */
 
 $p = new MdParser\Parser;
 
@@ -34,7 +34,7 @@ eq("tilde fence first line stays inline",
    "~~~\ncode\n~~~");
 
 // A colon-led GFM table underline on a continuation line also opens a block in
-// md4c unless the line gets its own ZWSP sentinel.
+// md4c unless the line gets its own sentinel.
 eq("colon-led table underline continuation stays inline",
    trim($p->toInlineHtml("a | b\n:--|:--\nc | d")),
    "a | b\n:--|:--\nc | d");

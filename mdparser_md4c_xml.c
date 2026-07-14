@@ -22,6 +22,7 @@
 #include "md4c.h"
 #include "php_mdparser.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_vendor.h"
 #include "mdparser_md4c_xml.h"
 
 /* Streaming md4c -> CommonMark-XML emitter. Mirrors the CommonMark
@@ -32,6 +33,7 @@
 #define MDX_OK        0
 #define MDX_ERR_PARSE 1
 #define MDX_ERR_DEPTH 2
+#define MDX_MAX_INDENT_DEPTH 32
 
 const char *mdparser_md4c_xml_status_message(int status)
 {
@@ -52,7 +54,9 @@ typedef struct {
 
 static void mdx_indent(mdx_ctx *c)
 {
-    for (int i = 0; i < c->depth; i++) smart_str_appendl(&c->out, "  ", 2);
+    int indent_depth = c->depth < MDX_MAX_INDENT_DEPTH
+        ? c->depth : MDX_MAX_INDENT_DEPTH;
+    for (int i = 0; i < indent_depth; i++) smart_str_appendl(&c->out, "  ", 2);
 }
 
 #define X_LIT(c, lit) smart_str_appendl(&(c)->out, "" lit, sizeof(lit) - 1)
@@ -66,21 +70,32 @@ static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
     size_t beg = 0, i = 0;
     for (; i < n; i++) {
         const char *rep = NULL;
-        switch (s[i]) {
-            case '&': rep = "&amp;"; break;
-            case '<': rep = "&lt;"; break;
-            case '>': rep = "&gt;"; break;
-            case '"': if (attr) rep = "&quot;"; break;
-            default:
-                if ((unsigned char)s[i] < 0x20
-                    && s[i] != '\t' && s[i] != '\n' && s[i] != '\r')
-                    rep = "\xef\xbf\xbd";
-                break;
+        size_t consumed = 1;
+        const unsigned char *u = (const unsigned char *)s;
+
+        if (i + 2 < n && u[i] == 0xEF && u[i + 1] == 0xBF
+            && (u[i + 2] == 0xBE || u[i + 2] == 0xBF)) {
+            rep = "\xef\xbf\xbd";
+            consumed = 3;
+        } else {
+            switch (s[i]) {
+                case '&': rep = "&amp;"; break;
+                case '<': rep = "&lt;"; break;
+                case '>': rep = "&gt;"; break;
+                case '"': if (attr) rep = "&quot;"; break;
+                case '\t': if (attr) rep = "&#x9;"; break;
+                case '\n': if (attr) rep = "&#xA;"; break;
+                case '\r': if (attr) rep = "&#xD;"; break;
+                default:
+                    if ((unsigned char)s[i] < 0x20) rep = "\xef\xbf\xbd";
+                    break;
+            }
         }
         if (rep) {
             if (i > beg) smart_str_appendl(b, s + beg, i - beg);
             smart_str_appends(b, rep);
-            beg = i + 1;
+            beg = i + consumed;
+            i += consumed - 1;
         }
     }
     if (i > beg) smart_str_appendl(b, s + beg, i - beg);
@@ -147,9 +162,8 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
 static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
-    /* Cap nesting: indentation is 2*depth spaces per line, so unbounded depth
-     * makes a tiny input produce quadratic XML (a DoS amplifier). Aborting
-     * here mirrors the toAst depth cap and fails with a clean exception. */
+    /* Keep the structural depth contract aligned with toAst. Indentation is
+     * capped independently so valid near-limit trees remain linear-sized. */
     if (c->depth >= MDPARSER_MAX_AST_DEPTH) { c->error = MDX_ERR_DEPTH; return 1; }
     switch (type) {
         case MD_BLOCK_DOC: break;
@@ -201,7 +215,7 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             MD_BLOCK_CODE_DETAIL *d = detail;
             mdx_indent(c);
             X_LIT(c, "<code_block");
-            if (d->lang.text) mdx_attr(c, "info", &d->lang);
+            if (d->info.text) mdx_attr(c, "info", &d->info);
             X_LIT(c, " xml:space=\"preserve\">");
             c->collecting = true;
             break;
@@ -446,8 +460,15 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
         smart_str_alloc(&c.out, reserve, 0);
     }
 
-    int rc = md_parse(use_src, (MD_SIZE)use_len, &parser, &c);
+    bool bailed_out;
+    int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &c,
+        &bailed_out);
     if (owned) efree((void *)use_src);
+
+    if (bailed_out) {
+        smart_str_free(&c.out);
+        zend_bailout();
+    }
 
     if (c.error != 0 || rc != 0 || c.depth != 1) {
         if (c.error == 0) {

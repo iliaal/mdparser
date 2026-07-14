@@ -53,7 +53,11 @@ Before filing, try to reproduce against the latest `master` branch.
 7. Validate the package manifest didn't regress:
 
    ```sh
-   php scripts/validate_package.php
+   composer validate --strict
+   curl -fsSL -o /tmp/pie.phar \
+     https://github.com/php/pie/releases/latest/download/pie.phar
+   php /tmp/pie.phar repository:add path .
+   php /tmp/pie.phar build iliaal/mdparser:*@dev
    ```
 
 8. Push and open a PR against `master`.
@@ -145,14 +149,31 @@ For maintainers cutting a new version:
 
 3. Commit + push to master. CI (Tests + Windows Build) must be
    green on the resulting commit before tagging.
-4. `git tag -a X.Y.Z -m "mdparser X.Y.Z"` with a release-note
-   body, then `git push origin X.Y.Z`. Use bare semver
-   (`0.1.1`, not `v0.1.1`) to match the existing tag convention.
-5. The `windows.yml` workflow picks up the tag, runs the full
-   build matrix (PHP 8.3-8.5 x TS/NTS x x86/x64), and uses
-   `php-windows-builder/release@v1` to create the GitHub release
-   and attach the 12 DLL zips.
-6. Packagist's GitHub webhook (configured on the repo) fires on
+4. Create and push the annotated tag. Use bare semver (`0.4.4`, not
+   `v0.4.4`) to match the existing convention:
+
+   ```sh
+   git tag -a X.Y.Z -m "mdparser X.Y.Z"
+   git push origin X.Y.Z
+   ```
+
+5. Publish the GitHub release for that existing tag. A tag push alone does
+   not start the binary workflows; both `release-linux.yml` and the release
+   lane in `windows.yml` trigger on the published-release event.
+
+   ```sh
+   gh release create X.Y.Z --verify-tag \
+     --title "mdparser X.Y.Z" --notes-file /path/to/release-notes.md
+   ```
+
+6. Confirm both release workflows finish successfully. `windows.yml` runs
+   PHP 8.2-8.5 across TS/NTS and x86/x64 and uploads the tested DLL archives.
+   `release-linux.yml` builds Linux x86_64/arm64 and macOS arm64 for PHP 8.4
+   and 8.5, unpacks and loads each exact `.so`, then uploads it. If a Unix
+   lane needs recovery, dispatch `release-linux.yml` manually with the same
+   tag; the workflow verifies that it checked out the tag commit before it
+   builds.
+7. Packagist's GitHub webhook (configured on the repo) fires on
    the tag push and re-scans versions. `pie install
    iliaal/mdparser` resolves to the new tag within a minute or
    two. If Packagist hasn't indexed the tag yet, users can fall
@@ -161,7 +182,7 @@ For maintainers cutting a new version:
    to force a re-crawl. See
    `~/ai/wiki/tools/packagist-quirks.md` for the full list of
    Packagist indexing gotchas.
-7. Before the first tag of any new release cycle, double-check
+8. Before the first tag of any new release cycle, double-check
    that `composer.json` exists in the tree at HEAD (`git ls-tree
    HEAD | grep composer.json`). Packagist silently skips tags
    whose commit doesn't contain `composer.json` at the root —

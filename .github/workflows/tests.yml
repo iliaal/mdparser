@@ -79,7 +79,7 @@ jobs:
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   linux-zts:
     name: PHP ${{ matrix.php }} ZTS - Linux (canary)
@@ -116,7 +116,7 @@ jobs:
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   macos:
     name: PHP ${{ matrix.php }} - macOS
@@ -150,7 +150,7 @@ jobs:
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   asan:
     name: PHP ${{ matrix.php }} - ASAN
@@ -217,4 +217,4 @@ jobs:
           /tmp/php-asan/bin/php run-tests.php --show-diff --asan -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS"
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1

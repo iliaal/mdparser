@@ -22,6 +22,7 @@
 #include "md4c.h"
 #include "php_mdparser.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_vendor.h"
 #include "mdparser_md4c_ast.h"
 
 /* Stack-based md4c -> PHP-array AST builder. Node type names and per-node
@@ -145,6 +146,89 @@ static void mda_new_node(zval *out, int type)
     zend_hash_add_new(Z_ARRVAL_P(out), mda_k_type, &v);
 }
 
+static zval *mda_last_text_literal(mda_ctx *c)
+{
+    zval *children = zend_hash_find(Z_ARRVAL_P(mda_top(c)), mda_k_children);
+    zval *last;
+    zval *type;
+
+    if (!children || zend_hash_num_elements(Z_ARRVAL_P(children)) == 0) {
+        return NULL;
+    }
+    last = zend_hash_index_find(Z_ARRVAL_P(children),
+        zend_hash_num_elements(Z_ARRVAL_P(children)) - 1);
+    if (!last || Z_TYPE_P(last) != IS_ARRAY) {
+        return NULL;
+    }
+    type = zend_hash_find(Z_ARRVAL_P(last), mda_k_type);
+    if (!type || Z_TYPE_P(type) != IS_STRING
+        || Z_STR_P(type) != mda_types[MDA_T_text]) {
+        return NULL;
+    }
+    return zend_hash_str_find(Z_ARRVAL_P(last), "literal", sizeof("literal") - 1);
+}
+
+static void mda_append_text_raw(mda_ctx *c, const char *text, size_t size)
+{
+    zval *literal;
+    zval node;
+
+    if (size == 0) {
+        return;
+    }
+    literal = mda_last_text_literal(c);
+    if (literal && Z_TYPE_P(literal) == IS_STRING) {
+        size_t old_size = Z_STRLEN_P(literal);
+        zend_string *joined = zend_string_extend(Z_STR_P(literal), old_size + size, 0);
+        memcpy(ZSTR_VAL(joined) + old_size, text, size);
+        ZSTR_VAL(joined)[old_size + size] = '\0';
+        Z_STR_P(literal) = joined;
+        return;
+    }
+
+    mda_new_node(&node, MDA_T_text);
+    add_assoc_stringl(&node, "literal", text, size);
+    mda_append_child(c, &node);
+}
+
+static void mda_append_text(mda_ctx *c, const char *text, size_t size)
+{
+    const char *cursor = text;
+    size_t remaining = size;
+
+    while (remaining > 0) {
+        const char *nul = memchr(cursor, '\0', remaining);
+        if (!nul) {
+            mda_append_text_raw(c, cursor, remaining);
+            return;
+        }
+        mda_append_text_raw(c, cursor, (size_t)(nul - cursor));
+        mda_append_text_raw(c, "\xef\xbf\xbd", 3);
+        remaining -= (size_t)(nul - cursor) + 1;
+        cursor = nul + 1;
+    }
+}
+
+static void mda_collect_literal(mda_ctx *c, const char *text, size_t size)
+{
+    const char *cursor = text;
+    size_t remaining = size;
+
+    while (remaining > 0) {
+        const char *nul = memchr(cursor, '\0', remaining);
+        if (!nul) {
+            smart_str_appendl(&c->litbuf, cursor, remaining);
+            return;
+        }
+        if (nul > cursor) {
+            smart_str_appendl(&c->litbuf, cursor, (size_t)(nul - cursor));
+        }
+        smart_str_appendl(&c->litbuf, "\xef\xbf\xbd", 3);
+        remaining -= (size_t)(nul - cursor) + 1;
+        cursor = nul + 1;
+    }
+}
+
 /* Store an MD_ATTRIBUTE (destination/title/info) under `key`, entity-decoded.
  * The AST contract exposes decoded URLs/titles (see docs/ast.md), so resolve
  * md4c's typed substrings rather than storing the raw &amp;-encoded bytes. */
@@ -250,7 +334,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_CODE: {
             MD_BLOCK_CODE_DETAIL *d = detail;
             mda_new_node(&n, MDA_T_code_block);
-            mda_add_attr(&n, "info", &d->lang);
+            mda_add_attr(&n, "info", &d->info);
             c->collecting = true;
             smart_str_free(&c->litbuf);
             break;
@@ -404,7 +488,11 @@ static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 
     if (c->collecting) {
         /* code/html literal: verbatim bytes (entities not decoded). */
-        smart_str_appendl(&c->litbuf, text, size);
+        if (type == MD_TEXT_NULLCHAR) {
+            smart_str_appendl(&c->litbuf, "\xef\xbf\xbd", 3);
+        } else {
+            mda_collect_literal(c, text, size);
+        }
         return 0;
     }
 
@@ -420,19 +508,16 @@ static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             smart_str b = {0};
             mdparser_md4c_decode_entity(&b, text, size);
             smart_str_0(&b);
-            mda_new_node(&n, MDA_T_text);
-            add_assoc_stringl(&n, "literal", b.s ? ZSTR_VAL(b.s) : "", b.s ? ZSTR_LEN(b.s) : 0);
+            if (b.s) mda_append_text(c, ZSTR_VAL(b.s), ZSTR_LEN(b.s));
             smart_str_free(&b);
-            break;
+            return 0;
         }
         case MD_TEXT_NULLCHAR:
-            mda_new_node(&n, MDA_T_text);
-            add_assoc_stringl(&n, "literal", "\xef\xbf\xbd", 3);
-            break;
+            mda_append_text(c, "\xef\xbf\xbd", 3);
+            return 0;
         default:  /* MD_TEXT_NORMAL / MD_TEXT_CODE outside a collector */
-            mda_new_node(&n, MDA_T_text);
-            add_assoc_stringl(&n, "literal", text, size);
-            break;
+            mda_append_text(c, text, size);
+            return 0;
     }
     mda_append_child(c, &n);
     return 0;
@@ -465,10 +550,19 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     if (validate_utf8)
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
-    int rc = md_parse(use_src, (MD_SIZE)use_len, &parser, &c);
+    bool bailed_out;
+    int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &c,
+        &bailed_out);
 
     if (owned) efree((void *)use_src);
     smart_str_free(&c.litbuf);
+
+    if (bailed_out) {
+        for (int i = 0; i <= c.depth; i++) {
+            if (Z_TYPE(c.stack[i]) != IS_UNDEF) zval_ptr_dtor(&c.stack[i]);
+        }
+        zend_bailout();
+    }
 
     if (c.error != MDA_OK || rc != 0 || c.depth != 0) {
         if (c.error == MDA_OK) {

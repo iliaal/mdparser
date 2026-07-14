@@ -10,18 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Enabled GitHub-style alerts as well as footnotes in `Options::github()`.
+- Adjacent AST text fragments are now coalesced into one `text` node, reducing callback-driven array overhead.
 
 ### Fixed
 
 - Fixed SmartyPants quote context after decoded entities.
 - Avoided repeated 100,000-suffix scans after heading ID exhaustion and reduced scratch memory for large headings.
 - Reduced peak HTML, XML, and AST memory for sparse input and large code or HTML literals.
+- `toInlineHtml()` now preserves line-leading inline delimiters and literal U+200B while using less memory on multiline input.
+- HTML, XML, and AST output now replace embedded NUL exactly once; XML also preserves attribute whitespace and replaces forbidden XML 1.0 scalars.
+- AST and XML code blocks retain full info strings, and deeply nested XML bounds indentation without truncating structure.
+- Zend memory-limit bailouts now release md4c's libc allocations before the request aborts.
 
 ### For contributors
 
 - Made CI reject crashed, unloadable, and all-skipped PHPT runs.
 - Made benchmark and release helpers reject invalid or inconsistent inputs with a nonzero status.
 - Added the PHP 8.2 floor and warnings-as-errors development mode to Windows builds.
+- Unix release jobs now verify the requested tag and load-test each packaged binary before upload.
+- CI now rejects warned, incomplete, or unexpectedly skipped PHPT runs, and PIE smoke failures no longer fall back to manual builds.
 
 ## [0.4.3] - 2026-07-09
 

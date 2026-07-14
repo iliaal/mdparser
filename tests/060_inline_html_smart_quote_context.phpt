@@ -1,15 +1,12 @@
 --TEST--
-toInlineHtml with smart quotes opens a line-leading quote (ZWSP sentinel is quote-transparent)
+toInlineHtml with smart quotes opens a line-leading quote
 --EXTENSIONS--
 mdparser
 --FILE--
 <?php
 
-/* Regression: toInlineHtml prefixes each physical line with U+200B (ZWSP) to
- * suppress block constructs. U+200B is category Cf, not White_Space, so it was
- * absent from the smart renderer's Unicode-space set; its raw tail byte read as
- * right context, flipping every line-leading quote to a *closing* quote. The
- * renderer now treats a trailing ZWSP as left context. */
+/* The internal punctuation sentinel is consumed before smart rendering and
+ * seeds whitespace quote context, so every physical line opens independently. */
 
 $LDQ = "\xE2\x80\x9C"; $RDQ = "\xE2\x80\x9D";
 $LSQ = "\xE2\x80\x98"; $RSQ = "\xE2\x80\x99";

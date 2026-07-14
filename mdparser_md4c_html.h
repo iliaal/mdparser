@@ -25,6 +25,7 @@
 #define MDPARSER_RF_SMART            0x10  /* SmartyPants on normal text */
 #define MDPARSER_RF_NOBREAKS         0x20  /* softbreak -> space, not newline */
 #define MDPARSER_RF_VALIDATE_UTF8    0x40  /* rewrite invalid UTF-8 to U+FFFD */
+#define MDPARSER_RF_INLINE_SENTINEL  0x80  /* consume one internal ';' per line */
 
 /* Render `src` (length `len`) to HTML using md4c with `parser_flags`
  * (MD_FLAG_* / MD_DIALECT_*) and the MDPARSER_RF_* behaviors in `render_opts`.

@@ -254,21 +254,22 @@ PHP_METHOD(MdParser_Parser, toAst)
  * is line-oriented and triggers off the first byte of every physical
  * line, so a single sentinel before the source only protects the first
  * line. We instead build a normalized buffer where every line starts
- * with a zero-width space (U+200B, UTF-8 E2 80 8B):
+ * with an ordinary punctuation sentinel (`;`):
  *
  *   - \r\n and lone \r are normalized to \n (md4c normalizes too,
  *     but doing it here lets us know exactly where line breaks are);
  *   - runs of \n are collapsed to one (blank lines would otherwise
  *     end the paragraph and start a new one);
  *   - leading, trailing, and whitespace-only physical lines are dropped;
- *   - ZWSP is prepended at the start, and after every retained \n.
+ *   - `;` is prepended at the start, and after every retained \n.
  *
- * md4c sees a single paragraph whose every line begins with ZWSP, so
+ * md4c sees a single paragraph whose every line begins with punctuation, so
  * ATX headings, list markers, blockquotes, indented code, thematic
- * breaks, fenced code, and HTML blocks cannot fire on any line. The
- * rendered HTML is `<p>\xE2\x80\x8B...</p>\n`; we strip the wrapper
- * and any remaining ZWSPs (the per-line sentinels) from the body.
- * Literal U+200B in source is collateral and gets stripped too.
+ * breaks, fenced code, and HTML blocks cannot fire on any line. Unlike a
+ * zero-width-space prefix, punctuation preserves delimiter flanking for
+ * line-leading `_`, `~`, and `=` spans. The HTML callback consumes exactly
+ * the inserted sentinel at each line start; literal source bytes are not
+ * searched or removed afterward.
  */
 PHP_METHOD(MdParser_Parser, toInlineHtml)
 {
@@ -284,11 +285,11 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
 
     mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
 
-    static const char zwsp[3] = { (char)0xE2, (char)0x80, (char)0x8B };
+    static const char sentinel = ';';
 
     /* Build the normalized buffer incrementally with smart_str. The
-     * worst-case pre-pass bound is 4*src_len + 3 (every byte becomes a
-     * newline that gains a 3-byte ZWSP prefix), which is mathematically
+     * worst-case pre-pass bound is 2*src_len + 1 (every byte becomes a
+     * newline that gains a one-byte sentinel prefix), which is mathematically
      * safe under MDPARSER_MAX_INPUT_SIZE = 256 MB on 64-bit size_t.
      * Pre-allocating the worst-case eagerly, however, can blow past
      * memory_limit on newline-heavy inputs whose normalized form is
@@ -300,9 +301,9 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     mdparser_md4c_skip_bom(&src, &src_len);
     smart_str norm = {0};
 
-    /* Single-line fast path: with no line break the per-line ZWSP
+    /* Single-line fast path: with no line break the per-line
      * normalization reduces to one leading sentinel, so the normalized
-     * buffer is exactly ZWSP+input -- or empty when the line is all blanks
+     * buffer is exactly sentinel+input -- or empty when the line is all blanks
      * (the loop below defers leading whitespace and emits nothing if no
      * content follows). Two bulk appends instead of the per-byte loop. */
     bool single_line = (memchr(src, '\n', src_len) == NULL &&
@@ -311,12 +312,12 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         size_t s = 0;
         while (s < src_len && (src[s] == ' ' || src[s] == '\t')) s++;
         if (s < src_len) {
-            smart_str_appendl(&norm, zwsp, sizeof(zwsp));
+            smart_str_appendc(&norm, sentinel);
             smart_str_appendl(&norm, src, src_len);
         }
     }
 
-    bool need_zwsp = true;
+    bool need_sentinel = true;
     size_t pending_indent_start = 0;
     size_t pending_indent_len = 0;
 
@@ -330,28 +331,28 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         }
         if (c == '\n') {
             pending_indent_len = 0;
-            if (need_zwsp) {
+            if (need_sentinel) {
                 /* leading newline, or run of newlines; drop. */
                 continue;
             }
             smart_str_appendc(&norm, '\n');
-            need_zwsp = true;
+            need_sentinel = true;
             continue;
         }
-        if (need_zwsp && (c == ' ' || c == '\t')) {
+        if (need_sentinel && (c == ' ' || c == '\t')) {
             if (pending_indent_len == 0) {
                 pending_indent_start = i;
             }
             pending_indent_len++;
             continue;
         }
-        if (need_zwsp) {
-            smart_str_appendl(&norm, zwsp, sizeof(zwsp));
+        if (need_sentinel) {
+            smart_str_appendc(&norm, sentinel);
             if (pending_indent_len != 0) {
                 smart_str_appendl(&norm, src + pending_indent_start, pending_indent_len);
                 pending_indent_len = 0;
             }
-            need_zwsp = false;
+            need_sentinel = false;
         }
         smart_str_appendc(&norm, c);
     }
@@ -362,10 +363,11 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     size_t buf_len = norm.s ? ZSTR_LEN(norm.s) : 0;
 
     /* Heading anchors are meaningless here -- block markers are suppressed
-     * by the ZWSP normalization, so no headings emit. nofollow stays:
+     * by the sentinel normalization, so no headings emit. nofollow stays:
      * inline snippets can contain links, applied in-stream by the renderer. */
     int inline_status = 0;
-    int inline_ropts = obj->md4c_ropts & ~MDPARSER_RF_HEADING_ANCHORS;
+    int inline_ropts = (obj->md4c_ropts & ~MDPARSER_RF_HEADING_ANCHORS)
+        | MDPARSER_RF_INLINE_SENTINEL;
     zend_string *rendered_zs = mdparser_md4c_render_html(buf, buf_len,
         obj->md4c_pflags, inline_ropts, &inline_status);
     smart_str_free(&norm);
@@ -377,53 +379,22 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     const char *rendered = ZSTR_VAL(rendered_zs);
 
     size_t out_len = ZSTR_LEN(rendered_zs);
-    static const char prefix[] = "<p>\xE2\x80\x8B";
+    static const char prefix[] = "<p>";
     static const size_t prefix_len = sizeof(prefix) - 1;
     static const char suffix[] = "</p>\n";
     static const size_t suffix_len = sizeof(suffix) - 1;
 
-    const char *body_src;
-    size_t body_src_len;
     if (out_len >= prefix_len + suffix_len &&
         memcmp(rendered, prefix, prefix_len) == 0 &&
         memcmp(rendered + out_len - suffix_len, suffix, suffix_len) == 0)
     {
-        body_src = rendered + prefix_len;
-        body_src_len = out_len - prefix_len - suffix_len;
-    } else {
-        body_src = rendered;
-        body_src_len = out_len;
+        size_t body_len = out_len - prefix_len - suffix_len;
+        memmove(ZSTR_VAL(rendered_zs), rendered + prefix_len, body_len);
+        ZSTR_VAL(rendered_zs)[body_len] = '\0';
+        ZSTR_LEN(rendered_zs) = body_len;
     }
 
-    /* Strip remaining ZWSPs (the per-line sentinels we inserted). The only
-     * bytes removed are ZWSP (U+200B = E2 80 8B); if the body carries no
-     * 0xE2 lead byte at all -- the common single-line ASCII/Latin case,
-     * where the one wrapper sentinel was already removed above -- there is
-     * nothing to strip, so copy it wholesale and skip the per-byte scan. */
-    zend_string *body_str;
-    if (memchr(body_src, 0xE2, body_src_len) == NULL) {
-        body_str = zend_string_init(body_src, body_src_len, 0);
-    } else {
-        body_str = zend_string_alloc(body_src_len, 0);
-        char *out = ZSTR_VAL(body_str);
-        size_t out_idx = 0;
-        for (size_t i = 0; i < body_src_len; i++) {
-            if (i + 2 < body_src_len &&
-                (unsigned char)body_src[i] == 0xE2 &&
-                (unsigned char)body_src[i + 1] == 0x80 &&
-                (unsigned char)body_src[i + 2] == 0x8B)
-            {
-                i += 2;
-                continue;
-            }
-            out[out_idx++] = body_src[i];
-        }
-        out[out_idx] = '\0';
-        ZSTR_LEN(body_str) = out_idx;
-    }
-
-    zend_string_release(rendered_zs);
-    RETVAL_STR(body_str);
+    RETVAL_STR(rendered_zs);
 }
 
 PHP_METHOD(MdParser_Parser, html)

@@ -432,7 +432,12 @@ md_text_with_null_replacement(MD_CTX* ctx, MD_TEXTTYPE type, const CHAR* str, SZ
         ret = ctx->parser.text(MD_TEXT_NULLCHAR, _T(""), 1, ctx->userdata);
         if(ret != 0)
             return ret;
-        off++;
+        /* mdparser local patch (see vendor/VENDOR.md): consume the NUL from
+         * the input after emitting its replacement event. Incrementing only
+         * off leaves str/size unchanged and sends the NUL again in the next
+         * normal-text callback. */
+        str++;
+        size--;
     }
 }
 
@@ -7232,7 +7237,14 @@ md_parse(const MD_CHAR* text, MD_SIZE size, const MD_PARSER* parser, void* userd
     ctx.table_cell_boundaries_tail = -1;
 
     /* All the work. */
+#ifdef MD_PARSER_BAILOUT_GUARD
+    /* mdparser local integration hook (see vendor/VENDOR.md): the embedding
+     * wrapper catches Zend bailouts here so this stack-owned context remains
+     * valid for the cleanup immediately below. */
+    MD_PARSER_BAILOUT_GUARD(ret, md_process_doc(&ctx));
+#else
     ret = md_process_doc(&ctx);
+#endif
 
     /* Clean-up. */
     md_free_ref_defs(&ctx);
