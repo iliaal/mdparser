@@ -327,7 +327,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     size_t pending_indent_start = 0;
     size_t pending_indent_len = 0;
 
-    for (size_t i = 0; !single_line && i < src_len; i++) {
+    for (size_t i = 0; !single_line && i < src_len; ) {
         char c = src[i];
         if (c == '\r') {
             if (i + 1 < src_len && src[i + 1] == '\n') {
@@ -337,6 +337,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         }
         if (c == '\n') {
             pending_indent_len = 0;
+            i++;
             if (need_sentinel) {
                 /* leading newline, or run of newlines; drop. */
                 continue;
@@ -350,6 +351,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
                 pending_indent_start = i;
             }
             pending_indent_len++;
+            i++;
             continue;
         }
         if (need_sentinel) {
@@ -360,7 +362,13 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
             }
             need_sentinel = false;
         }
-        smart_str_appendc(&norm, c);
+        /* Bulk-append the rest of the physical line (content until CR/LF). */
+        size_t run = i;
+        while (run < src_len && src[run] != '\n' && src[run] != '\r') {
+            run++;
+        }
+        smart_str_appendl(&norm, src + i, run - i);
+        i = run;
     }
     /* If the input ended on a \n, norm already has no trailing newline
      * (we deferred the ZWSP for a non-existent next line). */

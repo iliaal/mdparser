@@ -17,10 +17,11 @@ no string re-parsing, so building the array is roughly as fast as
 `text` node so parser callback fragmentation does not multiply PHP array
 overhead.
 
-> **Security: the AST is unsanitized.** Link / image `url` fields and
-> `html_block` / `html_inline` `literal` fields are preserved
-> byte-for-byte. `Options::unsafe`, `Options::tagfilter`, and the
-> URL-scheme defenses apply only to the HTML paths (`toHtml` /
+> **Security: the AST is unsanitized.** `html_block` / `html_inline`
+> `literal` fields are preserved byte-for-byte. Link / image `url` and
+> `title` fields are **entity-decoded** (so `&amp;` becomes `&`) but are
+> **not** scheme-filtered. `Options::unsafe`, `Options::tagfilter`, and
+> the URL-scheme defenses apply only to the HTML paths (`toHtml` /
 > `toInlineHtml`), NOT to `toAst` or `toXml`. If you build HTML out of
 > the AST yourself, you own the sanitization: apply a URL scheme
 > allowlist (`http`, `https`, `mailto`, `tel`, …) before emitting
@@ -30,6 +31,7 @@ overhead.
 > Examples of what survives in the AST:
 > - `[click](javascript:alert(1))` → `link` node with
 >   `url => "javascript:alert(1)"`.
+> - `[x](http://a.com?a=1&amp;b=2)` → `url => "http://a.com?a=1&b=2"`.
 > - `<script>alert(1)</script>` → `html_block` with the literal text.
 > - `<b onclick="x">y</b>` → an `html_inline` carrying the attribute
 >   verbatim.
@@ -220,8 +222,13 @@ Line breaks. No fields, no children.
 
 ### `table_header`, `table_row`
 
+Both carry `is_header` (`true` on `table_header`, `false` on body
+`table_row`). THEAD/TBODY wrappers are flattened: header and body rows
+are direct children of `table` (unlike `toXml()`, which emits
+`table_header` / `table_body` section elements).
+
 ```php
-['type' => 'table_header', 'children' => [/* table_cell nodes */]]
+['type' => 'table_header', 'is_header' => true,  'children' => [/* table_cell nodes */]]
 ['type' => 'table_row',    'is_header' => false, 'children' => [...]]
 ```
 
@@ -326,7 +333,11 @@ Appears with `Options(wikiLinks: true)`, for `[[target]]` and
 
 Appear with `Options(footnotes: true)`. Both nodes carry the numeric
 footnote id in `literal`; `footnote_definition` is a block node and
-`footnote_reference` is inline.
+`footnote_reference` is inline. The AST does **not** emit a wrapping
+`footnote_section` node — definitions are direct children of
+`document` (or their enclosing block). `toXml()` *does* wrap them in
+`<footnote_section>`; treat the two structural formats as dual
+contracts, not isomorphic serializations.
 
 ```php
 ['type' => 'footnote_reference', 'literal' => '1']

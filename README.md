@@ -144,7 +144,7 @@ These are real features. They're just out of scope for a CommonMark+GFM core par
 
 ### Structural outputs are unsanitized
 
-`Parser::toXml()` and `Parser::toAst()` return structural representations of the parsed document. Link / image `url` fields and `html_block` / `html_inline` literal text are preserved; XML output escapes those bytes as XML text, while AST output returns them byte-for-byte. The `unsafe`, `tagfilter`, and URL-scheme defenses do **not** make these structural outputs safe to transform back into HTML. If you build HTML out of XML or AST data yourself, you own the sanitization: apply a URL scheme allowlist before emitting `href`, and run HTML through a sanitizer before emitting raw `html_block` / `html_inline` literal text. See `docs/ast.md` for examples.
+`Parser::toXml()` and `Parser::toAst()` return structural representations of the parsed document. `html_block` / `html_inline` literals are preserved byte-for-byte (XML-escaped in `toXml()`); link / image URLs and titles are **entity-decoded** but **not** scheme-filtered. The `unsafe`, `tagfilter`, and URL-scheme defenses do **not** make these structural outputs safe to transform back into HTML. If you build HTML out of XML or AST data yourself, you own the sanitization: apply a URL scheme allowlist before emitting `href`, and run HTML through a sanitizer before emitting raw `html_block` / `html_inline` literal text. See `docs/ast.md` for examples.
 
 ## 🔗 Native PHP extensions
 

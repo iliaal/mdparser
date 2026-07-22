@@ -54,17 +54,6 @@ typedef struct {
     int error;
 } mda_ctx;
 
-/* Nearest enclosing table node's "alignments" array, or NULL. */
-static zval *mda_table_alignments(mda_ctx *c)
-{
-    for (int i = c->depth; i >= 0; i--) {
-        zval *t = zend_hash_str_find(Z_ARRVAL(c->stack[i]), "type", sizeof("type") - 1);
-        if (t && Z_TYPE_P(t) == IS_STRING && strcmp(Z_STRVAL_P(t), "table") == 0)
-            return zend_hash_str_find(Z_ARRVAL(c->stack[i]), "alignments", sizeof("alignments") - 1);
-    }
-    return NULL;
-}
-
 /* Interned keys for the two hot per-node inserts ("type" on every node,
  * "children" on every container) and the interned node-type *values*. All
  * created once at MINIT and reused, so the builder neither re-allocates nor
@@ -117,6 +106,18 @@ void mdparser_md4c_ast_minit(void)
     mda_s_align_center = zend_string_init_interned("center", sizeof("center") - 1, 1);
     mda_s_align_right = zend_string_init_interned("right", sizeof("right") - 1, 1);
     mda_s_align_none = zend_string_init_interned("none", sizeof("none") - 1, 1);
+}
+
+/* Nearest enclosing table node's "alignments" array, or NULL. */
+static zval *mda_table_alignments(mda_ctx *c)
+{
+    /* type values are interned at MINIT; pointer equality avoids strcmp. */
+    for (int i = c->depth; i >= 0; i--) {
+        zval *t = zend_hash_find(Z_ARRVAL(c->stack[i]), mda_k_type);
+        if (t && Z_TYPE_P(t) == IS_STRING && Z_STR_P(t) == mda_types[MDA_T_table])
+            return zend_hash_str_find(Z_ARRVAL(c->stack[i]), "alignments", sizeof("alignments") - 1);
+    }
+    return NULL;
 }
 
 /* ---- node helpers ---------------------------------------------------- */

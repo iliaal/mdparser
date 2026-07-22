@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Enabled GitHub-style alerts as well as footnotes in `Options::github()`.
 - Adjacent AST text fragments are now coalesced into one `text` node, reducing callback-driven array overhead.
+- HTML output now seeds a ~1.25× smart_str reserve (still capped at 1 MiB) so ordinary documents reallocate less.
+- Documented that AST/XML link URLs are entity-decoded (not source-byte-verbatim), that AST flattens `footnote_section` while XML keeps it, and that AST/XML depth caps count different nesting units.
+- `toInlineHtml()` multiline normalization bulk-appends content runs instead of appending one byte at a time.
+- Heading-anchor side buffers are released as soon as each heading is flushed into the main output.
 
 ### Fixed
 
@@ -21,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTML, XML, and AST output now replace embedded NUL exactly once; XML also preserves attribute whitespace and replaces forbidden XML 1.0 scalars.
 - AST and XML code blocks retain full info strings, and deeply nested XML bounds indentation without truncating structure.
 - Zend memory-limit bailouts now release md4c's libc allocations before the request aborts.
+- Fenced code info that entity-decodes to a `language-` prefix no longer gets a second `language-` prepended (`language&#45;php` → `class="language-php"`).
+- `nofollowLinks` fragment exception now trims the same leading C0/space bytes as the URL scheme filter.
+- HTML footnote/ol open tags append via `strlen` of the snprintf buffer (same truncation-safe pattern as headings).
+- Body HTML hex-entity nibble decoding now matches the shared util alphabet (`0-9A-Fa-f` only).
 
 ### For contributors
 

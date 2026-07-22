@@ -158,11 +158,14 @@ CommonMark core, an md4c extension via `MD_FLAG_FOOTNOTES`).
 ```php
 $md = "A claim[^1] follows.\n\n[^1]: See source.\n";
 echo (new Parser(new Options(footnotes: true)))->toHtml($md);
-// <p>A claim<sup class="footnote-ref">...</sup> follows.</p>
-// <section class="footnotes" data-footnotes>
-//   <ol>
-//     <li id="fn-1"><p>See source. <a href="#fnref-1" ...>↩</a></p></li>
-//   </ol>
+// <p>A claim<sup><a href="#fn-1" id="fnref-1-1">1</a></sup> follows.</p>
+// <section class="footnotes">
+// <ol>
+// <li id="fn-1">
+// <p>See source.</p>
+// <a href="#fnref-1-1" class="footnote-backref">↩</a>
+// </li>
+// </ol>
 // </section>
 ```
 
@@ -385,12 +388,12 @@ Options::github();
 ```php
 new Options(
     unsafe: true,           // spec tests exercise raw HTML
-    githubPreLang: false,   // spec uses <pre><code class="language-X">
     tables: false,          // strip GFM extras for pure spec
     strikethrough: false,
     tasklist: false,
     autolink: false,
     tagfilter: false,
+    // githubPreLang is accepted-but-inert; omit it
 );
 ```
 

@@ -142,14 +142,15 @@ Parses `$source` and returns a nested PHP array representation of the
 document tree. See `docs/ast.md` for the full shape — every node type
 has a documented set of fields.
 
-> **Security note: AST and XML output are not sanitized.** Link / image
-> URLs and raw HTML literals are preserved byte-for-byte. The `unsafe`,
-> `tagfilter`, and URL-scheme defenses operate only on the HTML paths
-> (`toHtml`, `toInlineHtml`); `toAst` and `toXml` are structural views
-> and apply none of them. A consumer that emits HTML from the AST or XML
-> must apply its own URL scheme allowlist and HTML sanitization. For
-> example, a `link` node's `url` (and the XML `<link destination>`) can
-> hold `javascript:alert(1)`, and an `html_block` `literal` can hold a
+> **Security note: AST and XML output are not sanitized.** Raw HTML
+> literals are preserved byte-for-byte. Link / image URLs and titles are
+> entity-decoded but not scheme-filtered. The `unsafe`, `tagfilter`, and
+> URL-scheme defenses operate only on the HTML paths (`toHtml`,
+> `toInlineHtml`); `toAst` and `toXml` are structural views and apply
+> none of them. A consumer that emits HTML from the AST or XML must
+> apply its own URL scheme allowlist and HTML sanitization. For example,
+> a `link` node's `url` (and the XML `<link destination>`) can hold
+> `javascript:alert(1)`, and an `html_block` `literal` can hold a
 > literal `<script>`.
 
 ```php

@@ -120,19 +120,22 @@ final class Parser
     /**
      * Returns CommonMark XML for the parsed document. This is a
      * structural representation, not sanitized HTML: raw HTML nodes are
-     * XML-escaped but their source literals are preserved for consumers
-     * that transform the XML further.
+     * XML-escaped but their source literals are preserved; link/image
+     * destinations are entity-decoded then XML-escaped. The `unsafe`,
+     * `tagfilter`, and URL-scheme defenses do not apply -- same trust
+     * boundary as `toAst()`.
      */
     public function toXml(string $source): string {}
 
     /**
      * Returns a structural representation of the markdown source as
-     * a nested array. Link URLs and raw HTML literals are preserved
-     * verbatim -- the `unsafe`, `tagfilter`, and URL-scheme defenses
-     * apply to the HTML rendering paths (`toHtml` / `toInlineHtml`),
-     * NOT to `toXml` or `toAst`. Consumers that emit HTML from XML or
-     * the AST must apply their own URL scheme allowlist and HTML
-     * sanitization.
+     * a nested array. Raw HTML literals (`html_block` / `html_inline`)
+     * are preserved byte-for-byte. Link and image `url` / `title` fields
+     * are entity-decoded but not scheme-filtered -- the `unsafe`,
+     * `tagfilter`, and URL-scheme defenses apply only to the HTML
+     * rendering paths (`toHtml` / `toInlineHtml`), NOT to `toXml` or
+     * `toAst`. Consumers that emit HTML from XML or the AST must apply
+     * their own URL scheme allowlist and HTML sanitization.
      */
     public function toAst(string $source): array {}
 
@@ -149,8 +152,10 @@ final class Parser
      * `headingAnchors` is silently a no-op for this method (no headings
      * are ever emitted in inline mode); `nofollowLinks` still applies.
      * On empty or whitespace-only input the return value is the empty
-     * string. Literal U+200B (zero-width space) bytes in the source
-     * are stripped as collateral of the per-line sentinel mechanism.
+     * string. Block markers are suppressed by prepending an ASCII `;`
+     * sentinel on each retained physical line (consumed by the HTML
+     * renderer, not present in the output). Literal U+200B (zero-width
+     * space) bytes in the source are preserved.
      */
     public function toInlineHtml(string $source): string {}
 

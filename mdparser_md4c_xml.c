@@ -54,9 +54,12 @@ typedef struct {
 
 static void mdx_indent(mdx_ctx *c)
 {
+    /* 32 levels × 2 spaces; MDX_MAX_INDENT_DEPTH is 32. */
+    static const char spaces[64] =
+        "                                                                ";
     int indent_depth = c->depth < MDX_MAX_INDENT_DEPTH
         ? c->depth : MDX_MAX_INDENT_DEPTH;
-    for (int i = 0; i < indent_depth; i++) smart_str_appendl(&c->out, "  ", 2);
+    smart_str_appendl(&c->out, spaces, (size_t)indent_depth * 2);
 }
 
 #define X_LIT(c, lit) smart_str_appendl(&(c)->out, "" lit, sizeof(lit) - 1)
@@ -162,8 +165,12 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
 static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
-    /* Keep the structural depth contract aligned with toAst. Indentation is
-     * capped independently so valid near-limit trees remain linear-sized. */
+    /* Depth counts open XML containers, not the AST zval-stack model.
+     * XML increments for table_header/table_body/footnote_section and does
+     * not for leaf code_block/html_block/thematic_break; AST does the reverse
+     * for those. Same Markdown can therefore hit MDPARSER_MAX_AST_DEPTH on
+     * only one path. Indentation is capped independently (MDX_MAX_INDENT_DEPTH)
+     * so valid near-limit trees remain linear-sized. */
     if (c->depth >= MDPARSER_MAX_AST_DEPTH) { c->error = MDX_ERR_DEPTH; return 1; }
     switch (type) {
         case MD_BLOCK_DOC: break;

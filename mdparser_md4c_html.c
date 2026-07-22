@@ -95,7 +95,8 @@ void mdparser_md4c_html_minit(void)
     for (int i = 0; i < 256; i++) {
         unsigned char ch = (unsigned char)i;
         mdm_escape_map_template[i] = 0;
-        if (strchr("\"&<>", ch) != NULL)
+        /* NUL is replaced with U+FFFD (same policy as MD_TEXT_NULLCHAR). */
+        if (ch == 0 || strchr("\"&<>", ch) != NULL)
             mdm_escape_map_template[i] |= NEED_HTML_ESC_FLAG;
         if (!ISALNUM(ch) && strchr("~-_.+!*(),%#@?=;:/$", ch) == NULL)
             mdm_escape_map_template[i] |= NEED_URL_ESC_FLAG;
@@ -172,11 +173,14 @@ static void mdm_escape_url(mdm_ctx *r, const char *data, size_t size)
     #undef NEED_URL_ESC
 }
 
+/* Match mdparser_md4c_util: only 0-9/A-F/a-f; other bytes contribute 0 so
+ * non-canonical numeric entities cannot diverge across HTML vs AST/XML. */
 static unsigned mdm_hex_val(char ch)
 {
     if ('0' <= ch && ch <= '9') return ch - '0';
-    if ('A' <= ch && ch <= 'Z') return ch - 'A' + 10;
-    return ch - 'a' + 10;
+    if ('A' <= ch && ch <= 'F') return ch - 'A' + 10;
+    if ('a' <= ch && ch <= 'f') return ch - 'a' + 10;
+    return 0;
 }
 
 static void mdm_append_codepoint(mdm_ctx *r, unsigned cp)
@@ -422,10 +426,10 @@ static unsigned char mdm_trailing_quote_char(const char *p, size_t n)
     else if ((lead & 0xF8) == 0xF0 && seqlen >= 4)
         cp = ((lead & 0x07u) << 18) | (((unsigned char)p[i + 1] & 0x3Fu) << 12)
             | (((unsigned char)p[i + 2] & 0x3Fu) << 6) | ((unsigned char)p[i + 3] & 0x3Fu);
-    /* U+200B (ZWSP) is category Cf, not White_Space, so it is absent from
-     * mdm_is_unicode_space; but toInlineHtml prefixes each physical line with a
-     * ZWSP as a block-suppression sentinel, and a quote right after it should
-     * still open, so treat it as left context here. */
+    /* U+200B (ZWSP) is category Cf, not White_Space. Treat it as left quote
+     * context so a quote after a zero-width space still opens (common in
+     * copied text). toInlineHtml's block-suppression sentinel is ASCII ';',
+     * handled separately in mdm_text. */
     if (cp == 0x200B) return ' ';
     return mdm_is_unicode_space(cp) ? ' ' : last;
 }
@@ -503,50 +507,59 @@ static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
 static char *mdm_slugify(const char *text, size_t len)
 {
     static const char hex[] = "0123456789abcdef";
-    size_t extra = 0;
-    for (size_t i = 0; i < len;) {
-        unsigned char c = (unsigned char)text[i];
-        if (c < 0x80) {
-            i++;
-            continue;
-        }
-        size_t n = mdparser_md4c_utf8_seqlen((const unsigned char *)text + i, len - i);
-        if (n != 0) {
-            i += n;
-        } else {
-            extra += 2;  /* one invalid byte becomes three %xx bytes */
-            i++;
-        }
+    /* Single-pass into smart_str: avoids a full UTF-8 sizing walk. Invalid
+     * bytes expand to %xx (3 bytes); smart_str grows on demand so pathological
+     * invalid input does not need a len*3 preallocation. */
+    smart_str s = {0};
+    if (len) {
+        smart_str_alloc(&s, len + 1, 0);
     }
-    char *out = emalloc(len + extra + 1);
-    size_t o = 0;
     bool prev_dash = true;
     size_t i = 0;
     while (i < len) {
         unsigned char c = (unsigned char)text[i];
         if (c < 0x80) {
-            if (c >= 'A' && c <= 'Z') { out[o++] = (char)(c + ('a' - 'A')); prev_dash = false; }
-            else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') { out[o++] = (char)c; prev_dash = false; }
-            else if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '-') {
-                if (!prev_dash) { out[o++] = '-'; prev_dash = true; }
+            if (c >= 'A' && c <= 'Z') {
+                smart_str_appendc(&s, (char)(c + ('a' - 'A')));
+                prev_dash = false;
+            } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+                smart_str_appendc(&s, (char)c);
+                prev_dash = false;
+            } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '-') {
+                if (!prev_dash) {
+                    smart_str_appendc(&s, '-');
+                    prev_dash = true;
+                }
             }
             i++;
             continue;
         }
         size_t n = mdparser_md4c_utf8_seqlen((const unsigned char *)text + i, len - i);
         if (n) {
-            memcpy(out + o, text + i, n);
-            o += n;
+            smart_str_appendl(&s, text + i, n);
             prev_dash = false;
             i += n;
         } else {
-            out[o++] = '%'; out[o++] = hex[(c >> 4) & 0xF]; out[o++] = hex[c & 0xF];
+            char enc[3] = { '%', hex[(c >> 4) & 0xF], hex[c & 0xF] };
+            smart_str_appendl(&s, enc, 3);
             prev_dash = false;
             i++;
         }
     }
-    while (o > 0 && out[o - 1] == '-') o--;
-    out[o] = '\0';
+    /* Trim trailing dashes. */
+    if (s.s) {
+        while (ZSTR_LEN(s.s) > 0 && ZSTR_VAL(s.s)[ZSTR_LEN(s.s) - 1] == '-') {
+            ZSTR_LEN(s.s)--;
+        }
+        ZSTR_VAL(s.s)[ZSTR_LEN(s.s)] = '\0';
+    }
+    size_t out_len = s.s ? ZSTR_LEN(s.s) : 0;
+    char *out = emalloc(out_len + 1);
+    if (out_len) {
+        memcpy(out, ZSTR_VAL(s.s), out_len);
+    }
+    out[out_len] = '\0';
+    smart_str_free(&s);
     return out;
 }
 
@@ -611,12 +624,19 @@ static char *mdm_slug_unique(mdm_slugs *s, char *base)
  * md4c callbacks
  * =================================================================== */
 
+/* Append a fixed-size snprintf buffer by its written C-string length, never
+ * by snprintf's return value (which is the would-be length on truncation). */
+static void mdm_out_buf(mdm_ctx *r, const char *buf)
+{
+    out_append(r, buf, strlen(buf));
+}
+
 static void mdm_render_ol_open(mdm_ctx *r, const MD_BLOCK_OL_DETAIL *d)
 {
     if (d->start == 1) { OUT_LIT(r, "<ol>\n"); return; }
     char buf[64];
-    int w = snprintf(buf, sizeof(buf), "<ol start=\"%u\">\n", d->start);
-    out_append(r, buf, (size_t)w);
+    snprintf(buf, sizeof(buf), "<ol start=\"%u\">\n", d->start);
+    mdm_out_buf(r, buf);
 }
 
 static void mdm_render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
@@ -679,11 +699,23 @@ static void mdm_render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
 {
     OUT_LIT(r, "<pre><code");
     if (d->lang.text != NULL) {
+        /* Prefix decision must use entity-decoded bytes: md4c hands lang out
+         * entity-undecoded, so `language&#45;php` would miss a raw "language-"
+         * probe and emit class="language-language-php". */
+        const char *p;
+        size_t n;
+        smart_str raw = {0};
+        if (!mdparser_md4c_attr_plain(&d->lang, &p, &n)) {
+            mdparser_md4c_decode_attr(&raw, &d->lang);
+            p = raw.s ? ZSTR_VAL(raw.s) : "";
+            n = raw.s ? ZSTR_LEN(raw.s) : 0;
+        }
         OUT_LIT(r, " class=\"");
-        if (d->lang.size < 9 || strncmp(d->lang.text, "language-", 9) != 0)
+        if (n < 9 || strncmp(p, "language-", 9) != 0)
             OUT_LIT(r, "language-");
-        mdm_render_attribute(r, &d->lang);
+        mdm_escape_html(r, p, n);
         OUT_LIT(r, "\"");
+        smart_str_free(&raw);
     }
     OUT_LIT(r, ">");
 }
@@ -717,8 +749,14 @@ static void mdm_emit_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
         hp = href.s ? ZSTR_VAL(href.s) : "";
         hn = href.s ? ZSTR_LEN(href.s) : 0;
     }
-    /* Fragment-only anchors (href="#...") are in-document links: skip nofollow. */
-    bool fragment = hn > 0 && hp[0] == '#';
+    /* Fragment-only anchors (href="#...") are in-document links: skip nofollow.
+     * Trim the same leading C0/space bytes the scheme filter skips so
+     * `[x]( #section)` still counts as a fragment. */
+    size_t frag_i = 0;
+    while (frag_i < hn && (unsigned char)hp[frag_i] <= 0x20) {
+        frag_i++;
+    }
+    bool fragment = frag_i < hn && hp[frag_i] == '#';
 
     /* rel before href to match the prior (postprocess-injected) attribute
      * order, keeping output stable for nofollow callers. */
@@ -840,9 +878,9 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         case MD_BLOCK_FOOTNOTE_DEF: {
             char buf[64];
-            int w = snprintf(buf, sizeof(buf), "<li id=\"fn-%u\">\n",
+            snprintf(buf, sizeof(buf), "<li id=\"fn-%u\">\n",
                 ((MD_BLOCK_FOOTNOTE_DEF_DETAIL *)detail)->id);
-            out_append(r, buf, (size_t)w);
+            mdm_out_buf(r, buf);
             break;
         }
         case MD_BLOCK_ADMONITION:
@@ -880,20 +918,24 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 if (slug[0] != '\0') {
                     char open[16];
                     snprintf(open, sizeof(open), "<h%d id=\"", r->heading_level);
-                    out_append(r, open, strlen(open));
+                    mdm_out_buf(r, open);
                     mdm_escape_html(r, slug, strlen(slug));
                     OUT_LIT(r, "\">");
                 } else {
                     char tag[8];
                     snprintf(tag, sizeof(tag), "<h%d>", r->heading_level);
-                    out_append(r, tag, strlen(tag));
+                    mdm_out_buf(r, tag);
                 }
                 efree(slug);
                 if (r->heading_html.s)
                     out_append(r, ZSTR_VAL(r->heading_html.s), ZSTR_LEN(r->heading_html.s));
+                /* Drop the side buffer now that main holds the body; keeps
+                 * peak ≈ main rather than main + last heading until the next
+                 * heading or render teardown. */
+                smart_str_free(&r->heading_html);
                 char close[8];
                 snprintf(close, sizeof(close), "</h%d>\n", r->heading_level);
-                out_append(r, close, strlen(close));
+                mdm_out_buf(r, close);
             } else {
                 char tag[8];
                 snprintf(tag, sizeof(tag), "</h%d>\n", r->heading_level);
@@ -917,10 +959,10 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             char buf[128];
             for (unsigned ref = 1; ref <= d->ref_count; ref++) {
                 if (ref > 1) OUT_LIT(r, " ");
-                int w = snprintf(buf, sizeof(buf),
+                snprintf(buf, sizeof(buf),
                     "<a href=\"#fnref-%u-%u\" class=\"footnote-backref\">&#8617;</a>",
                     d->id, ref);
-                out_append(r, buf, (size_t)w);
+                mdm_out_buf(r, buf);
             }
             OUT_LIT(r, "\n</li>\n");
             break;
@@ -955,10 +997,10 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_FOOTNOTE_REF: {
             const MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
             char buf[128];
-            int w = snprintf(buf, sizeof(buf),
+            snprintf(buf, sizeof(buf),
                 "<sup><a href=\"#fn-%u\" id=\"fnref-%u-%u\">%u</a></sup>",
                 d->id, d->id, d->ref_id, d->id);
-            out_append(r, buf, (size_t)w);
+            mdm_out_buf(r, buf);
             break;
         }
         default: break;
@@ -1092,12 +1134,18 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     if (render_opts & MDPARSER_RF_VALIDATE_UTF8)
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
-    /* Reserve up to 1 MiB based on the input size. This skips early smart_str
-     * growth for ordinary documents without making sparse large inputs pay
-     * for output they never produce. */
+    /* Reserve up to 1 MiB. HTML markup typically expands past raw input, so
+     * seed ~1.25× (still capped) to cut early reallocs on ordinary docs
+     * without making sparse large inputs pay for output they never produce. */
     if (use_len) {
-        size_t reserve = use_len < MDPARSER_INITIAL_OUTPUT_RESERVE_MAX
-            ? use_len : MDPARSER_INITIAL_OUTPUT_RESERVE_MAX;
+        size_t reserve;
+        if (use_len >= MDPARSER_INITIAL_OUTPUT_RESERVE_MAX) {
+            reserve = MDPARSER_INITIAL_OUTPUT_RESERVE_MAX;
+        } else {
+            size_t extra = use_len / 4;
+            reserve = (use_len + extra <= MDPARSER_INITIAL_OUTPUT_RESERVE_MAX)
+                ? use_len + extra : MDPARSER_INITIAL_OUTPUT_RESERVE_MAX;
+        }
         smart_str_alloc(&r.main, reserve, 0);
     }
 

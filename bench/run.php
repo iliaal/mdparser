@@ -54,6 +54,22 @@ $parsers = [
         $p ??= new MdParser\Parser();
         return $p->toInlineHtml($md);
     },
+    'mdparser-anchors' => function (string $md): string {
+        static $p = null;
+        $p ??= new MdParser\Parser(new MdParser\Options(headingAnchors: true));
+        return $p->toHtml($md);
+    },
+    'mdparser-nofollow' => function (string $md): string {
+        static $p = null;
+        $p ??= new MdParser\Parser(new MdParser\Options(nofollowLinks: true));
+        return $p->toHtml($md);
+    },
+    'mdparser-ast' => function (string $md): string {
+        static $p = null;
+        $p ??= new MdParser\Parser();
+        // Serialize to a stable sink so the bench measures full AST build cost.
+        return serialize($p->toAst($md));
+    },
     'parsedown' => function (string $md): string {
         static $p = null;
         $p ??= new Parsedown();
