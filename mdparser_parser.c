@@ -222,7 +222,8 @@ PHP_METHOD(MdParser_Parser, toXml)
         (obj->md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0);
 }
 
-PHP_METHOD(MdParser_Parser, toAst)
+static void mdparser_md4c_ast_emit(INTERNAL_FUNCTION_PARAMETERS,
+    unsigned parser_flags, bool validate_utf8)
 {
     zend_string *source;
 
@@ -234,16 +235,21 @@ PHP_METHOD(MdParser_Parser, toAst)
         RETURN_THROWS();
     }
 
-    mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
     int status = 0;
     mdparser_md4c_render_ast(ZSTR_VAL(source), ZSTR_LEN(source),
-        obj->md4c_pflags, (obj->md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0,
-        return_value, &status);
+        parser_flags, validate_utf8, return_value, &status);
     if (status != 0) {
         zend_throw_exception(mdparser_exception_ce,
             mdparser_md4c_ast_status_message(status), 0);
         RETURN_THROWS();
     }
+}
+
+PHP_METHOD(MdParser_Parser, toAst)
+{
+    mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
+    mdparser_md4c_ast_emit(INTERNAL_FUNCTION_PARAM_PASSTHRU,
+        obj->md4c_pflags, (obj->md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0);
 }
 
 /* Parsedown::line() semantics: render `source` as inline-only HTML
@@ -412,24 +418,7 @@ PHP_METHOD(MdParser_Parser, xml)
 
 PHP_METHOD(MdParser_Parser, ast)
 {
-    zend_string *source;
-
-    ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STR(source)
-    ZEND_PARSE_PARAMETERS_END();
-
-    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
-        RETURN_THROWS();
-    }
-
-    int status = 0;
-    mdparser_md4c_render_ast(ZSTR_VAL(source), ZSTR_LEN(source),
+    mdparser_md4c_ast_emit(INTERNAL_FUNCTION_PARAM_PASSTHRU,
         mdparser_default_md4c_pflags,
-        (mdparser_default_md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0,
-        return_value, &status);
-    if (status != 0) {
-        zend_throw_exception(mdparser_exception_ce,
-            mdparser_md4c_ast_status_message(status), 0);
-        RETURN_THROWS();
-    }
+        (mdparser_default_md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0);
 }

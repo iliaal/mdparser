@@ -135,6 +135,20 @@ size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail)
     return expect;
 }
 
+/* Skip a run of ASCII (<0x80) bytes starting at p[i], using a 64-bit
+ * SWAR scan for the common case. Returns the new index. */
+static size_t mdu_skip_ascii(const unsigned char *p, size_t i, size_t len)
+{
+    while (i + 8 <= len) {
+        uint64_t w;
+        memcpy(&w, p + i, 8);
+        if (w & 0x8080808080808080ULL) break;
+        i += 8;
+    }
+    while (i < len && p[i] < 0x80) i++;
+    return i;
+}
+
 const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     size_t *out_len, bool *owned)
 {
@@ -145,13 +159,7 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
         /* ASCII fast path: skip runs of <0x80 bytes 8 at a time, then 1 at a
          * time, before falling back to the per-sequence validator. Markdown
          * is overwhelmingly ASCII, so this avoids a call per byte. */
-        while (i + 8 <= len) {
-            uint64_t w;
-            memcpy(&w, p + i, 8);
-            if (w & 0x8080808080808080ULL) break;
-            i += 8;
-        }
-        while (i < len && p[i] < 0x80) i++;
+        i = mdu_skip_ascii(p, i, len);
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
         if (n == 0) { clean = false; break; }
@@ -170,13 +178,7 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     i = 0;
     while (i < len) {
         size_t beg = i;
-        while (i + 8 <= len) {
-            uint64_t w;
-            memcpy(&w, p + i, 8);
-            if (w & 0x8080808080808080ULL) break;
-            i += 8;
-        }
-        while (i < len && p[i] < 0x80) i++;
+        i = mdu_skip_ascii(p, i, len);
         out_size += i - beg;
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
@@ -189,13 +191,7 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     while (i < len) {
         /* Bulk-copy ASCII runs (same fast path as the clean scan). */
         size_t beg = i;
-        while (i + 8 <= len) {
-            uint64_t w;
-            memcpy(&w, p + i, 8);
-            if (w & 0x8080808080808080ULL) break;
-            i += 8;
-        }
-        while (i < len && p[i] < 0x80) i++;
+        i = mdu_skip_ascii(p, i, len);
         if (i > beg) { memcpy(dst + o, p + beg, i - beg); o += i - beg; }
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);

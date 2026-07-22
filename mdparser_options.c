@@ -189,6 +189,21 @@ static void mdparser_options_seed_defaults(bool values[MDPARSER_OPTIONS_FIELD_CO
     }
 }
 
+typedef void (*mdparser_options_modifier)(bool v[MDPARSER_OPTIONS_FIELD_COUNT]);
+
+static void mdparser_options_strict_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT]);
+static void mdparser_options_github_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT]);
+static void mdparser_options_permissive_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT]);
+
+static void mdparser_options_preset(zval *return_value, mdparser_options_modifier modify)
+{
+    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
+    mdparser_options_seed_defaults(v);
+    modify(v);
+    object_init_ex(return_value, mdparser_options_ce);
+    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
+}
+
 void mdparser_options_read_masks(zval *options_zv, unsigned *md4c_pflags, int *md4c_ropts)
 {
     unsigned mpf = 0;
@@ -290,43 +305,40 @@ PHP_METHOD(MdParser_Options, __construct)
 PHP_METHOD(MdParser_Options, strict)
 {
     ZEND_PARSE_PARAMETERS_NONE();
+    mdparser_options_preset(return_value, mdparser_options_strict_mod);
+}
 
-    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
-    mdparser_options_seed_defaults(v);
+static void mdparser_options_strict_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT])
+{
     /* Bare URLs stay inert text instead of becoming live <a> tags. */
     v[MDOPT_AUTOLINK] = false;
-
-    object_init_ex(return_value, mdparser_options_ce);
-    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
 }
 
 PHP_METHOD(MdParser_Options, github)
 {
     ZEND_PARSE_PARAMETERS_NONE();
+    mdparser_options_preset(return_value, mdparser_options_github_mod);
+}
 
-    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
-    mdparser_options_seed_defaults(v);
+static void mdparser_options_github_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT])
+{
     /* github.com's renderer supports footnotes and [!NOTE]-style alerts;
      * the rest of the default set already matches github. */
     v[MDOPT_FOOTNOTES] = true;
     v[MDOPT_ADMONITIONS] = true;
-
-    object_init_ex(return_value, mdparser_options_ce);
-    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
 }
 
 PHP_METHOD(MdParser_Options, permissive)
 {
     ZEND_PARSE_PARAMETERS_NONE();
+    mdparser_options_preset(return_value, mdparser_options_permissive_mod);
+}
 
-    bool v[MDPARSER_OPTIONS_FIELD_COUNT];
-    mdparser_options_seed_defaults(v);
+static void mdparser_options_permissive_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT])
+{
     /* Trusted-input mode: raw HTML passes through and tagfilter is off.
      * Explicitly disables the XSS safety net -- only for markdown the
      * caller authored themselves. */
     v[MDOPT_UNSAFE] = true;
     v[MDOPT_TAGFILTER] = false;
-
-    object_init_ex(return_value, mdparser_options_ce);
-    mdparser_options_populate_object(Z_OBJ_P(return_value), v);
 }

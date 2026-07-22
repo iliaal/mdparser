@@ -700,17 +700,20 @@ static void mdm_render_td_open(mdm_ctx *r, const char *cell, const MD_BLOCK_TD_D
     }
 }
 
-static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
+/* Emit `<a` + nofollow (if applicable) + optional class + `href="` + decoded
+ * URL, decoding the attribute once so both the fragment-nofollow exception
+ * and the scheme filter see entity-decoded bytes (md4c hands them out
+ * entity-undecoded, so `&#35;section` and `javascript&colon;` would otherwise
+ * dodge the respective checks). `class_attr` is NULL for regular links,
+ * "wikilink" for wiki-link spans. */
+static void mdm_emit_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
+    const char *class_attr)
 {
-    /* Decode the href once: both the fragment-nofollow exception and the
-     * scheme filter must see the decoded bytes (md4c hands them out
-     * entity-undecoded, so `&#35;section` and `javascript&colon;` would
-     * otherwise dodge the respective checks). */
     smart_str href = {0};
     const char *hp;
     size_t hn;
-    if (!mdparser_md4c_attr_plain(&d->href, &hp, &hn)) {
-        mdparser_md4c_decode_attr(&href, &d->href);
+    if (!mdparser_md4c_attr_plain(attr, &hp, &hn)) {
+        mdparser_md4c_decode_attr(&href, attr);
         hp = href.s ? ZSTR_VAL(href.s) : "";
         hn = href.s ? ZSTR_LEN(href.s) : 0;
     }
@@ -722,10 +725,20 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
     OUT_LIT(r, "<a");
     if ((r->render_opts & MDPARSER_RF_NOFOLLOW) && !fragment)
         OUT_LIT(r, " rel=\"nofollow noopener noreferrer\"");
+    if (class_attr) {
+        OUT_LIT(r, " class=\"");
+        out_append(r, class_attr, strlen(class_attr));
+        OUT_LIT(r, "\"");
+    }
     OUT_LIT(r, " href=\"");
     /* Link context: data: URLs are rejected (no navigable data: documents). */
     mdm_emit_decoded_url(r, hp, hn, false);
     smart_str_free(&href);
+}
+
+static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
+{
+    mdm_emit_link_open(r, &d->href, NULL);
     if (d->title.text != NULL) {
         OUT_LIT(r, "\" title=\"");
         mdm_render_attribute(r, &d->title);
@@ -739,22 +752,7 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
  * the fragment exception follow the same rule as mdm_render_a_open. */
 static void mdm_render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
 {
-    smart_str href = {0};
-    const char *hp;
-    size_t hn;
-    if (!mdparser_md4c_attr_plain(&d->target, &hp, &hn)) {
-        mdparser_md4c_decode_attr(&href, &d->target);
-        hp = href.s ? ZSTR_VAL(href.s) : "";
-        hn = href.s ? ZSTR_LEN(href.s) : 0;
-    }
-    bool fragment = hn > 0 && hp[0] == '#';
-
-    OUT_LIT(r, "<a");
-    if ((r->render_opts & MDPARSER_RF_NOFOLLOW) && !fragment)
-        OUT_LIT(r, " rel=\"nofollow noopener noreferrer\"");
-    OUT_LIT(r, " class=\"wikilink\" href=\"");
-    mdm_emit_decoded_url(r, hp, hn, false);
-    smart_str_free(&href);
+    mdm_emit_link_open(r, &d->target, "wikilink");
     OUT_LIT(r, "\">");
 }
 
