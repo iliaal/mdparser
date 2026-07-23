@@ -8,6 +8,12 @@ on:
   release:
     types: [published]
 
+permissions: {}
+
+concurrency:
+  group: windows-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
 jobs:
   windows-matrix:
     name: Generate Windows build matrix
@@ -29,11 +35,15 @@ jobs:
     name: Build ${{ matrix.php-version }} ${{ matrix.arch }} ${{ matrix.ts }}
     needs: windows-matrix
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.windows-matrix.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build extension
         uses: php/php-windows-builder/extension@e03e5d39879adaeb61ed2225f0f4eae7db8c1df8 # v1
@@ -52,7 +62,7 @@ jobs:
     # for the contents permission on newly-created repos and the
     # php-windows-builder/release@v1 action calls POST /releases.
     permissions:
-      contents: write
+      contents: write # Uploads Windows binaries to the published release.
     steps:
       # Pinned to the commit SHA that v6 resolves to; this job runs
       # under contents:write, so a moved tag on a third-party action
@@ -60,7 +70,7 @@ jobs:
       # false drops the GITHUB_TOKEN from the local git config so any
       # shell step in the workflow cannot reuse it for an unrelated
       # push.
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 

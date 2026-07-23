@@ -7,6 +7,8 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "ci"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "composer"
     directory: "/bench"
@@ -15,3 +17,5 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "bench"
+    cooldown:
+      default-days: 7

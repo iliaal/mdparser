@@ -6,13 +6,22 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validate composer.json
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: '8.4'
           tools: composer
@@ -24,8 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     steps:
-      - uses: actions/checkout@v7
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: '8.4'
           tools: phpize, php-config
@@ -52,10 +63,12 @@ jobs:
         php: ['8.2', '8.3', '8.4', '8.5']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: ${{ matrix.php }}
           tools: phpize, php-config
@@ -92,10 +105,12 @@ jobs:
         php: ['8.4']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup PHP (ZTS)
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: ${{ matrix.php }}
           tools: phpize, php-config
@@ -127,10 +142,12 @@ jobs:
         php: ['8.2', '8.3', '8.4']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: ${{ matrix.php }}
           tools: phpize, php-config
@@ -172,16 +189,19 @@ jobs:
       UBSAN_OPTIONS: print_stacktrace=1
       USE_ZEND_ALLOC: 0
       USE_TRACKED_ALLOC: 1
+      PHP_VERSION: ${{ matrix.php }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y llvm clang re2c bison autoconf
 
       - name: Build PHP with ASAN
         run: |
-          git clone --depth=1 --branch=PHP-${{ matrix.php }} https://github.com/php/php-src.git /tmp/php-src
+          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
           cd /tmp/php-src
           ./buildconf --force
           CC=clang CXX=clang++ \

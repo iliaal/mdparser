@@ -42,12 +42,18 @@ on:
         description: "Existing release tag to build and upload binaries for"
         required: true
 
+permissions: {}
+
+concurrency:
+  group: release-linux-${{ github.event.release.tag_name || inputs.release-tag }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: ${{ matrix.os }} php ${{ matrix.php }}
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: write # Uploads tested binaries to the selected release.
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +68,7 @@ jobs:
           - macos-14
         php: ['8.4', '8.5']
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -78,7 +84,7 @@ jobs:
           scripts/check_version.sh
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2 (2.37.2)
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: ${{ matrix.php }}
           coverage: none
