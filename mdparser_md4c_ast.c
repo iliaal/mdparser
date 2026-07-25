@@ -235,17 +235,10 @@ static void mda_collect_literal(mda_ctx *c, const char *text, size_t size)
  * md4c's typed substrings rather than storing the raw &amp;-encoded bytes. */
 static void mda_add_attr(zval *node, const char *key, const MD_ATTRIBUTE *a)
 {
-    const char *p;
-    size_t n;
-    if (mdparser_md4c_attr_plain(a, &p, &n)) {
-        add_assoc_stringl(node, key, (char *) p, n);
-        return;
-    }
-    smart_str dec = {0};
-    mdparser_md4c_decode_attr(&dec, a);
-    add_assoc_stringl(node, key, dec.s ? ZSTR_VAL(dec.s) : "",
-        dec.s ? ZSTR_LEN(dec.s) : 0);
-    smart_str_free(&dec);
+    mdparser_md4c_attr_view value;
+    mdparser_md4c_attr_view_init(&value, a);
+    add_assoc_stringl(node, key, (char *)value.text, value.size);
+    mdparser_md4c_attr_view_destroy(&value);
 }
 
 /* Push a freshly-created container node. Returns false on depth overflow. */

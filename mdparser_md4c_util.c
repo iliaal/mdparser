@@ -35,18 +35,33 @@ static unsigned mdu_hex_val(char ch)
 void mdparser_md4c_append_cp(smart_str *out, unsigned cp)
 {
     unsigned char u[4];
+    size_t size;
+
     if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
         smart_str_appendl(out, "\xef\xbf\xbd", 3);
         return;
     }
-    if (cp <= 0x7f)        { u[0] = (unsigned char)cp; smart_str_appendl(out, (char *)u, 1); }
-    else if (cp <= 0x7ff)  { u[0] = 0xc0 | (cp >> 6); u[1] = 0x80 | (cp & 0x3f);
-                             smart_str_appendl(out, (char *)u, 2); }
-    else if (cp <= 0xffff) { u[0] = 0xe0 | (cp >> 12); u[1] = 0x80 | ((cp >> 6) & 0x3f);
-                             u[2] = 0x80 | (cp & 0x3f); smart_str_appendl(out, (char *)u, 3); }
-    else                   { u[0] = 0xf0 | (cp >> 18); u[1] = 0x80 | ((cp >> 12) & 0x3f);
-                             u[2] = 0x80 | ((cp >> 6) & 0x3f); u[3] = 0x80 | (cp & 0x3f);
-                             smart_str_appendl(out, (char *)u, 4); }
+
+    if (cp <= 0x7f) {
+        size = 1;
+        u[0] = (unsigned char)cp;
+    } else if (cp <= 0x7ff) {
+        size = 2;
+        u[0] = 0xc0 | (cp >> 6);
+        u[1] = 0x80 | (cp & 0x3f);
+    } else if (cp <= 0xffff) {
+        size = 3;
+        u[0] = 0xe0 | (cp >> 12);
+        u[1] = 0x80 | ((cp >> 6) & 0x3f);
+        u[2] = 0x80 | (cp & 0x3f);
+    } else {
+        size = 4;
+        u[0] = 0xf0 | (cp >> 18);
+        u[1] = 0x80 | ((cp >> 12) & 0x3f);
+        u[2] = 0x80 | ((cp >> 6) & 0x3f);
+        u[3] = 0x80 | (cp & 0x3f);
+    }
+    smart_str_appendl(out, (char *)u, size);
 }
 
 void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size)
@@ -72,7 +87,7 @@ void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size)
     }
 }
 
-void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
+static void mdu_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
 {
     if (attr == NULL || attr->text == NULL) return;
     for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
@@ -90,12 +105,14 @@ void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
     }
 }
 
-bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *n)
+void mdparser_md4c_attr_view_init(mdparser_md4c_attr_view *view,
+    const MD_ATTRIBUTE *attr)
 {
+    memset(view, 0, sizeof(*view));
+
     if (attr == NULL || attr->text == NULL || attr->size == 0) {
-        *p = "";
-        *n = 0;
-        return true;
+        view->text = "";
+        return;
     }
     /* A single substring spans the whole value when substr_offsets[1]
      * already reaches attr->size. Entity / NUL substrings still need real
@@ -103,13 +120,19 @@ bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *
     if (attr->substr_offsets[1] >= attr->size &&
         attr->substr_types[0] != MD_TEXT_ENTITY &&
         attr->substr_types[0] != MD_TEXT_NULLCHAR) {
-        *p = attr->text;
-        *n = attr->size;
-        return true;
+        view->text = attr->text;
+        view->size = attr->size;
+        return;
     }
-    *p = "";
-    *n = 0;
-    return false;
+
+    mdu_decode_attr(&view->storage, attr);
+    view->text = view->storage.s ? ZSTR_VAL(view->storage.s) : "";
+    view->size = view->storage.s ? ZSTR_LEN(view->storage.s) : 0;
+}
+
+void mdparser_md4c_attr_view_destroy(mdparser_md4c_attr_view *view)
+{
+    smart_str_free(&view->storage);
 }
 
 size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail)

@@ -45,22 +45,18 @@ void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size)
 const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     size_t *out_len, bool *owned);
 
-/* Decode an MD_ATTRIBUTE (link/image destination, title, code-fence info)
- * into raw UTF-8 bytes appended to `out`. md4c hands attributes out as a
- * run of typed substrings; this resolves MD_TEXT_ENTITY substrings to their
- * codepoints and MD_TEXT_NULLCHAR to U+FFFD, copying NORMAL substrings
- * verbatim. The result is undecoded-of-markup but entity-resolved, matching
- * what the HTML renderer feeds its escapers; callers still escape for their
- * own context (XML-escape, HTML-escape, or store raw in the AST). */
-void mdparser_md4c_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr);
+/* Entity-decoded attribute bytes. Plain attributes borrow md4c's storage;
+ * attributes containing entities or NULs use `storage`. Always destroy the
+ * view after consuming `text`, whether or not the fast path allocated. */
+typedef struct {
+    const char *text;
+    size_t size;
+    smart_str storage;
+} mdparser_md4c_attr_view;
 
-/* Fast-path probe for mdparser_md4c_decode_attr. Most attributes (link/image
- * URLs especially) are a single plain substring (no entity, no NUL) spanning
- * the whole value, so the decoded bytes equal attr->text and the
- * scratch-buffer copy can be skipped. Returns true and points *p and *n at
- * the verbatim bytes on the fast path (including the empty-attribute case);
- * returns false when the caller must decode. */
-bool mdparser_md4c_attr_plain(const MD_ATTRIBUTE *attr, const char **p, size_t *n);
+void mdparser_md4c_attr_view_init(mdparser_md4c_attr_view *view,
+    const MD_ATTRIBUTE *attr);
+void mdparser_md4c_attr_view_destroy(mdparser_md4c_attr_view *view);
 
 /* Skip a single leading UTF-8 BOM (EF BB BF) on the (src,len) pair in place.
  * md4c does not strip a BOM: left in, it leaks into output verbatim and also

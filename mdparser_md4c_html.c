@@ -87,7 +87,7 @@ static zend_always_inline void out_append(mdm_ctx *r, const char *s, size_t n)
 
 /* Escape-classification map. It depends only on fixed character sets, so it
  * is built once at MINIT instead of rebuilt (256 iterations + strchr scans)
- * on every render; each render memcpy's it into the per-call context. */
+ * on every render. */
 static char mdm_escape_map_template[256];
 
 void mdparser_md4c_html_minit(void)
@@ -663,17 +663,10 @@ static void mdm_emit_decoded_url(mdm_ctx *r, const char *p, size_t n, bool image
 /* Decode an attribute URL to raw bytes, then emit it safely. */
 static void mdm_render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_context)
 {
-    const char *p;
-    size_t n;
-    if (mdparser_md4c_attr_plain(attr, &p, &n)) {
-        mdm_emit_decoded_url(r, p, n, image_context);
-        return;
-    }
-    smart_str raw = {0};
-    mdparser_md4c_decode_attr(&raw, attr);
-    mdm_emit_decoded_url(r, raw.s ? ZSTR_VAL(raw.s) : "",
-        raw.s ? ZSTR_LEN(raw.s) : 0, image_context);
-    smart_str_free(&raw);
+    mdparser_md4c_attr_view value;
+    mdparser_md4c_attr_view_init(&value, attr);
+    mdm_emit_decoded_url(r, value.text, value.size, image_context);
+    mdparser_md4c_attr_view_destroy(&value);
 }
 
 /* Render an MD_ATTRIBUTE (code-fence lang, link/image title) HTML-escaped:
@@ -702,20 +695,14 @@ static void mdm_render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
         /* Prefix decision must use entity-decoded bytes: md4c hands lang out
          * entity-undecoded, so `language&#45;php` would miss a raw "language-"
          * probe and emit class="language-language-php". */
-        const char *p;
-        size_t n;
-        smart_str raw = {0};
-        if (!mdparser_md4c_attr_plain(&d->lang, &p, &n)) {
-            mdparser_md4c_decode_attr(&raw, &d->lang);
-            p = raw.s ? ZSTR_VAL(raw.s) : "";
-            n = raw.s ? ZSTR_LEN(raw.s) : 0;
-        }
+        mdparser_md4c_attr_view lang;
+        mdparser_md4c_attr_view_init(&lang, &d->lang);
         OUT_LIT(r, " class=\"");
-        if (n < 9 || strncmp(p, "language-", 9) != 0)
+        if (lang.size < 9 || strncmp(lang.text, "language-", 9) != 0)
             OUT_LIT(r, "language-");
-        mdm_escape_html(r, p, n);
+        mdm_escape_html(r, lang.text, lang.size);
         OUT_LIT(r, "\"");
-        smart_str_free(&raw);
+        mdparser_md4c_attr_view_destroy(&lang);
     }
     OUT_LIT(r, ">");
 }
@@ -741,22 +728,16 @@ static void mdm_render_td_open(mdm_ctx *r, const char *cell, const MD_BLOCK_TD_D
 static void mdm_emit_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
     const char *class_attr)
 {
-    smart_str href = {0};
-    const char *hp;
-    size_t hn;
-    if (!mdparser_md4c_attr_plain(attr, &hp, &hn)) {
-        mdparser_md4c_decode_attr(&href, attr);
-        hp = href.s ? ZSTR_VAL(href.s) : "";
-        hn = href.s ? ZSTR_LEN(href.s) : 0;
-    }
+    mdparser_md4c_attr_view href;
+    mdparser_md4c_attr_view_init(&href, attr);
     /* Fragment-only anchors (href="#...") are in-document links: skip nofollow.
      * Trim the same leading C0/space bytes the scheme filter skips so
      * `[x]( #section)` still counts as a fragment. */
     size_t frag_i = 0;
-    while (frag_i < hn && (unsigned char)hp[frag_i] <= 0x20) {
+    while (frag_i < href.size && (unsigned char)href.text[frag_i] <= 0x20) {
         frag_i++;
     }
-    bool fragment = frag_i < hn && hp[frag_i] == '#';
+    bool fragment = frag_i < href.size && href.text[frag_i] == '#';
 
     /* rel before href to match the prior (postprocess-injected) attribute
      * order, keeping output stable for nofollow callers. */
@@ -770,8 +751,8 @@ static void mdm_emit_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
     }
     OUT_LIT(r, " href=\"");
     /* Link context: data: URLs are rejected (no navigable data: documents). */
-    mdm_emit_decoded_url(r, hp, hn, false);
-    smart_str_free(&href);
+    mdm_emit_decoded_url(r, href.text, href.size, false);
+    mdparser_md4c_attr_view_destroy(&href);
 }
 
 static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
@@ -815,20 +796,14 @@ static void mdm_render_img_close(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
  * TYPE is one of note/tip/important/warning/caution (entity-resolved, escaped). */
 static void mdm_render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DETAIL *d)
 {
-    const char *p;
-    size_t n;
-    smart_str raw = {0};
-    if (!mdparser_md4c_attr_plain(&d->type, &p, &n)) {
-        mdparser_md4c_decode_attr(&raw, &d->type);
-        p = raw.s ? ZSTR_VAL(raw.s) : "";
-        n = raw.s ? ZSTR_LEN(raw.s) : 0;
-    }
+    mdparser_md4c_attr_view type;
+    mdparser_md4c_attr_view_init(&type, &d->type);
     OUT_LIT(r, "<div class=\"admonition-");
-    mdm_escape_html(r, p, n);
+    mdm_escape_html(r, type.text, type.size);
     OUT_LIT(r, "\">\n<p class=\"admonition-title\">");
-    mdm_escape_html(r, p, n);
+    mdm_escape_html(r, type.text, type.size);
     OUT_LIT(r, "</p>\n");
-    smart_str_free(&raw);
+    mdparser_md4c_attr_view_destroy(&type);
 }
 
 static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)

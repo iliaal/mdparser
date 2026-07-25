@@ -68,10 +68,10 @@ void mdparser_parser_register_class(void)
      * correct mechanism. */
     mdparser_parser_ce->default_object_handlers = &mdparser_parser_handlers;
 #endif
-    /* Parser caches a mask/extension_mask pair that default serialization
-     * never captures, so unserialize() would silently yield a parser
-     * running on defaults regardless of the constructed Options. Block
-     * serialize entirely; clone is already blocked below. */
+    /* Parser caches parser/render-option masks that default serialization
+     * never captures, so unserialize() would silently yield a parser running
+     * on defaults regardless of the constructed Options. Block serialization
+     * entirely; clone is already blocked below. */
     mdparser_parser_ce->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
 
     memcpy(&mdparser_parser_handlers, &std_object_handlers, sizeof(zend_object_handlers));
@@ -371,7 +371,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         i = run;
     }
     /* If the input ended on a \n, norm already has no trailing newline
-     * (we deferred the ZWSP for a non-existent next line). */
+     * (we deferred the sentinel for a non-existent next line). */
 
     const char *buf = norm.s ? ZSTR_VAL(norm.s) : "";
     size_t buf_len = norm.s ? ZSTR_LEN(norm.s) : 0;

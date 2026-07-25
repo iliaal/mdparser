@@ -47,7 +47,6 @@ const char *mdparser_md4c_xml_status_message(int status)
 typedef struct {
     smart_str out;
     int depth;
-    int in_thead;
     bool collecting;   /* code/code_block/html literal */
     int error;
 } mdx_ctx;
@@ -145,20 +144,10 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
     /* md4c hands attributes out entity-undecoded across typed substrings;
      * resolve them to raw bytes first, then XML-escape once. Escaping the
      * raw bytes directly would double-encode entities (&amp; -> &amp;amp;). */
-    if (a && a->text) {
-        const char *p;
-        size_t n;
-        if (mdparser_md4c_attr_plain(a, &p, &n)) {
-            /* Plain substring decodes to itself; XML-escape the bytes
-             * directly, skipping the scratch decode buffer. */
-            mdx_escape(&c->out, p, n, true);
-        } else {
-            smart_str dec = {0};
-            mdparser_md4c_decode_attr(&dec, a);
-            if (dec.s) mdx_escape(&c->out, ZSTR_VAL(dec.s), ZSTR_LEN(dec.s), true);
-            smart_str_free(&dec);
-        }
-    }
+    mdparser_md4c_attr_view value;
+    mdparser_md4c_attr_view_init(&value, a);
+    mdx_escape(&c->out, value.text, value.size, true);
+    mdparser_md4c_attr_view_destroy(&value);
     smart_str_appendc(&c->out, '"');
 }
 
@@ -234,7 +223,7 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         case MD_BLOCK_P: mdx_open(c, "paragraph"); break;
         case MD_BLOCK_TABLE: mdx_open(c, "table"); break;
-        case MD_BLOCK_THEAD: c->in_thead++; mdx_open(c, "table_header"); break;
+        case MD_BLOCK_THEAD: mdx_open(c, "table_header"); break;
         case MD_BLOCK_TBODY: mdx_open(c, "table_body"); break;
         case MD_BLOCK_TR: mdx_open(c, "table_row"); break;
         case MD_BLOCK_TH:
@@ -293,7 +282,7 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         case MD_BLOCK_P: mdx_close(c, "paragraph"); break;
         case MD_BLOCK_TABLE: mdx_close(c, "table"); break;
-        case MD_BLOCK_THEAD: c->in_thead--; mdx_close(c, "table_header"); break;
+        case MD_BLOCK_THEAD: mdx_close(c, "table_header"); break;
         case MD_BLOCK_TBODY: mdx_close(c, "table_body"); break;
         case MD_BLOCK_TR: mdx_close(c, "table_row"); break;
         case MD_BLOCK_TH:
