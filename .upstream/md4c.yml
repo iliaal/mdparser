@@ -1,14 +1,21 @@
 # /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
 # detected from php_mdparser.h (MDPARSER_MD4C_VERSION)
 
-pinned: 0.5.3
+pinned: 10c0158a4afcaec1fc303cb51e7847d29edfd498
 vendored_at: vendor/md4c
-resolver: github
+resolver: github-head
 repo: mity/md4c
-tag_regex: "release-(.+)"
+branch: master
 note: |
-  md4c (mity/md4c), vendored at release-0.5.3 plus master commit 755ce49
-  (MDPARSER_MD4C_VERSION = 0.5.3+git755ce49). Carries one local patch: a
-  code-span trailing-whitespace fix in md_process_inlines (see
-  vendor/VENDOR.md), submitted upstream as mity/md4c#378. Remove the
-  patch on the next refresh that includes the upstream fix.
+  md4c (mity/md4c), vendored at master 10c0158 (MDPARSER_MD4C_VERSION =
+  0.5.3+git10c0158). The vendor directory mirrors a commit rather than a
+  release tag, so the gate resolves the branch head. mity/md4c publishes
+  tags but no GitHub Releases, so `resolver: github` hit releases/latest,
+  404'd on every run, and degraded to warn-and-proceed without ever
+  comparing anything.
+
+  Carries one local behavior patch (NUL replacement in
+  md_text_with_null_replacement) plus the MD_PARSER_BAILOUT_GUARD embedding
+  hook in md_parse. See vendor/VENDOR.md. The code-span trailing-whitespace
+  patch was accepted upstream as 10e96ad4 and dropped in the 2026-07-27
+  refresh.

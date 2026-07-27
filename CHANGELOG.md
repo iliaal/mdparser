@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Enabled GitHub-style alerts as well as footnotes in `Options::github()`.
+- Bare URLs containing a percent sign now autolink (`http://a.com/x%20y`), matching GFM; previously the percent ended the scan and the URL stayed literal text.
 - Adjacent AST text fragments are now coalesced into one `text` node, reducing callback-driven array overhead.
 - HTML output now seeds a ~1.25× smart_str reserve (still capped at 1 MiB) so ordinary documents reallocate less; sparse input no longer reserves output it never produces, while dense input past the cap grows by doubling and can peak above an exact reserve.
 - Documented that AST/XML link URLs are entity-decoded (not source-byte-verbatim), that AST flattens `footnote_section` while XML keeps it, and that AST/XML depth caps count different nesting units.
@@ -32,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### For contributors
 
+- Refreshed vendored md4c to master `10c0158`, dropping the local code-span line-break patch now that upstream carries it and picking up a bounds guard on the table-alignment dash scan.
 - Made CI reject crashed, unloadable, and all-skipped PHPT runs.
 - Made benchmark and release helpers reject invalid or inconsistent inputs with a nonzero status.
 - Added the PHP 8.2 floor and warnings-as-errors development mode to Windows builds.

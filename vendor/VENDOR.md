@@ -36,7 +36,7 @@ renderers.
 
 | Component | Version | Notes |
 |---|---|---|
-| mity/md4c | `0.5.3+git755ce49` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
+| mity/md4c | `0.5.3+git10c0158` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
 | CommonMark spec fixture | 0.31 `spec.txt` | Shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` pins md4c's conformance against it. |
 
 md4c targets CommonMark 0.31 natively, so the parser pin and the spec
@@ -48,25 +48,13 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Two behavior patches and one embedding hook are carried in `md4c/md4c.c`.
+One behavior patch and one embedding hook are carried in `md4c/md4c.c`.
 
-The first is in `md_process_inlines` (code-span line-break handling). Stock
-md4c renders an interior code-span line that ends in
-whitespace one space short, because it emits the line-break space only
-`if(off == line->end)` and the trailing-whitespace loop just above has
-already advanced `off` past `line->end`. This fails CommonMark 0.31
-examples 335, 337, and 640. The patch emits the space whenever `off`
-rests on an interior newline still preceding the closer
-(`off < mark->beg && ISNEWLINE(off)`), which fixes those three without
-regressing the boundary cases (121, 336). The change site is marked
-with an `mdparser local patch` comment.
+The code-span line-break patch that used to live here was accepted upstream
+as `10e96ad4` and is no longer local; the 2026-07-27 refresh picked it up and
+dropped the local copy.
 
-Submitted upstream to mity/md4c. **Remove this patch on the next vendor
-refresh that includes the upstream fix** — when copying in a new md4c
-release (see Refresh below), diff `md_process_inlines` against this note
-and drop the local change if upstream now carries it.
-
-The second is in `md_text_with_null_replacement`. Stock md4c emits the
+The behavior patch is in `md_text_with_null_replacement`. Stock md4c emits the
 `MD_TEXT_NULLCHAR` callback but advances only the local offset, leaving the
 input pointer and remaining size on the same NUL. The following callback then
 receives that byte a second time. The patch consumes one character from
