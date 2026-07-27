@@ -70,12 +70,14 @@ static void mdx_indent(mdx_ctx *c)
 static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
 {
     size_t beg = 0, i = 0;
+    /* 0xEF first: every byte pays this test, and only the lead byte of the
+     * U+FFFE/U+FFFF sequences needs the bounds check that follows. */
+    const unsigned char *u = (const unsigned char *)s;
     for (; i < n; i++) {
         const char *rep = NULL;
         size_t consumed = 1;
-        const unsigned char *u = (const unsigned char *)s;
 
-        if (i + 2 < n && u[i] == 0xEF && u[i + 1] == 0xBF
+        if (u[i] == 0xEF && i + 2 < n && u[i + 1] == 0xBF
             && (u[i + 2] == 0xBE || u[i + 2] == 0xBF)) {
             rep = "\xef\xbf\xbd";
             consumed = 3;

@@ -68,7 +68,9 @@ typedef struct {
     /* SmartyPants quote context: last normal-text byte emitted (0 at
      * start / after a structural boundary we treat as left-context). */
     unsigned char prev_char;
-    bool inline_line_start;
+    /* Render source span, used to spot physical line starts. */
+    const char *src_begin;
+    const char *src_end;
 } mdm_ctx;
 
 #define NEED_HTML_ESC_FLAG 0x1
@@ -1012,14 +1014,19 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
 
-    if (r->inline_line_start && type == MD_TEXT_NORMAL && size > 0) {
-        r->inline_line_start = false;
-        if (text[0] == ';') {
-            text++;
-            size--;
-            r->prev_char = ' ';
-            if (size == 0) return 0;
-        }
+    /* toInlineHtml normalizes its input so every physical line begins with one
+     * ASCII ';' sentinel; consume it here rather than scrubbing the output.
+     * The source position is the line-start signal, because a verbatim span
+     * that swallows a line break emits no MD_TEXT_BR|SOFTBR, and md4c's own
+     * literal chunks fall outside the source buffer where no sentinel can
+     * live. Only normal text seeds the SmartyPants quote context. */
+    if ((r->render_opts & MDPARSER_RF_INLINE_SENTINEL) && size > 0
+        && text >= r->src_begin && text < r->src_end
+        && (text == r->src_begin || text[-1] == '\n') && text[0] == ';') {
+        text++;
+        size--;
+        if (type == MD_TEXT_NORMAL) r->prev_char = ' ';
+        if (size == 0) return 0;
     }
 
     /* While buffering a heading, also accumulate plain text for the slug.
@@ -1040,16 +1047,12 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             if (r->image_nesting_level > 0) OUT_LIT(r, " ");
             else OUT_LIT(r, "<br />\n");
             r->prev_char = 0;
-            if (r->render_opts & MDPARSER_RF_INLINE_SENTINEL)
-                r->inline_line_start = true;
             break;
         case MD_TEXT_SOFTBR:
             if (r->image_nesting_level > 0) OUT_LIT(r, " ");
             else if (r->render_opts & MDPARSER_RF_NOBREAKS) OUT_LIT(r, " ");
             else OUT_LIT(r, "\n");
             r->prev_char = 0;
-            if (r->render_opts & MDPARSER_RF_INLINE_SENTINEL)
-                r->inline_line_start = true;
             break;
         case MD_TEXT_HTML:
             if (r->image_nesting_level > 0) mdm_escape_html(r, text, size);
@@ -1097,7 +1100,6 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     r.render_opts = render_opts;
     r.cur = &r.main;
     r.prev_char = 0;
-    r.inline_line_start = (render_opts & MDPARSER_RF_INLINE_SENTINEL) != 0;
 
     if (render_opts & MDPARSER_RF_HEADING_ANCHORS)
         mdm_slugs_init(&r.slugs);
@@ -1123,6 +1125,9 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
         }
         smart_str_alloc(&r.main, reserve, 0);
     }
+
+    r.src_begin = use_src;
+    r.src_end = use_src + use_len;
 
     MD_PARSER parser = {
         0,

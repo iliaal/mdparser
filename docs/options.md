@@ -162,12 +162,14 @@ echo (new Parser(new Options(footnotes: true)))->toHtml($md);
 // <section class="footnotes">
 // <ol>
 // <li id="fn-1">
-// <p>See source.</p>
-// <a href="#fnref-1-1" class="footnote-backref">↩</a>
+// See source.<a href="#fnref-1-1" class="footnote-backref">↩</a>
 // </li>
 // </ol>
 // </section>
 ```
+
+Definition bodies are emitted tight — no `<p>` wrapper — with the
+backref anchor appended directly to the body text.
 
 When `false`, `[^1]` and `[^1]: ...` parse as literal text.
 

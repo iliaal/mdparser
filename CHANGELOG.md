@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Enabled GitHub-style alerts as well as footnotes in `Options::github()`.
 - Adjacent AST text fragments are now coalesced into one `text` node, reducing callback-driven array overhead.
-- HTML output now seeds a ~1.25× smart_str reserve (still capped at 1 MiB) so ordinary documents reallocate less.
+- HTML output now seeds a ~1.25× smart_str reserve (still capped at 1 MiB) so ordinary documents reallocate less; sparse input no longer reserves output it never produces, while dense input past the cap grows by doubling and can peak above an exact reserve.
 - Documented that AST/XML link URLs are entity-decoded (not source-byte-verbatim), that AST flattens `footnote_section` while XML keeps it, and that AST/XML depth caps count different nesting units.
 - `toInlineHtml()` multiline normalization bulk-appends content runs instead of appending one byte at a time.
 - Heading-anchor side buffers are released as soon as each heading is flushed into the main output.
@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed SmartyPants quote context after decoded entities.
 - Avoided repeated 100,000-suffix scans after heading ID exhaustion and reduced scratch memory for large headings.
 - Reduced peak HTML, XML, and AST memory for sparse input and large code or HTML literals.
-- `toInlineHtml()` now preserves line-leading inline delimiters and literal U+200B while using less memory on multiline input.
+- `toInlineHtml()` now preserves line-leading inline delimiters and literal U+200B while using less memory on multiline input; its per-line sentinel no longer surfaces inside code or LaTeX spans that cross a line break.
 - HTML, XML, and AST output now replace embedded NUL exactly once; XML also preserves attribute whitespace and replaces forbidden XML 1.0 scalars.
 - AST and XML code blocks retain full info strings, and deeply nested XML bounds indentation without truncating structure.
 - Zend memory-limit bailouts now release md4c's libc allocations before the request aborts.
