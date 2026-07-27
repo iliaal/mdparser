@@ -62,6 +62,11 @@ $parser = new Parser(new Options(
 ));
 echo $parser->toHtml($markdown);
 
+// Presets for common setups.
+$github     = new Parser(Options::github());     // GFM + footnotes + alerts
+$strict     = new Parser(Options::strict());     // CommonMark, no bare-URL autolinks
+$permissive = new Parser(Options::permissive()); // trusted input: raw HTML passes through
+
 // Three output formats from one parser.
 $html = $parser->toHtml($markdown);
 $xml  = $parser->toXml($markdown);   // CommonMark XML, DOCTYPE-wrapped
@@ -131,7 +136,8 @@ mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It d
 - Mentions (`@user`)
 - Emoji (`:smile:`)
 - Fenced admonition containers (`::: warning`); GitHub-style `> [!NOTE]`
-  alert blocks are supported via `Options::admonitions`
+  alert blocks are supported via `Options::admonitions`, and are on by
+  default in `Options::github()`
 
 These are real features. They're just out of scope for a CommonMark+GFM core parser.
 
