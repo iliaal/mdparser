@@ -135,27 +135,59 @@ void mdparser_md4c_attr_view_destroy(mdparser_md4c_attr_view *view)
     smart_str_free(&view->storage);
 }
 
+/* RFC 3629 lead-byte classification shared by the sequence validator and
+ * the maximal-subpart scanner: expected length plus the allowed range for
+ * the second byte (overlong / surrogate / >U+10FFFF guards). Returns false
+ * when c cannot start a multi-byte sequence. */
+typedef struct {
+    size_t expect;
+    unsigned char min2, max2;
+} mdu_seq_info;
+
+static bool mdu_lead_info(unsigned char c, mdu_seq_info *si)
+{
+    si->min2 = 0x80;
+    si->max2 = 0xBF;
+    if (c >= 0xC2 && c <= 0xDF)      { si->expect = 2; return true; }
+    if (c == 0xE0)                   { si->expect = 3; si->min2 = 0xA0; return true; }
+    if (c >= 0xE1 && c <= 0xEC)      { si->expect = 3; return true; }
+    if (c == 0xED)                   { si->expect = 3; si->max2 = 0x9F; return true; }
+    if (c >= 0xEE && c <= 0xEF)      { si->expect = 3; return true; }
+    if (c == 0xF0)                   { si->expect = 4; si->min2 = 0x90; return true; }
+    if (c >= 0xF1 && c <= 0xF3)      { si->expect = 4; return true; }
+    if (c == 0xF4)                   { si->expect = 4; si->max2 = 0x8F; return true; }
+    return false;
+}
+
 size_t mdparser_md4c_utf8_seqlen(const unsigned char *p, size_t avail)
 {
     unsigned char c = p[0];
     if (c < 0x80) return 1;
-    size_t expect;
-    unsigned char min2 = 0x80, max2 = 0xBF;
-    if (c >= 0xC2 && c <= 0xDF)      expect = 2;
-    else if (c == 0xE0)              { expect = 3; min2 = 0xA0; }
-    else if (c >= 0xE1 && c <= 0xEC) expect = 3;
-    else if (c == 0xED)              { expect = 3; max2 = 0x9F; }
-    else if (c >= 0xEE && c <= 0xEF) expect = 3;
-    else if (c == 0xF0)              { expect = 4; min2 = 0x90; }
-    else if (c >= 0xF1 && c <= 0xF3) expect = 4;
-    else if (c == 0xF4)              { expect = 4; max2 = 0x8F; }
-    else return 0;
-    if (avail < expect) return 0;
-    if (p[1] < min2 || p[1] > max2) return 0;
-    for (size_t k = 2; k < expect; k++) {
+    mdu_seq_info si;
+    if (!mdu_lead_info(c, &si)) return 0;
+    if (avail < si.expect) return 0;
+    if (p[1] < si.min2 || p[1] > si.max2) return 0;
+    for (size_t k = 2; k < si.expect; k++) {
         if (p[k] < 0x80 || p[k] > 0xBF) return 0;
     }
-    return expect;
+    return si.expect;
+}
+
+/* Length of the Unicode "maximal subpart" of the invalid sequence starting
+ * at p: the longest prefix that is still a prefix of some valid sequence.
+ * One U+FFFD replaces the whole subpart (W3C/WHATWG replacement policy),
+ * so a truncated E2 82 yields one U+FFFD while an out-of-range second byte
+ * (e.g. E0 9F) splits into one U+FFFD per offending byte. Callers invoke
+ * this only after mdparser_md4c_utf8_seqlen returned 0. */
+static size_t mdu_invalid_subpart_len(const unsigned char *p, size_t avail)
+{
+    unsigned char c = p[0];
+    mdu_seq_info si;
+    if (c < 0x80 || !mdu_lead_info(c, &si)) return 1;
+    if (avail < 2 || p[1] < si.min2 || p[1] > si.max2) return 1;
+    size_t n = 2;
+    while (n < si.expect && n < avail && p[n] >= 0x80 && p[n] <= 0xBF) n++;
+    return n;
 }
 
 /* Skip a run of ASCII (<0x80) bytes starting at p[i], using a 64-bit
@@ -205,7 +237,7 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
         out_size += i - beg;
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
-        if (n == 0) { out_size += 3; i++; }
+        if (n == 0) { i += mdu_invalid_subpart_len(p + i, len - i); out_size += 3; }
         else { out_size += n; i += n; }
     }
     char *dst = emalloc(out_size + 1);
@@ -220,7 +252,7 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
         if (n == 0) {
             dst[o++] = (char)0xEF; dst[o++] = (char)0xBF; dst[o++] = (char)0xBD;
-            i++;
+            i += mdu_invalid_subpart_len(p + i, len - i);
         } else {
             memcpy(dst + o, p + i, n);
             o += n;
