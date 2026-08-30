@@ -1503,10 +1503,23 @@ md_free_attribute(MD_CTX* ctx, MD_ATTRIBUTE_BUILD* build)
 {
     MD_UNUSED(ctx);
 
-    if(build->substr_alloc > 0) {
+    /* mdparser local patch (see vendor/VENDOR.md): a trivial build aliases
+     * caller-owned storage, so it must not be freed; every other build owns
+     * all three pointers from the moment md_build_attribute() leaves the
+     * trivial branch, even if a growth realloc later failed with
+     * substr_alloc still 0. Keying on substr_alloc instead leaked those
+     * partial builds and, because md_build_attribute() frees on its own
+     * abort path before the caller frees again, double-freed the completed
+     * ones. Clearing the pointers keeps this idempotent. */
+    if(build->substr_types != build->trivial_types) {
         free(build->text);
         free(build->substr_types);
         free(build->substr_offsets);
+        build->text = NULL;
+        build->substr_types = NULL;
+        build->substr_offsets = NULL;
+        build->substr_alloc = 0;
+        build->substr_count = 0;
     }
 }
 
@@ -2478,6 +2491,11 @@ md_is_link_reference_definition(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lin
                     _T(' '), &label, &label_size));
         def = (MD_REF_DEF*) md_add_label_def(ctx, &ctx->ref_def_hashtable, label, label_size);
         if(def == NULL) {
+            /* mdparser local patch (see vendor/VENDOR.md): stock md4c leaves
+             * ret at 0 here, so an out-of-memory md_add_label_def() was
+             * reported to the caller as "not a reference definition" rather
+             * than as the error this function documents itself to return. */
+            ret = -1;
             free(label);
             goto abort;
         }
@@ -2485,8 +2503,11 @@ md_is_link_reference_definition(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lin
     } else {
         def = (MD_REF_DEF*) md_add_label_def(ctx, &ctx->ref_def_hashtable,
                     STR(label_contents_beg), label_contents_end - label_contents_beg);
-        if(def == NULL)
+        if(def == NULL) {
+            /* mdparser local patch: see the sibling branch above. */
+            ret = -1;
             goto abort;
+        }
     }
 
     if(title_is_multiline) {
@@ -2507,10 +2528,11 @@ md_is_link_reference_definition(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lin
 
 abort:
     /* Failure. */
-    if(def != NULL  &&  def->label_needs_free)
-        free((CHAR*) def->entry.label);
-    if(def != NULL  &&  def->title_needs_free)
-        free(def->title);
+    /* mdparser local patch (see vendor/VENDOR.md): a non-NULL def is already
+     * committed to ctx->ref_def_hashtable, which owns its label and title and
+     * frees them in md_free_ref_defs(). Freeing them here too double-freed the
+     * label whenever the multiline-title merge ran out of memory. The def == NULL
+     * path frees its local label itself, above. */
     return ret;
 }
 
@@ -6343,7 +6365,10 @@ md_enter_child_containers(MD_CTX* ctx, int n_children)
             case _T('*'):
                 /* Remember offset in ctx->block_bytes so we can revisit the
                  * block if we detect it is a loose list. */
-                md_end_current_block(ctx);
+                /* mdparser local patch (see vendor/VENDOR.md): stock md4c
+                 * drops this return value, so an out-of-memory here recorded
+                 * block_byte_off against a half-ended block and carried on. */
+                MD_CHECK(md_end_current_block(ctx));
                 c->block_byte_off = ctx->n_block_bytes;
 
                 MD_CHECK(md_push_container_bytes(ctx,
@@ -7147,7 +7172,11 @@ md_process_doc(MD_CTX *ctx)
         MD_CHECK(md_process_line(ctx, &pivot_line, line));
     }
 
-    md_end_current_block(ctx);
+    /* mdparser local patch (see vendor/VENDOR.md): stock md4c drops this
+     * return value, so an allocation failure while consuming the document's
+     * last reference definition was swallowed and phase 2 then ran over a
+     * half-committed definition. */
+    MD_CHECK(md_end_current_block(ctx));
 
     MD_CHECK(md_build_ref_def_hashtable(ctx));
     if(ctx->parser.flags & MD_FLAG_FOOTNOTES)

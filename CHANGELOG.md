@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Fixed a double free in md4c's attribute builder: `md_free_attribute()` keyed its frees on `substr_alloc`, so a failed growth realloc had `md_build_attribute()` and its caller both free the same three buffers. The same test also leaked when the first growth realloc failed.
+- Fixed a double free of a link reference definition's label when the multiline-title merge ran out of memory; the hashtable already owns the label and frees it at parse end.
+- Out-of-memory errors from `md_add_label_def()` and both `md_end_current_block()` call sites are now propagated instead of being reported as "not a reference definition" or dropped outright.
+
+### For contributors
+
+- Added `tests/oom/`, an ASAN sweep that fails md4c's n-th allocation over a corpus; md4c's out-of-memory paths are unreachable from PHP, so this is the only gate on them.
+
 ## [0.5.0] - 2026-07-27
 
 ### Changed

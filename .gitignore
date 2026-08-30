@@ -53,6 +53,9 @@ tests/**/*.sh
 tests/**/*.php.out
 tests/**/*.php
 
+# tests/oom/ is checked-in source, not run-tests output
+!tests/oom/run.sh
+
 # editors
 .vscode/
 .idea/
