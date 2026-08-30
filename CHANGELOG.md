@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-30
+
 ### Added
 
 - `Options::$insert` maps md4c's `MD_FLAG_INSERT`: `++text++` renders as `<ins>`, the counterpart to strikethrough's `<del>`. Off by default.
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `validateUtf8` now replaces invalid UTF-8 with one U+FFFD per maximal subpart rather than one per byte, matching the Unicode, W3C, and WHATWG policy. A truncated `E2 82` or `F0 9F` yields one replacement character instead of several; out-of-range second bytes such as `E0 9F` still split per offending byte. Applies to `toHtml()`, `toXml()`, and `toAst()` alike.
 - Refreshed vendored md4c from `0.5.3+git10c0158` to `0.5.3+git61f5ce7` (21 commits). CommonMark conformance is unchanged at 652/652.
 
 ### For contributors
@@ -555,7 +558,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.5.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.6.0...HEAD
+[0.6.0]: https://github.com/iliaal/mdparser/releases/tag/0.6.0
 [0.5.0]: https://github.com/iliaal/mdparser/releases/tag/0.5.0
 [0.4.3]: https://github.com/iliaal/mdparser/releases/tag/0.4.3
 [0.4.2]: https://github.com/iliaal/mdparser/releases/tag/0.4.2
