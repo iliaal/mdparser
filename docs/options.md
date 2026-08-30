@@ -51,6 +51,8 @@ new Options(
     latexMath: false,
     wikiLinks: false,
     admonitions: false,
+    insert: false,
+    preserveBlankLines: false,
 );
 ```
 
@@ -376,6 +378,21 @@ The block type is one of `note`, `tip`, `important`, `warning`, or
 classes downstream. In `toXml()` it is `<admonition type="note">`; in
 `toAst()` it is an `admonition` node carrying an `admonition_type`
 field. With the option off, `> [!NOTE]` stays a plain blockquote.
+
+### `insert: bool = false`
+
+When `true`, `++inserted++` becomes `<ins>inserted</ins>`, the
+counterpart to strikethrough's `<del>`. In `toXml()` it is `<insert>`;
+in `toAst()` it is an `insert` node. With the option off the plus signs
+stay literal text.
+
+### `preserveBlankLines: bool = false`
+
+When `true`, runs of blank lines between blocks are reported instead of
+discarded. `toHtml()` output is unchanged, since blank runs carry no
+HTML; `toXml()` emits `<blank />` between the surrounding blocks and
+`toAst()` emits a `blank` node. Use it when you need to round-trip a
+document's vertical spacing rather than just render it.
 
 ## Patterns
 

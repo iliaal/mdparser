@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Options::$insert` maps md4c's `MD_FLAG_INSERT`: `++text++` renders as `<ins>`, the counterpart to strikethrough's `<del>`. Off by default.
+- `Options::$preserveBlankLines` maps md4c's `MD_FLAG_PRESERVEBLANKLINES`: blank-line runs between blocks are reported rather than discarded, as `<blank />` in `toXml()` and a `blank` node in `toAst()`. HTML output is unchanged. Off by default.
 - `mdparser.parse_memory_limit` (default `128M`, `PHP_INI_ALL`, `0` or negative for unlimited) caps the libc working set of a single parse. md4c's memory is invisible to `memory_limit`, and markdown amplifies it (about 72 bytes per `[` byte, 40 to 56 per `>` byte), so a few megabytes of hostile input could ask for gigabytes. Crossing the limit throws `MdParser\Exception`.
 
 ### Security
@@ -16,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a double free in md4c's attribute builder: `md_free_attribute()` keyed its frees on `substr_alloc`, so a failed growth realloc had `md_build_attribute()` and its caller both free the same three buffers. The same test also leaked when the first growth realloc failed.
 - Fixed a double free of a link reference definition's label when the multiline-title merge ran out of memory; the hashtable already owns the label and frees it at parse end.
 - Out-of-memory errors from `md_add_label_def()` and both `md_end_current_block()` call sites are now propagated instead of being reported as "not a reference definition" or dropped outright.
+
+### Changed
+
+- Refreshed vendored md4c from `0.5.3+git10c0158` to `0.5.3+git61f5ce7` (21 commits). CommonMark conformance is unchanged at 652/652.
 
 ### For contributors
 

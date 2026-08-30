@@ -1,21 +1,25 @@
 # /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
 # detected from php_mdparser.h (MDPARSER_MD4C_VERSION)
 
-pinned: 10c0158a4afcaec1fc303cb51e7847d29edfd498
+pinned: 61f5ce76647a93d60f652da8212e263ae2b4d8b7
 vendored_at: vendor/md4c
 resolver: github-head
 repo: mity/md4c
 branch: master
 note: |
-  md4c (mity/md4c), vendored at master 10c0158 (MDPARSER_MD4C_VERSION =
-  0.5.3+git10c0158). The vendor directory mirrors a commit rather than a
+  md4c (mity/md4c), vendored at master 61f5ce7 (MDPARSER_MD4C_VERSION =
+  0.5.3+git61f5ce7). The vendor directory mirrors a commit rather than a
   release tag, so the gate resolves the branch head. mity/md4c publishes
   tags but no GitHub Releases, so `resolver: github` hit releases/latest,
   404'd on every run, and degraded to warn-and-proceed without ever
   comparing anything.
 
-  Carries one local behavior patch (NUL replacement in
-  md_text_with_null_replacement) plus the MD_PARSER_BAILOUT_GUARD embedding
-  hook in md_parse. See vendor/VENDOR.md. The code-span trailing-whitespace
-  patch was accepted upstream as 10e96ad4 and dropped in the 2026-07-27
-  refresh.
+  Carries six local behavior patches plus the MD_PARSER_BAILOUT_GUARD
+  embedding hook in md_parse: NUL replacement in
+  md_text_with_null_replacement, and five out-of-memory error-path fixes
+  (double free plus leak in md_free_attribute, double free and two
+  swallowed md_add_label_def errors in md_is_link_reference_definition,
+  and dropped md_end_current_block return values in md_process_doc and
+  md_enter_child_containers). All five OOM fixes are proposed upstream.
+  See vendor/VENDOR.md. The code-span trailing-whitespace patch was
+  accepted upstream as 10e96ad4 and dropped in the 2026-07-27 refresh.

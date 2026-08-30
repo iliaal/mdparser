@@ -64,11 +64,11 @@ typedef struct {
  * generated from it, so adding a node type is a one-line change. */
 #define MDA_NODE_TYPES(_) \
     _(document) _(block_quote) _(list) _(tasklist) _(item) \
-    _(thematic_break) _(heading) _(code_block) _(html_block) _(paragraph) \
+    _(thematic_break) _(blank) _(heading) _(code_block) _(html_block) _(paragraph) \
     _(table) _(table_header) _(table_row) _(table_cell) _(footnote_definition) \
     _(admonition) \
     _(emph) _(strong) _(link) _(image) _(code) \
-    _(strikethrough) _(underline) _(superscript) _(subscript) _(highlight) \
+    _(strikethrough) _(insert) _(underline) _(superscript) _(subscript) _(highlight) \
     _(spoiler) _(latex_math) _(latex_math_display) _(wikilink) _(footnote_reference) \
     _(softbreak) _(linebreak) _(html_inline) _(text) _(unknown)
 
@@ -323,6 +323,7 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         }
         case MD_BLOCK_HR: mda_new_node(&n, MDA_T_thematic_break); break;
+        case MD_BLOCK_BLANK: mda_new_node(&n, MDA_T_blank); break;
         case MD_BLOCK_H:
             mda_new_node(&n, MDA_T_heading);
             add_assoc_long(&n, "level", ((MD_BLOCK_H_DETAIL *)detail)->level);
@@ -440,6 +441,7 @@ static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             smart_str_free(&c->litbuf);
             break;
         case MD_SPAN_DEL: mda_new_node(&n, MDA_T_strikethrough); break;
+        case MD_SPAN_INS: mda_new_node(&n, MDA_T_insert); break;
         case MD_SPAN_U: mda_new_node(&n, MDA_T_underline); break;
         case MD_SPAN_SUPERSCRIPT: mda_new_node(&n, MDA_T_superscript); break;
         case MD_SPAN_SUBSCRIPT: mda_new_node(&n, MDA_T_subscript); break;

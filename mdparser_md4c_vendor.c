@@ -168,9 +168,10 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
  * itself. That is safe only because every header md4c.c includes is already
  * fully included here (include guards suppress re-declaration), so the macro
  * expansion never rewrites a system declaration. md4c.c includes: limits.h,
- * stdint.h, stdio.h, stdlib.h, stddef.h, string.h. If md4c gains a new
- * system include at a refresh, add it to this list. */
+ * stdbool.h, stdint.h, stdio.h, stdlib.h, stddef.h, string.h. If md4c gains a
+ * new system include at a refresh, add it to this list. */
 #include <limits.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

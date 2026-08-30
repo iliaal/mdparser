@@ -36,7 +36,7 @@ renderers.
 
 | Component | Version | Notes |
 |---|---|---|
-| mity/md4c | `0.5.3+git10c0158` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
+| mity/md4c | `0.5.3+git61f5ce7` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
 | CommonMark spec fixture | 0.31 `spec.txt` | Shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` pins md4c's conformance against it. |
 
 md4c targets CommonMark 0.31 natively, so the parser pin and the spec
@@ -100,13 +100,9 @@ and phase 2 then ran over a half-committed definition; in the second, the
 recorded offset was taken against a block that had not finished ending. Both
 patches wrap the call in `MD_CHECK`.
 
-All five are still present in md4c master (checked 2026-08-30 against
-`raw.githubusercontent.com/mity/md4c/master/src/md4c.c`: `md_free_attribute`
-still keys on `substr_alloc`, the reference-definition abort label still frees,
-both `md_add_label_def` branches still fall through with `ret` at 0, and both
-`md_end_current_block` call sites are still bare at upstream lines 6431 and
-7244). A refresh will therefore NOT drop them — re-apply all five and re-check
-upstream before assuming otherwise. They are worth reporting to mity/md4c.
+All five are still present in md4c master as of the `61f5ce7` pin, so a
+refresh does not drop them. Re-apply all five and re-check upstream first.
+They are proposed upstream as separate pull requests.
 
 ### Behavior
 

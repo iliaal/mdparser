@@ -45,6 +45,15 @@
     #define snprintf _snprintf
 #endif
 
+/* For falling through case labels in switch statements. */
+#if defined __clang__ && __clang_major__ >= 12
+    #define MD_FALLTHROUGH()        ;__attribute__((fallthrough))
+#elif defined __GNUC__ && __GNUC__ >= 7
+    #define MD_FALLTHROUGH()        ;__attribute__((fallthrough))
+#else
+    #define MD_FALLTHROUGH()        ((void)0)
+#endif
+
 
 
 typedef struct MD_HTML_tag MD_HTML;
@@ -426,6 +435,16 @@ render_close_footnote_def_block(MD_HTML* r, const MD_BLOCK_FOOTNOTE_DEF_DETAIL* 
     RENDER_VERBATIM(r, "\n</li>\n");
 }
 
+static void
+render_blank_block(MD_HTML* r, const MD_BLOCK_BLANK_DETAIL* det)
+{
+    unsigned i;
+    /* The first blank line is the ordinary block separation CommonMark already
+     * implies; render only the surplus (line_count - 1) as <br>. */
+    for(i = 1; i < det->line_count; i++)
+        RENDER_VERBATIM(r, (r->flags & MD_HTML_FLAG_XHTML) ? "<br/>\n" : "<br>\n");
+}
+
 static int
 enter_block_callback(MD_BLOCKTYPE type, void* detail, void* userdata)
 {
@@ -452,6 +471,7 @@ enter_block_callback(MD_BLOCKTYPE type, void* detail, void* userdata)
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: RENDER_VERBATIM(r, "<section class=\"footnotes\">\n<ol>\n"); break;
         case MD_BLOCK_FOOTNOTE_DEF: render_open_footnote_def_block(r, (MD_BLOCK_FOOTNOTE_DEF_DETAIL*)detail); break;
         case MD_BLOCK_ADMONITION:   render_open_admonition_block(r, (const MD_BLOCK_ADMONITION_DETAIL*) detail); break;
+        case MD_BLOCK_BLANK:    render_blank_block(r, (const MD_BLOCK_BLANK_DETAIL*) detail); break;
     }
 
     return 0;
@@ -483,6 +503,7 @@ leave_block_callback(MD_BLOCKTYPE type, void* detail, void* userdata)
         case MD_BLOCK_FOOTNOTE_DEF_SECTION: RENDER_VERBATIM(r, "</ol>\n</section>\n"); break;
         case MD_BLOCK_FOOTNOTE_DEF: render_close_footnote_def_block(r, (MD_BLOCK_FOOTNOTE_DEF_DETAIL*)detail); break;
         case MD_BLOCK_ADMONITION:   RENDER_VERBATIM(r, "</div>\n"); break;
+        case MD_BLOCK_BLANK:    /* noop (fully emitted on enter) */ break;
     }
 
     return 0;
@@ -520,6 +541,7 @@ enter_span_callback(MD_SPANTYPE type, void* detail, void* userdata)
         case MD_SPAN_A:                 render_open_a_span(r, (MD_SPAN_A_DETAIL*) detail); break;
         case MD_SPAN_IMG:               render_open_img_span(r, (MD_SPAN_IMG_DETAIL*) detail); break;
         case MD_SPAN_CODE:              RENDER_VERBATIM(r, "<code>"); break;
+        case MD_SPAN_INS:               RENDER_VERBATIM(r, "<ins>"); break;
         case MD_SPAN_DEL:               RENDER_VERBATIM(r, "<del>"); break;
         case MD_SPAN_SPOILER:           RENDER_VERBATIM(r, "<x-spoiler>"); break;
         case MD_SPAN_SUPERSCRIPT:       RENDER_VERBATIM(r, "<sup>"); break;
@@ -551,12 +573,13 @@ leave_span_callback(MD_SPANTYPE type, void* detail, void* userdata)
         case MD_SPAN_A:                 RENDER_VERBATIM(r, "</a>"); break;
         case MD_SPAN_IMG:               render_close_img_span(r, (MD_SPAN_IMG_DETAIL*) detail); break;
         case MD_SPAN_CODE:              RENDER_VERBATIM(r, "</code>"); break;
+        case MD_SPAN_INS:               RENDER_VERBATIM(r, "</ins>"); break;
         case MD_SPAN_DEL:               RENDER_VERBATIM(r, "</del>"); break;
         case MD_SPAN_SPOILER:           RENDER_VERBATIM(r, "</x-spoiler>"); break;
         case MD_SPAN_SUPERSCRIPT:       RENDER_VERBATIM(r, "</sup>"); break;
         case MD_SPAN_SUBSCRIPT:         RENDER_VERBATIM(r, "</sub>"); break;
         case MD_SPAN_MARK:              RENDER_VERBATIM(r, "</mark>"); break;
-        case MD_SPAN_LATEXMATH:         /*fall through*/
+        case MD_SPAN_LATEXMATH:         MD_FALLTHROUGH();
         case MD_SPAN_LATEXMATH_DISPLAY: RENDER_VERBATIM(r, "</x-equation>"); break;
         case MD_SPAN_WIKILINK:          RENDER_VERBATIM(r, "</x-wikilink>"); break;
         case MD_SPAN_FOOTNOTE_REF:      /* noop: enter_span already emitted full HTML */ break;

@@ -203,6 +203,7 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         }
         case MD_BLOCK_HR: mdx_indent(c); X_LIT(c, "<thematic_break />\n"); break;
+        case MD_BLOCK_BLANK: mdx_indent(c); X_LIT(c, "<blank />\n"); break;
         case MD_BLOCK_H: {
             mdx_indent(c);
             X_LIT(c, "<heading level=\"");
@@ -275,6 +276,7 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_OL: mdx_close(c, "list"); break;
         case MD_BLOCK_LI: mdx_close(c, "item"); break;
         case MD_BLOCK_HR: break;
+        case MD_BLOCK_BLANK: break;
         case MD_BLOCK_H: mdx_close(c, "heading"); break;
         case MD_BLOCK_CODE:
             X_LIT(c, "</code_block>\n");
@@ -332,6 +334,7 @@ static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
             c->collecting = true;
             break;
         case MD_SPAN_DEL: mdx_open(c, "strikethrough"); break;
+        case MD_SPAN_INS: mdx_open(c, "insert"); break;
         case MD_SPAN_U: mdx_open(c, "underline"); break;
         case MD_SPAN_SUPERSCRIPT: mdx_open(c, "superscript"); break;
         case MD_SPAN_SUBSCRIPT: mdx_open(c, "subscript"); break;
@@ -375,6 +378,7 @@ static int mdx_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
             c->collecting = false;
             break;
         case MD_SPAN_DEL: mdx_close(c, "strikethrough"); break;
+        case MD_SPAN_INS: mdx_close(c, "insert"); break;
         case MD_SPAN_U: mdx_close(c, "underline"); break;
         case MD_SPAN_SUPERSCRIPT: mdx_close(c, "superscript"); break;
         case MD_SPAN_SUBSCRIPT: mdx_close(c, "subscript"); break;

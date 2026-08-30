@@ -829,6 +829,7 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_OL: mdm_render_ol_open(r, (MD_BLOCK_OL_DETAIL *)detail); break;
         case MD_BLOCK_LI: mdm_render_li_open(r, (MD_BLOCK_LI_DETAIL *)detail); break;
         case MD_BLOCK_HR: OUT_LIT(r, "<hr />\n"); break;
+        case MD_BLOCK_BLANK: break;
         case MD_BLOCK_H:
             r->heading_level = ((MD_BLOCK_H_DETAIL *)detail)->level;
             if (r->render_opts & MDPARSER_RF_HEADING_ANCHORS) {
@@ -881,6 +882,7 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_OL: OUT_LIT(r, "</ol>\n"); break;
         case MD_BLOCK_LI: OUT_LIT(r, "</li>\n"); break;
         case MD_BLOCK_HR: break;
+        case MD_BLOCK_BLANK: break;
         case MD_BLOCK_H:
             if (r->in_heading) {
                 /* Compute the slug, emit the full heading to the main buffer. */
@@ -967,6 +969,7 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_IMG: mdm_render_img_open(r, (MD_SPAN_IMG_DETAIL *)detail); break;
         case MD_SPAN_CODE: OUT_LIT(r, "<code>"); break;
         case MD_SPAN_DEL: OUT_LIT(r, "<del>"); break;
+        case MD_SPAN_INS: OUT_LIT(r, "<ins>"); break;
         case MD_SPAN_SUPERSCRIPT: OUT_LIT(r, "<sup>"); break;
         case MD_SPAN_SUBSCRIPT: OUT_LIT(r, "<sub>"); break;
         case MD_SPAN_MARK: OUT_LIT(r, "<mark>"); break;
@@ -1001,6 +1004,7 @@ static int mdm_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_IMG: mdm_render_img_close(r, (MD_SPAN_IMG_DETAIL *)detail); break;
         case MD_SPAN_CODE: OUT_LIT(r, "</code>"); break;
         case MD_SPAN_DEL: OUT_LIT(r, "</del>"); break;
+        case MD_SPAN_INS: OUT_LIT(r, "</ins>"); break;
         case MD_SPAN_SUPERSCRIPT: OUT_LIT(r, "</sup>"); break;
         case MD_SPAN_SUBSCRIPT: OUT_LIT(r, "</sub>"); break;
         case MD_SPAN_MARK: OUT_LIT(r, "</mark>"); break;

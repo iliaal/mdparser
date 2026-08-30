@@ -72,6 +72,8 @@ enum {
     MDOPT_LATEX_MATH,
     MDOPT_WIKILINKS,
     MDOPT_ADMONITIONS,
+    MDOPT_INSERT,
+    MDOPT_PRESERVE_BLANK_LINES,
     MDOPT_COUNT_
 };
 
@@ -122,6 +124,8 @@ static const mdparser_options_field mdparser_options_fields[] = {
     F("latexMath",                  MD_FLAG_LATEXMATHSPANS, 0, false),
     F("wikiLinks",                  MD_FLAG_WIKILINKS, 0, false),
     F("admonitions",                MD_FLAG_ADMONITIONS, 0, false),
+    F("insert",                     MD_FLAG_INSERT, 0, false),
+    F("preserveBlankLines",         MD_FLAG_PRESERVEBLANKLINES, 0, false),
 };
 
 #undef F
@@ -297,6 +301,8 @@ PHP_METHOD(MdParser_Options, __construct)
         Z_PARAM_BOOL(values[MDOPT_LATEX_MATH])
         Z_PARAM_BOOL(values[MDOPT_WIKILINKS])
         Z_PARAM_BOOL(values[MDOPT_ADMONITIONS])
+        Z_PARAM_BOOL(values[MDOPT_INSERT])
+        Z_PARAM_BOOL(values[MDOPT_PRESERVE_BLANK_LINES])
     ZEND_PARSE_PARAMETERS_END();
 
     mdparser_options_populate_object(Z_OBJ_P(ZEND_THIS), values);

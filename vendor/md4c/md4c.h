@@ -118,7 +118,12 @@ typedef enum MD_BLOCKTYPE {
     /* Adminition extension.
      * Detail MD_BLOCK_ADMONITION_DETAIL.
      * Note: Recognized only when MD_FLAG_ADMONITIONS is enabled. */
-    MD_BLOCK_ADMONITION
+    MD_BLOCK_ADMONITION,
+
+    /* A run of blank lines separating two blocks. Has no contents.
+     * Detail: Structure MD_BLOCK_BLANK_DETAIL.
+     * Note: Emitted only when MD_FLAG_PRESERVEBLANKLINES is enabled. */
+    MD_BLOCK_BLANK
 } MD_BLOCKTYPE;
 
 /* Span represents an in-line piece of a document which should be rendered with
@@ -145,6 +150,11 @@ typedef enum MD_SPANTYPE {
 
     /* <code>...</code> */
     MD_SPAN_CODE,
+
+    /* <ins>...</ins>
+     * Syntax: ++insert++
+     * Note: Recognized only when MD_FLAG_INSERT is enabled. */
+    MD_SPAN_INS,
 
     /* <del>...</del>
      * Note: Recognized only when MD_FLAG_STRIKETHROUGH is enabled.
@@ -284,34 +294,34 @@ typedef struct MD_ATTRIBUTE {
 
 /* Detailed info for MD_BLOCK_UL. */
 typedef struct MD_BLOCK_UL_DETAIL {
-    int is_tight;           /* Non-zero if tight list, zero if loose. */
-    MD_CHAR mark;           /* Item bullet character in MarkDown source of the list, e.g. '-', '+', '*'. */
+    int is_tight;               /* Non-zero if tight list, zero if loose. */
+    MD_CHAR mark;               /* Item bullet character in MarkDown source of the list, e.g. '-', '+', '*'. */
 } MD_BLOCK_UL_DETAIL;
 
 /* Detailed info for MD_BLOCK_OL. */
 typedef struct MD_BLOCK_OL_DETAIL {
-    unsigned start;         /* Start index of the ordered list. */
-    int is_tight;           /* Non-zero if tight list, zero if loose. */
-    MD_CHAR mark_delimiter; /* Character delimiting the item marks in MarkDown source, e.g. '.' or ')' */
+    unsigned start;             /* Start index of the ordered list. */
+    int is_tight;               /* Non-zero if tight list, zero if loose. */
+    MD_CHAR mark_delimiter;     /* Character delimiting the item marks in MarkDown source, e.g. '.' or ')' */
 } MD_BLOCK_OL_DETAIL;
 
 /* Detailed info for MD_BLOCK_LI. */
 typedef struct MD_BLOCK_LI_DETAIL {
-    int is_task;            /* Can be non-zero only with MD_FLAG_TASKLISTS */
-    MD_CHAR task_mark;      /* If is_task, then one of 'x', 'X' or ' '. Undefined otherwise. */
-    MD_OFFSET task_mark_offset;  /* If is_task, then offset in the input of the char between '[' and ']'. */
+    int is_task;                /* Can be non-zero only with MD_FLAG_TASKLISTS */
+    MD_CHAR task_mark;          /* If is_task, then one of 'x', 'X' or ' '. Undefined otherwise. */
+    MD_OFFSET task_mark_offset; /* If is_task, then offset in the input of the char between '[' and ']'. */
 } MD_BLOCK_LI_DETAIL;
 
 /* Detailed info for MD_BLOCK_H. */
 typedef struct MD_BLOCK_H_DETAIL {
-    unsigned level;         /* Header level (1 - 6) */
+    unsigned level;             /* Header level (1 - 6) */
 } MD_BLOCK_H_DETAIL;
 
 /* Detailed info for MD_BLOCK_CODE. */
 typedef struct MD_BLOCK_CODE_DETAIL {
     MD_ATTRIBUTE info;
     MD_ATTRIBUTE lang;
-    MD_CHAR fence_char;     /* The character used for fenced code block; or zero for indented code block. */
+    MD_CHAR fence_char;         /* The character used for fenced code block; or zero for indented code block. */
 } MD_BLOCK_CODE_DETAIL;
 
 /* Detailed info for MD_BLOCK_TABLE. */
@@ -351,44 +361,51 @@ typedef struct MD_SPAN_WIKILINK {
 
 /* Detailed info for MD_SPAN_FOOTNOTE_REF. */
 typedef struct MD_SPAN_FOOTNOTE_REF_DETAIL {
-    unsigned int id;        /* 1-based identifier of the referenced footnote */
-    unsigned int ref_id;    /* 1-based identifier of this reference among references to the same footnote */
-    MD_ATTRIBUTE label;     /* Raw label text, e.g. "1" or "note" */
+    unsigned int id;            /* 1-based identifier of the referenced footnote */
+    unsigned int ref_id;        /* 1-based identifier of this reference among references to the same footnote */
+    MD_ATTRIBUTE label;         /* Raw label text, e.g. "1" or "note" */
 } MD_SPAN_FOOTNOTE_REF_DETAIL;
 
 /* Detailed info for MD_BLOCK_FOOTNOTE_DEF. */
 typedef struct MD_BLOCK_FOOTNOTE_DEF_DETAIL {
-    unsigned int id;        /* 1-based identifier of this footnote */
-    unsigned int ref_count; /* Number of references to this footnote */
-    MD_ATTRIBUTE label;     /* Raw label text */
+    unsigned int id;            /* 1-based identifier of this footnote */
+    unsigned int ref_count;     /* Number of references to this footnote */
+    MD_ATTRIBUTE label;         /* Raw label text */
 } MD_BLOCK_FOOTNOTE_DEF_DETAIL;
+
+/* Detailed info for MD_BLOCK_BLANK. */
+typedef struct MD_BLOCK_BLANK_DETAIL {
+    unsigned line_count;        /* Count of blank lines forming the block separation */
+} MD_BLOCK_BLANK_DETAIL;
 
 /* Flags specifying extensions/deviations from CommonMark specification.
  *
  * By default (when MD_PARSER::flags == 0), we follow CommonMark specification.
  * The following flags may allow some extensions or deviations from it.
  */
-#define MD_FLAG_COLLAPSEWHITESPACE          0x1     /* In MD_TEXT_NORMAL, collapse non-trivial whitespace into single ' ' */
-#define MD_FLAG_PERMISSIVEATXHEADERS        0x2     /* Do not require space in ATX headers ( ###header ) */
-#define MD_FLAG_PERMISSIVEURLAUTOLINKS      0x4     /* Recognize URLs as autolinks even without '<', '>' */
-#define MD_FLAG_PERMISSIVEEMAILAUTOLINKS    0x8     /* Recognize e-mails as autolinks even without '<', '>' and 'mailto:' */
-#define MD_FLAG_NOINDENTEDCODEBLOCKS        0x10    /* Disable indented code blocks. (Only fenced code works.) */
-#define MD_FLAG_NOHTMLBLOCKS                0x20    /* Disable raw HTML blocks. */
-#define MD_FLAG_NOHTMLSPANS                 0x40    /* Disable raw HTML (inline). */
-#define MD_FLAG_TABLES                      0x100   /* Enable tables extension. */
-#define MD_FLAG_STRIKETHROUGH               0x200   /* Enable strikethrough extension. */
-#define MD_FLAG_PERMISSIVEWWWAUTOLINKS      0x400   /* Enable WWW autolinks (even without any scheme prefix, if they begin with 'www.') */
-#define MD_FLAG_TASKLISTS                   0x800   /* Enable task list extension. */
-#define MD_FLAG_LATEXMATHSPANS              0x1000  /* Enable $ and $$ containing LaTeX equations. */
-#define MD_FLAG_WIKILINKS                   0x2000  /* Enable wiki links extension. */
-#define MD_FLAG_UNDERLINE                   0x4000  /* Enable underline extension (and disables '_' for normal emphasis). */
-#define MD_FLAG_HARD_SOFT_BREAKS            0x8000  /* Force all soft breaks to act as hard breaks. */
-#define MD_FLAG_SPOILERS                    0x10000 /* Enable ||hidden text|| spoiler spans. */
-#define MD_FLAG_SUPERSCRIPTS                0x20000 /* Enable ^superscript^ spans. */
-#define MD_FLAG_SUBSCRIPTS                  0x40000 /* Enable ~subscript~ spans. */
-#define MD_FLAG_ADMONITIONS                 0x80000 /* Enable admonitions extension. */
+#define MD_FLAG_COLLAPSEWHITESPACE          0x1      /* In MD_TEXT_NORMAL, collapse non-trivial whitespace into single ' ' */
+#define MD_FLAG_PERMISSIVEATXHEADERS        0x2      /* Do not require space in ATX headers ( ###header ) */
+#define MD_FLAG_PERMISSIVEURLAUTOLINKS      0x4      /* Recognize URLs as autolinks even without '<', '>' */
+#define MD_FLAG_PERMISSIVEEMAILAUTOLINKS    0x8      /* Recognize e-mails as autolinks even without '<', '>' and 'mailto:' */
+#define MD_FLAG_NOINDENTEDCODEBLOCKS        0x10     /* Disable indented code blocks. (Only fenced code works.) */
+#define MD_FLAG_NOHTMLBLOCKS                0x20     /* Disable raw HTML blocks. */
+#define MD_FLAG_NOHTMLSPANS                 0x40     /* Disable raw HTML (inline). */
+#define MD_FLAG_TABLES                      0x100    /* Enable tables extension. */
+#define MD_FLAG_STRIKETHROUGH               0x200    /* Enable strikethrough extension. */
+#define MD_FLAG_PERMISSIVEWWWAUTOLINKS      0x400    /* Enable WWW autolinks (even without any scheme prefix, if they begin with 'www.') */
+#define MD_FLAG_TASKLISTS                   0x800    /* Enable task list extension. */
+#define MD_FLAG_LATEXMATHSPANS              0x1000   /* Enable $ and $$ containing LaTeX equations. */
+#define MD_FLAG_WIKILINKS                   0x2000   /* Enable wiki links extension. */
+#define MD_FLAG_UNDERLINE                   0x4000   /* Enable underline extension (and disables '_' for normal emphasis). */
+#define MD_FLAG_HARD_SOFT_BREAKS            0x8000   /* Force all soft breaks to act as hard breaks. */
+#define MD_FLAG_SPOILERS                    0x10000  /* Enable ||hidden text|| spoiler spans. */
+#define MD_FLAG_SUPERSCRIPTS                0x20000  /* Enable ^superscript^ spans. */
+#define MD_FLAG_SUBSCRIPTS                  0x40000  /* Enable ~subscript~ spans. */
+#define MD_FLAG_ADMONITIONS                 0x80000  /* Enable admonitions extension. */
 #define MD_FLAG_FOOTNOTES                   0x100000 /* Enable [^label] footnote references. */
 #define MD_FLAG_HIGHLIGHT                   0x200000 /* Enable ==highlight== spans. */
+#define MD_FLAG_PRESERVEBLANKLINES          0x400000 /* Report blank line runs as MD_BLOCK_BLANK. */
+#define MD_FLAG_INSERT                      0x800000 /* Enable insert extension. */
 
 #define MD_FLAG_PERMISSIVEAUTOLINKS         (MD_FLAG_PERMISSIVEEMAILAUTOLINKS | MD_FLAG_PERMISSIVEURLAUTOLINKS | MD_FLAG_PERMISSIVEWWWAUTOLINKS)
 #define MD_FLAG_NOHTML                      (MD_FLAG_NOHTMLBLOCKS | MD_FLAG_NOHTMLSPANS)

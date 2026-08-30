@@ -48,6 +48,8 @@ final readonly class Options
     public bool $latexMath;
     public bool $wikiLinks;
     public bool $admonitions;
+    public bool $insert;
+    public bool $preserveBlankLines;
 
     public function __construct(
         bool $sourcepos = false,
@@ -80,6 +82,8 @@ final readonly class Options
         bool $latexMath = false,
         bool $wikiLinks = false,
         bool $admonitions = false,
+        bool $insert = false,
+        bool $preserveBlankLines = false,
     ) {}
 
     /**
