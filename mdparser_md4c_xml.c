@@ -33,6 +33,7 @@
 #define MDX_OK        0
 #define MDX_ERR_PARSE 1
 #define MDX_ERR_DEPTH 2
+#define MDX_ERR_MEMORY 3
 #define MDX_MAX_INDENT_DEPTH 32
 
 const char *mdparser_md4c_xml_status_message(int status)
@@ -40,6 +41,7 @@ const char *mdparser_md4c_xml_status_message(int status)
     switch (status) {
         case MDX_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDX_ERR_DEPTH: return "mdparser: XML nesting exceeds maximum depth";
+        case MDX_ERR_MEMORY: return "mdparser: parse exceeded mdparser.parse_memory_limit";
         default: return "mdparser: unknown error";
     }
 }
@@ -459,8 +461,9 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     }
 
     bool bailed_out;
+    bool limit_exceeded;
     int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &c,
-        &bailed_out);
+        &bailed_out, &limit_exceeded);
     if (owned) efree((void *)use_src);
 
     if (bailed_out) {
@@ -470,7 +473,7 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
 
     if (c.error != 0 || rc != 0 || c.depth != 1) {
         if (c.error == 0) {
-            c.error = MDX_ERR_PARSE;
+            c.error = limit_exceeded ? MDX_ERR_MEMORY : MDX_ERR_PARSE;
         }
         smart_str_free(&c.out);
         *status = c.error;

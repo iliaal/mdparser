@@ -34,12 +34,14 @@
 #define MDA_OK         0
 #define MDA_ERR_PARSE  1
 #define MDA_ERR_DEPTH  2
+#define MDA_ERR_MEMORY 3
 
 const char *mdparser_md4c_ast_status_message(int status)
 {
     switch (status) {
         case MDA_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDA_ERR_DEPTH: return "mdparser: AST nesting exceeds maximum depth";
+        case MDA_ERR_MEMORY: return "mdparser: parse exceeded mdparser.parse_memory_limit";
         default: return "mdparser: unknown error";
     }
 }
@@ -545,8 +547,9 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
 
     bool bailed_out;
+    bool limit_exceeded;
     int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &c,
-        &bailed_out);
+        &bailed_out, &limit_exceeded);
 
     if (owned) efree((void *)use_src);
     smart_str_free(&c.litbuf);
@@ -560,7 +563,7 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
 
     if (c.error != MDA_OK || rc != 0 || c.depth != 0) {
         if (c.error == MDA_OK) {
-            c.error = MDA_ERR_PARSE;
+            c.error = limit_exceeded ? MDA_ERR_MEMORY : MDA_ERR_PARSE;
         }
         /* Free the whole partial tree (stack[0] plus any still-open nodes). */
         for (int i = 0; i <= c.depth; i++) {

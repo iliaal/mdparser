@@ -2,8 +2,9 @@
 # Sweep every md4c allocation-failure point of tests/oom/corpus under ASAN.
 #
 # Not part of `make test`: it needs its own ASAN build of the vendored parser
-# rather than the extension .so. Run it after touching vendor/md4c/md4c.c and
-# as step 4 of a vendor refresh (see vendor/VENDOR.md).
+# rather than the extension .so, and it reaches every error path rather than
+# only those near a parse_memory_limit boundary. Run it after touching
+# vendor/md4c/md4c.c and as step 4 of a vendor refresh (see vendor/VENDOR.md).
 set -u
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,9 +30,13 @@ for doc in "$here"/corpus/*.md; do
     bad=0
     for n in $(seq 1 "$total"); do
         out="$("$bin" "$doc" "$n" 2>&1)"
+        rc=$?
         if printf '%s' "$out" | grep -q 'ERROR: \(Address\|Leak\)Sanitizer'; then
             bad=$((bad + 1))
             echo "  $(basename "$doc") fail_at=$n -> $(printf '%s' "$out" | grep -m1 'ERROR:')"
+        elif [ "$rc" -ne 0 ]; then
+            bad=$((bad + 1))
+            echo "  $(basename "$doc") fail_at=$n -> $(printf '%s' "$out" | tail -1)"
         fi
     done
 

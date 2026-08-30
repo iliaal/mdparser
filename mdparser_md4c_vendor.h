@@ -16,7 +16,11 @@
 #include "php.h"
 #include "md4c.h"
 
+/* Runs md_parse() with a per-parse libc allocation registry. Sets *bailed_out
+ * when a Zend bailout was caught, and *limit_exceeded when an allocation was
+ * refused because the parse crossed mdparser.parse_memory_limit. */
 int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
-    const MD_PARSER *parser, void *userdata, bool *bailed_out);
+    const MD_PARSER *parser, void *userdata, bool *bailed_out,
+    bool *limit_exceeded);
 
 #endif

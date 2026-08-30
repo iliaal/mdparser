@@ -20,6 +20,21 @@
 #define MDPARSER_MD4C_VERSION "0.5.3+git10c0158"
 
 extern zend_module_entry mdparser_module_entry;
+
+ZEND_BEGIN_MODULE_GLOBALS(mdparser)
+    /* Ceiling on the libc bytes one parse may hold at once. md4c's working
+     * memory is invisible to memory_limit, so this is the only bound on it
+     * besides MDPARSER_MAX_INPUT_SIZE. 0 = unlimited. */
+    zend_long parse_memory_limit;
+ZEND_END_MODULE_GLOBALS(mdparser)
+
+ZEND_EXTERN_MODULE_GLOBALS(mdparser)
+
+#define MDPARSER_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(mdparser, v)
+
+#if defined(ZTS) && defined(COMPILE_DL_MDPARSER)
+ZEND_TSRMLS_CACHE_EXTERN()
+#endif
 #define phpext_mdparser_ptr &mdparser_module_entry
 
 #ifdef PHP_WIN32

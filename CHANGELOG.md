@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `mdparser.parse_memory_limit` (default `128M`, `PHP_INI_ALL`, `0` or negative for unlimited) caps the libc working set of a single parse. md4c's memory is invisible to `memory_limit`, and markdown amplifies it (about 72 bytes per `[` byte, 40 to 56 per `>` byte), so a few megabytes of hostile input could ask for gigabytes. Crossing the limit throws `MdParser\Exception`.
+
 ### Security
 
 - Fixed a double free in md4c's attribute builder: `md_free_attribute()` keyed its frees on `substr_alloc`, so a failed growth realloc had `md_build_attribute()` and its caller both free the same three buffers. The same test also leaked when the first growth realloc failed.
@@ -15,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### For contributors
 
-- Added `tests/oom/`, an ASAN sweep that fails md4c's n-th allocation over a corpus; md4c's out-of-memory paths are unreachable from PHP, so this is the only gate on them.
+- Added `tests/oom/`, an ASAN sweep that fails md4c's n-th allocation over a corpus. It reaches every out-of-memory path a document can hit, rather than only the ones near a `mdparser.parse_memory_limit` boundary.
 
 ## [0.5.0] - 2026-07-27
 

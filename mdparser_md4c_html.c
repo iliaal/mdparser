@@ -29,12 +29,15 @@
 /* Status codes returned via the *status out-param. */
 #define MDM_OK            0
 #define MDM_ERR_PARSE     1   /* md_parse returned non-zero */
+#define MDM_ERR_MEMORY    2   /* parse crossed mdparser.parse_memory_limit */
 
 const char *mdparser_md4c_status_message(int status)
 {
     switch (status) {
         case MDM_ERR_PARSE:
             return "mdparser: md4c parser failed";
+        case MDM_ERR_MEMORY:
+            return "mdparser: parse exceeded mdparser.parse_memory_limit";
         default:
             return "mdparser: unknown error";
     }
@@ -1142,8 +1145,9 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     };
 
     bool bailed_out;
+    bool limit_exceeded;
     int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &r,
-        &bailed_out);
+        &bailed_out, &limit_exceeded);
 
     if (owned) efree((void *)use_src);
     smart_str_free(&r.heading_html);
@@ -1157,7 +1161,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
 
     if (rc != 0) {
         smart_str_free(&r.main);
-        *status = MDM_ERR_PARSE;
+        *status = limit_exceeded ? MDM_ERR_MEMORY : MDM_ERR_PARSE;
         return NULL;
     }
 

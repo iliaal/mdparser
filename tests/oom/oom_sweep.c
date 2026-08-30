@@ -12,13 +12,14 @@
 
 /* Standalone md4c allocation-failure sweep; see tests/oom/run.sh.
  *
- * md4c's out-of-memory error paths are unreachable from PHP: the wrapper
- * routes md4c to libc, so no INI setting can make one of its allocations
- * fail. This harness compiles md4c.c with malloc/realloc redirected through
- * a counter that fails the n-th call, exactly as mdparser_md4c_vendor.c
- * redirects them through the allocation registry. Sweeping n over a
- * document's whole allocation count under ASAN visits every error path that
- * document can reach. */
+ * mdparser.parse_memory_limit can refuse a real allocation, but only once a
+ * parse crosses the budget, which reaches the error paths near that boundary
+ * and no others. This harness compiles md4c.c with malloc/realloc redirected
+ * through a counter that fails the n-th call, exactly as
+ * mdparser_md4c_vendor.c redirects them through the allocation registry.
+ * Sweeping n over a document's whole allocation count under ASAN visits every
+ * error path that document can reach, not just the ones a budget happens to
+ * land on. */
 
 #include <limits.h>
 #include <stdint.h>
@@ -31,10 +32,12 @@
 
 static long oom_counter;
 static long oom_fail_at;
+static int oom_fired;
 
 static void *oom_malloc(size_t size)
 {
     if (++oom_counter == oom_fail_at) {
+        oom_fired = 1;
         return NULL;
     }
     return malloc(size);
@@ -43,6 +46,7 @@ static void *oom_malloc(size_t size)
 static void *oom_realloc(void *ptr, size_t size)
 {
     if (++oom_counter == oom_fail_at) {
+        oom_fired = 1;
         return NULL;
     }
     return realloc(ptr, size);
@@ -115,10 +119,21 @@ int main(int argc, char **argv)
 
     oom_fail_at = atol(argv[2]);
     oom_counter = 0;
+    oom_fired = 0;
     /* Sequenced deliberately: oom_counter must be read after md_parse() runs,
      * which an argument list would not guarantee. */
     ret = md_parse(doc, (MD_SIZE) len, &parser, NULL);
-    printf("fail_at=%ld ret=%d allocs=%ld\n", oom_fail_at, ret, oom_counter);
+    printf("fail_at=%ld ret=%d allocs=%ld fired=%d\n",
+        oom_fail_at, ret, oom_counter, oom_fired);
     free(doc);
+
+    /* Sanitizers cover memory safety. This covers the other half of the
+     * contract: once an allocation has been refused, md_parse() must report
+     * failure rather than hand back a document rendered from partial state. */
+    if (oom_fired && ret == 0) {
+        fprintf(stderr, "refused allocation %ld but md_parse() returned 0\n",
+            oom_fail_at);
+        return 1;
+    }
     return 0;
 }

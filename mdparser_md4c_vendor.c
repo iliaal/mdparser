@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #include "md4c.h"
+#include "php_mdparser.h"
 #include "mdparser_md4c_vendor.h"
 
 typedef union mdparser_md4c_alloc_header mdparser_md4c_alloc_header;
@@ -28,13 +29,20 @@ typedef struct mdparser_md4c_alloc_tracker mdparser_md4c_alloc_tracker;
 struct mdparser_md4c_alloc_tracker {
     mdparser_md4c_alloc_header *head;
     mdparser_md4c_alloc_tracker *previous;
+    size_t live;        /* bytes requested from libc, headers included */
+    size_t limit;       /* 0 = unlimited */
+    bool exceeded;
 };
 
+/* The size field rides in the union's existing padding: three pointers plus a
+ * size_t is 32 bytes, which is what long double's 16-byte alignment already
+ * rounded the header up to. */
 union mdparser_md4c_alloc_header {
     struct {
         mdparser_md4c_alloc_header *previous;
         mdparser_md4c_alloc_header *next;
         mdparser_md4c_alloc_tracker *owner;
+        size_t size;
     } links;
     long double alignment;
     void *pointer_alignment;
@@ -46,8 +54,17 @@ static zend_always_inline void *mdparser_md4c_malloc(size_t size)
 {
     mdparser_md4c_alloc_header *header;
     mdparser_md4c_alloc_tracker *owner = mdparser_md4c_active_tracker;
+    size_t charged;
 
     if (size > SIZE_MAX - sizeof(*header)) {
+        return NULL;
+    }
+    /* Charge the header as well: the budget is meant to bound what md4c makes
+     * us ask libc for, not just the payload md4c sees. */
+    charged = sizeof(*header) + size;
+    if (owner && owner->limit
+            && charged > owner->limit - MIN(owner->live, owner->limit)) {
+        owner->exceeded = true;
         return NULL;
     }
     header = malloc(sizeof(*header) + size);
@@ -58,11 +75,13 @@ static zend_always_inline void *mdparser_md4c_malloc(size_t size)
     header->links.previous = NULL;
     header->links.next = owner ? owner->head : NULL;
     header->links.owner = owner;
+    header->links.size = charged;
     if (owner) {
         if (owner->head) {
             owner->head->links.previous = header;
         }
         owner->head = header;
+        owner->live += charged;
     }
     return header + 1;
 }
@@ -74,6 +93,8 @@ static zend_always_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
     mdparser_md4c_alloc_header *previous;
     mdparser_md4c_alloc_header *next;
     mdparser_md4c_alloc_tracker *owner;
+    size_t old_charged;
+    size_t charged;
 
     if (!ptr) {
         return mdparser_md4c_malloc(size);
@@ -86,6 +107,14 @@ static zend_always_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
     previous = header->links.previous;
     next = header->links.next;
     owner = header->links.owner;
+    old_charged = header->links.size;
+    charged = sizeof(*header) + size;
+    if (owner && owner->limit && charged > old_charged
+            && charged - old_charged
+                > owner->limit - MIN(owner->live, owner->limit)) {
+        owner->exceeded = true;
+        return NULL;
+    }
     new_header = realloc(header, sizeof(*header) + size);
     if (!new_header) {
         return NULL;
@@ -94,6 +123,10 @@ static zend_always_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
     new_header->links.previous = previous;
     new_header->links.next = next;
     new_header->links.owner = owner;
+    new_header->links.size = charged;
+    if (owner) {
+        owner->live = owner->live - old_charged + charged;
+    }
     if (previous) {
         previous->links.next = new_header;
     } else if (owner) {
@@ -116,6 +149,9 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
 
     header = (mdparser_md4c_alloc_header *)ptr - 1;
     owner = header->links.owner;
+    if (owner) {
+        owner->live -= header->links.size;
+    }
     if (header->links.previous) {
         header->links.previous->links.next = header->links.next;
     } else if (owner) {
@@ -168,11 +204,14 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
 #undef MD_PARSER_BAILOUT_GUARD
 
 int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
-    const MD_PARSER *parser, void *userdata, bool *bailed_out)
+    const MD_PARSER *parser, void *userdata, bool *bailed_out,
+    bool *limit_exceeded)
 {
     mdparser_md4c_alloc_tracker tracker = {0};
+    zend_long limit = MDPARSER_G(parse_memory_limit);
     int result;
 
+    tracker.limit = limit > 0 ? (size_t)limit : 0;
     tracker.previous = mdparser_md4c_active_tracker;
     mdparser_md4c_active_tracker = &tracker;
     result = md_parse(text, size, parser, userdata);
@@ -185,5 +224,6 @@ int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     }
 
     *bailed_out = (result == MDPARSER_MD4C_BAILOUT_STATUS);
+    *limit_exceeded = tracker.exceeded;
     return result;
 }

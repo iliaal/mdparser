@@ -230,28 +230,44 @@ try {
 }
 ```
 
-### Memory: parse-side allocation is outside `memory_limit`
+### Memory: two limits, one for each side of the parse
 
-md4c allocates its own working memory with libc `malloc`/`free`, not
-Zend MM. That memory is **not** counted against PHP's `memory_limit`
-and does not show up in `memory_get_usage()`. The wrapper's own output
-buffers — the rendered HTML/XML string, the AST arrays — use Zend MM
-(`emalloc`/`efree`) and are accounted normally.
+md4c allocates its own working memory with libc `malloc`/`free`, not Zend MM,
+so that memory is not counted against PHP's `memory_limit` and does not show up
+in `memory_get_usage()`. The wrapper's output buffers, meaning the rendered
+HTML or XML string and the AST arrays, use Zend MM and are accounted normally.
 
-So `memory_limit` does not account for md4c's own working buffers. It can still
-interrupt a parse when an HTML/XML output buffer or AST allocation crosses the
-limit; the wrapper catches that bailout at md4c's parse frame, frees md4c's
-libc allocations, cleans up renderer state, and then resumes the PHP bailout.
-The primary bound on parse-side memory is the 256 MB input-size cap
-(`MDPARSER_MAX_INPUT_SIZE`), which throws `MdParser\Exception` before
-md4c sees the source. If a libc allocation itself fails, the process
-behaves the way any failed `malloc` does in the SAPI; the wrapper
-surfaces a clean `MdParser\Exception` on md4c's failure return rather
-than letting a partial parse through.
+Each side has its own bound:
 
-If you accept markdown from untrusted callers, cap the input length in
-your application before handing it to the parser; that bounds the
-parse-side footprint more directly than `memory_limit` can.
+| Side | Bound | On breach |
+|---|---|---|
+| md4c working set (libc) | `mdparser.parse_memory_limit`, default `128M` | `MdParser\Exception` |
+| Rendered output (Zend MM) | `memory_limit` | PHP's usual memory-limit fatal |
+| Input | `MDPARSER_MAX_INPUT_SIZE`, 256 MB, compiled in | `MdParser\Exception` |
+
+`mdparser.parse_memory_limit` caps the libc bytes a single parse may hold at
+once. It exists because markdown amplifies: one `[` byte commits about 72 bytes
+of md4c mark records, and one `>` byte about 40 to 56 bytes of container and
+block records, so a few megabytes of hostile input can ask for gigabytes that
+`memory_limit` never sees. When a parse crosses the limit the allocation is
+refused, md4c unwinds, and you get `MdParser\Exception` with the message
+`mdparser: parse exceeded mdparser.parse_memory_limit`.
+
+The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
+treats `0` or any negative value as unlimited. The count includes the registry
+header each md4c allocation carries, so it bounds what the parse asks libc for
+rather than only the payload md4c sees. Raise it if you legitimately render very
+large documents; lower it if you render untrusted markdown in long-lived
+workers and want a tighter ceiling than the default.
+
+`memory_limit` can still interrupt a parse when an output buffer or AST
+allocation crosses it. The wrapper catches that bailout at md4c's parse frame,
+frees md4c's libc allocations, cleans up renderer state, then resumes the PHP
+bailout.
+
+If you accept markdown from untrusted callers, cap the input length in your
+application as well. Bounding what reaches the parser is cheaper than bounding
+what the parser does with it.
 
 ## Reusing parsers
 
