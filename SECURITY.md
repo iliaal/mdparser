@@ -8,7 +8,9 @@ URL schemes, and tag-filter behavior.
 
 | Version | Supported          |
 |---------|--------------------|
-| 0.4.x   | :white_check_mark: |
+| 0.6.x   | :white_check_mark: |
+| 0.5.x   | :x:                |
+| 0.4.x   | :x:                |
 
 Once 1.0 ships, the two most recent minor versions will receive
 security fixes.

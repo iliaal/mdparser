@@ -15,8 +15,8 @@
 
 #define PHP_MDPARSER_VERSION "0.6.0"
 
-/* Bundled md4c version: release-0.5.3 plus master commit 755ce49
- * (vendored 2026-06-17). Keep in sync with vendor/VENDOR.md. */
+/* Bundled md4c version: release-0.5.3 plus master commit 61f5ce7
+ * (vendored 2026-08-30). Keep in sync with vendor/VENDOR.md. */
 #define MDPARSER_MD4C_VERSION "0.5.3+git61f5ce7"
 
 extern zend_module_entry mdparser_module_entry;
@@ -24,7 +24,10 @@ extern zend_module_entry mdparser_module_entry;
 ZEND_BEGIN_MODULE_GLOBALS(mdparser)
     /* Ceiling on the libc bytes one parse may hold at once. md4c's working
      * memory is invisible to memory_limit, so this is the only bound on it
-     * besides MDPARSER_MAX_INPUT_SIZE. 0 = unlimited. */
+     * besides MDPARSER_MAX_INPUT_SIZE. 0 = unlimited. Worst-case input
+     * (~72 bytes of libc working set per `[` byte) can ask libc for ~18GB
+     * on a 256MB input, so keep a limit for untrusted Markdown in
+     * long-lived workers. */
     zend_long parse_memory_limit;
 ZEND_END_MODULE_GLOBALS(mdparser)
 

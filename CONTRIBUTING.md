@@ -108,11 +108,14 @@ Before filing, try to reproduce against the latest `master` branch.
 
 ### Vendored md4c
 
-`vendor/md4c/` is a mostly clean upstream copy of md4c. It carries the
-single local code-span whitespace patch documented in `vendor/VENDOR.md`;
-do not add cherry-picks or hand-edited build shims. md4c targets
-CommonMark 0.31 natively, so there's no spec gap to bridge in the
-vendored sources.
+`vendor/md4c/` is a mostly clean upstream copy of md4c. Its local
+modifications — the NUL-replacement fix, five out-of-memory error-path
+fixes, and the `MD_PARSER_BAILOUT_GUARD` embedding hook — are inventoried
+in `vendor/VENDOR.md`, which is the authority on what is local versus
+upstream. (The old code-span whitespace patch dropped out in the
+2026-07-27 refresh once upstream `10e96ad4` carried the fix.) Do not add
+cherry-picks or hand-edited build shims. md4c targets CommonMark 0.31
+natively, so there's no spec gap to bridge in the vendored sources.
 
 Refreshing md4c is a drop-in file swap:
 

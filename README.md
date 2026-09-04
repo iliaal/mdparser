@@ -145,7 +145,7 @@ These are real features. They're just out of scope for a CommonMark+GFM core par
 
 The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. Markdown amplifies that memory: one `[` byte commits about 72 bytes of parser state, one `>` byte about 40 to 56, which means a few megabytes of hostile input can ask for gigabytes.
 
-`mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception` rather than letting the process grow. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats `0` or any negative value as unlimited. Raise it if you legitimately render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit` as before.
+`mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception` rather than letting the process grow. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats `0` or any negative value as unlimited. With the limit off, 256MB of the worst-case byte (~72B per '[') can ask libc for ~18GB; keep a limit for untrusted input in long-lived workers. Raise it if you legitimately render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit` as before.
 
 ## A note on `unsafe: true`
 

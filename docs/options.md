@@ -2,7 +2,7 @@
 
 `final readonly class MdParser\Options`
 
-Holds 30 bool toggles that control parser and renderer behavior:
+Holds 32 bool toggles that control parser and renderer behavior:
 core parser options, GFM extension toggles, HTML output flags (heading
 anchors, nofollow), and md4c dialect extensions. All fields are readonly after
 construction, and the class is `final` so it can't be subclassed.

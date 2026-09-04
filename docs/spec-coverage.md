@@ -2,10 +2,12 @@
 
 mdparser targets **CommonMark 0.31**. The backend is
 [md4c](https://github.com/mity/md4c), which implements CommonMark 0.31
-natively, so there is no version gap to bridge. mdparser carries a single
-local patch to md4c's code-span whitespace handling (documented in
-`vendor/VENDOR.md`); it is submitted upstream and drops out on the next
-vendor refresh that includes the fix.
+natively, so there is no version gap to bridge. The code-span whitespace
+handling that once needed a local patch now comes from upstream
+`10e96ad4`; mdparser's remaining local patches are the NUL-replacement
+fix and five out-of-memory error-path fixes (inventoried in
+`vendor/VENDOR.md`, which is the authority). Neither local patch is
+exercised by the spec run.
 
 The conformance test lives at `tests/005_commonmark_spec.phpt` and reads
 every example from `tests/fixtures/commonmark-spec.txt` (the 0.31
@@ -15,12 +17,12 @@ conformance, so any change that moves the baseline shows up in a diff.
 ## Current baseline
 
 The suite parses all 652 spec examples and pins the result at 652 pass,
-0 fail. Stock md4c fails three code-span examples (335, 337, 640) where
-an interior line ends in whitespace; the local patch in
-`vendor/md4c/md4c.c` fixes that one case, bringing the baseline to a
-clean 652. The test pins the pass/fail counts in its `--EXPECT--` block,
-so any movement (a regression, or a surprise improvement from an md4c
-update) shows up in a diff.
+0 fail. Stock md4c at the pinned revision passes all 652 because
+upstream `10e96ad4` already carries the code-span fix for examples 335,
+337, and 640 (interior line ending in whitespace). The test pins the
+pass/fail counts in its `--EXPECT--` block, so any movement (a
+regression, or a surprise improvement from an md4c update) shows up in
+a diff.
 
 The spec examples use the `<pre><code class="language-X">` form for
 fenced code, which is exactly what mdparser emits — md4c renders only
@@ -49,14 +51,13 @@ md4c also implements footnotes. Each extension toggles independently via
 
 ## Parity with other PHP libraries
 
-`tests/parity/` holds fixture corpora from five pure-PHP Markdown
-libraries (Parsedown, cebe/markdown, michelf/php-markdown, Ciconia,
-league/commonmark) to measure where mdparser's output differs from
-theirs. Pinned baselines:
+`tests/parity/` holds fixture corpora from three pure-PHP Markdown
+libraries (Parsedown, cebe/markdown, michelf/php-markdown) to measure
+where mdparser's output differs from theirs. Pinned baselines:
 
 | Library | Fixtures | Match | Why divergences exist |
 |---|---|---|---|
-| Parsedown | 64 | 40 (63%) | Parsedown diverges from CommonMark on escaping, nested lists, whitespace |
+| Parsedown | 64 | 42 (66%) | Parsedown diverges from CommonMark on escaping, nested lists, whitespace. Moved from 40 with the md4c backend swap; the test was regenerated in `b5a491b`. |
 | cebe/markdown (GFM) | 15 | 4 (27%) | cebe's GFM implementation diverges on tables, dense list markers |
 | michelf (Gruber 1.0.3) | 23 | 1 (4%) | Different spec era entirely (Gruber 2004); kept as documentation |
 

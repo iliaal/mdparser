@@ -116,7 +116,7 @@ ships a compatible `phpize`. Intel and Apple Silicon both supported.
 
 The Windows build uses `config.w32` and the `php/php-windows-builder`
 GitHub Action (see `.github/workflows/windows.yml`). Prebuilt DLLs are
-attached to GitHub releases for PHP 8.3-8.5, TS and NTS, x64 and x86.
+attached to GitHub releases for PHP 8.2-8.5, TS and NTS, x64 and x86.
 
 If you're building Windows from source manually:
 

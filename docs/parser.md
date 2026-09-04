@@ -251,7 +251,7 @@ of md4c mark records, and one `>` byte about 40 to 56 bytes of container and
 block records, so a few megabytes of hostile input can ask for gigabytes that
 `memory_limit` never sees. When a parse crosses the limit the allocation is
 refused, md4c unwinds, and you get `MdParser\Exception` with the message
-`mdparser: parse exceeded mdparser.parse_memory_limit`.
+`mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)`.
 
 The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
 treats `0` or any negative value as unlimited. The count includes the registry
