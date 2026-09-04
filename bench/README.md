@@ -107,11 +107,15 @@ want concrete numbers.
 cd bench
 composer install
 
-# Run with default iteration count (50):
+# Run with default iteration counts (300 for sub-KB corpora, 50 otherwise):
 php -d extension=../modules/mdparser.so run.php
 
-# Higher sample count for tighter numbers (200 is good):
-php -d extension=../modules/mdparser.so run.php --iters=200
+# Enable OPcache with JIT so the pure-PHP parsers run at full speed:
+php -d opcache.enable_cli=1 -d opcache.jit_buffer_size=64M \
+    -d extension=../modules/mdparser.so run.php
+
+# Override the iteration count for every corpus:
+php -d extension=../modules/mdparser.so run.php --iters=300
 
 # JSON output for scripted comparison:
 php -d extension=../modules/mdparser.so run.php --format=json
@@ -123,9 +127,12 @@ php -d extension=../modules/mdparser.so run.php --format=md
 php -d extension=../modules/mdparser.so run.php --parsers=mdparser,parsedown
 ```
 
-The harness does 5 warm-up iterations (not counted) and 10% trim on
-both tails before computing the mean, so one unlucky GC pause or
-OS-level hiccup doesn't dominate.
+Sub-KB corpora default to 300 iterations, larger ones to 50;
+`--iters` overrides every corpus. The harness does 5 warm-up iterations
+(not counted), subtracts an empty-closure baseline from every latency
+stat, and trims 10% from both tails before computing the mean, so one
+unlucky GC pause or OS-level hiccup doesn't dominate. Median and p95
+are reported alongside the trimmed mean in every output format.
 
 ## Methodology
 
@@ -137,7 +144,17 @@ construction cost is amortized into warm-up.
 Reported `mean_ms` is the mean of the middle 80% of samples after
 sorting (10% trimmed from each tail). This is robust to the occasional
 GC pause or page fault without throwing away real data. `ops_sec` is
-`1000 / mean_ms`.
+`1000 / mean_ms`. `median_ms` and `p95_ms` come from the full sorted
+sample set. Every latency stat is net of an empty-closure baseline
+measured with the same iteration count, so `hrtime()` and closure-call
+overhead doesn't inflate small-corpus means.
+
+`--format=json` wraps rows as `{"env": ..., "results": [...]}`. `env`
+records the PHP version, NTS/ZTS thread safety, debug flag, and the
+OPcache settings (`enable_cli`, `jit`, `jit_buffer_size`); table and md
+output carry the same record as a footer. Enable OPcache with JIT when
+comparing against interpreted parsers — without it the pure-PHP
+baseline runs unoptimized and the speedup flatters mdparser.
 
 The `speedup` column is simply `other_mean_ms / mdparser_mean_ms` for
 the same corpus. A value of `5.0x` means that parser took 5 times
