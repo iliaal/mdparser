@@ -75,6 +75,7 @@ jobs:
 
       - name: Build extension
         run: |
+          set -o pipefail
           phpize
           ./configure --enable-mdparser --enable-mdparser-dev
           WARNINGS=$(make -j$(nproc) 2>&1 | tee /dev/stderr | grep -c 'warning:' || true)
@@ -92,13 +93,12 @@ jobs:
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
+          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   linux-zts:
     name: PHP ${{ matrix.php }} ZTS - Linux (canary)
     runs-on: ubuntu-latest
-    env:
-      PHPTS: zts
     strategy:
       fail-fast: false
       matrix:
@@ -113,8 +113,12 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: ${{ matrix.php }}
+          phpts: zts
           tools: phpize, php-config
           coverage: none
+
+      - name: Assert ZTS PHP
+        run: "php -r 'exit(PHP_ZTS ? 0 : 1);'"
 
       - name: Build extension under ZTS
         run: |
@@ -131,6 +135,7 @@ jobs:
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
+          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   macos:
@@ -170,6 +175,7 @@ jobs:
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
+          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   asan:
@@ -240,4 +246,57 @@ jobs:
           /tmp/php-asan/bin/php run-tests.php --show-diff --asan -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
+          # 069 needs ext-dom, missing from the --disable-all build; expect that one skip.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+
+  oom-sweep:
+    name: OOM sweep (vendored md4c)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc
+
+      - name: Compile OOM sweep
+        run: |
+          gcc -g -O0 -fsanitize=address,undefined -I vendor/md4c \
+            -o /tmp/oom_sweep tests/oom/oom_sweep.c vendor/md4c/entity.c
+
+      - name: Run OOM sweep
+        run: |
+          bin=/tmp/oom_sweep
+          status=0
+          for doc in tests/oom/corpus/*.md; do
+            total="$("$bin" "$doc" -1 | sed -n 's/.*allocs=\([0-9]*\).*/\1/p')"
+            if [ -z "$total" ] || [ "$total" -eq 0 ]; then
+              echo "FAIL $(basename "$doc"): baseline parse allocated nothing to sweep"
+              status=1
+              continue
+            fi
+            bad=0
+            set +e
+            for n in $(seq 1 "$total"); do
+              out="$("$bin" "$doc" "$n" 2>&1)"
+              rc=$?
+              if printf '%s' "$out" | grep -q 'ERROR: \(Address\|Leak\)Sanitizer'; then
+                bad=$((bad + 1))
+                echo "  $(basename "$doc") fail_at=$n -> $(printf '%s' "$out" | grep -m1 'ERROR:')"
+              elif [ "$rc" -ne 0 ]; then
+                bad=$((bad + 1))
+                echo "  $(basename "$doc") fail_at=$n -> $(printf '%s' "$out" | tail -1)"
+              fi
+            done
+            set -e
+            if [ "$bad" -eq 0 ]; then
+              echo "PASS $(basename "$doc") ($total allocation points)"
+            else
+              echo "FAIL $(basename "$doc") ($bad of $total allocation points)"
+              status=1
+            fi
+          done
+          exit "$status"

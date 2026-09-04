@@ -54,6 +54,45 @@ jobs:
           arch: ${{ matrix.arch }}
           args: --enable-mdparser
 
+      - name: Setup PHP for smoke test
+        if: matrix.arch == 'x64'
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
+        with:
+          php-version: ${{ matrix.php-version }}
+          phpts: ${{ matrix.ts }}
+          coverage: none
+          tools: none
+
+      - name: Smoke-test built DLL
+        if: matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The builder zips the renamed DLL into artifacts/ with no path
+          # output, so unpack the top-level zip and load the DLL directly,
+          # mirroring scripts/build-release-binary.sh.
+          rm -rf smoke && mkdir smoke
+          unzip -q artifacts/*.zip -d smoke
+          dlls=(smoke/php_mdparser*.dll)
+          dll="${dlls[0]}"
+          [ -f "$dll" ] || { echo "::error::No built DLL in artifacts/"; exit 1; }
+          php -n -d "extension=$dll" -r '
+          $version = phpversion("mdparser");
+          if (!is_string($version) || $version === "") {
+              fwrite(STDERR, "version check failed\n");
+              exit(1);
+          }
+          $parser = new MdParser\Parser();
+          if ($parser->toHtml("# Release") !== "<h1>Release</h1>\n") {
+              fwrite(STDERR, "HTML smoke test failed\n");
+              exit(1);
+          }
+          $ast = $parser->toAst("a &amp; b");
+          if ($ast["type"] !== "document") {
+              fwrite(STDERR, "AST smoke test failed\n");
+              exit(1);
+          }
+          '
   release:
     name: Attach Windows DLLs to release
     if: github.event_name == 'release'
