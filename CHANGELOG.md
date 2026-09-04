@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-03
+
+### Added
+
+- `tests/084_review_followups.phpt` pins the empty-input contracts of all four entry points, the `githubPreLang` true/false identical-output invariant, and a dynamic stub-vs-runtime Options default agreement check with no hard-coded counts.
+- The input-size suite now renders an exactly-256MB input on all four entry points instead of trusting the cap comparison; each `029_regressions.phpt` section names its originating commit.
+- The OOM sweep fault-injects the callback layer too: a refused callback allocation discards partial state and aborts with a distinct sentinel, covered over the full corpus.
+
+### Changed
+
+- AST text coalescing stages fragments in a geometric buffer, linearizing fragment-dense input; entity decoding avoids per-entity temp allocations in AST/XML; the XML escaper shares the HTML unrolled scan. Measured entity-dense AST −18%, literal-heavy XML −25%.
+- `toInlineHtml()` normalization is extracted to `mdparser_inline_normalize()` and the HTML slug code to `mdparser_md4c_slug.c`, with byte-identical output proven by differential runs. No behavior change.
+- Genuine libc allocation failures now report the memory error instead of the parse error; all three memory-error messages share one wording naming the failed allocation or the `parse_memory_limit` budget.
+- The benchmark harness records its environment (PHP build, OPcache/JIT), defaults to 300 iterations for sub-KB corpora, and reports median/p95 with an empty-closure baseline subtracted.
+- Docs refresh: supported-versions table, vendor-patch inventory, spec-baseline attribution, parity counts, and the prior `.review/` notes against the md4c tree; inert Options flags are annotated in the stub.
+
+### Fixed
+
+- `config.w32` gains `mdparser_md4c_slug.c`, matching `config.m4` after the renderer split.
+- CI honesty: the Linux build step no longer masks make failures; per-job skip budgets name their test; the ZTS canary uses the documented selector with an in-job assert; the OOM sweep is a blocking job; Windows lanes smoke-test the packaged DLL.
+
+### For contributors
+
+- md4c refresh deferred: upstream `master` is one no-op commit ahead (`bed011f`, drops the C89 `inline` shim); see `.upstream/md4c.yml` for the audit and re-check date.
+
+
 ## [0.6.0] - 2026-08-30
 
 ### Added
@@ -558,7 +584,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.6.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.6.1...HEAD
+[0.6.1]: https://github.com/iliaal/mdparser/releases/tag/0.6.1
 [0.6.0]: https://github.com/iliaal/mdparser/releases/tag/0.6.0
 [0.5.0]: https://github.com/iliaal/mdparser/releases/tag/0.5.0
 [0.4.3]: https://github.com/iliaal/mdparser/releases/tag/0.4.3
