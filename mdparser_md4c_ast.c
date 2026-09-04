@@ -41,7 +41,7 @@ const char *mdparser_md4c_ast_status_message(int status)
     switch (status) {
         case MDA_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDA_ERR_DEPTH: return "mdparser: AST nesting exceeds maximum depth";
-        case MDA_ERR_MEMORY: return "mdparser: parse exceeded mdparser.parse_memory_limit";
+        case MDA_ERR_MEMORY: return "mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)";
         default: return "mdparser: unknown error";
     }
 }
@@ -53,6 +53,7 @@ typedef struct {
     int th_col;                /* column index within the header row */
     bool collecting;           /* accumulating a leaf literal */
     smart_str litbuf;
+    smart_str textrun;         /* staged consecutive text fragments */
     int error;
 } mda_ctx;
 
@@ -173,25 +174,43 @@ static zval *mda_last_text_literal(mda_ctx *c)
 
 static void mda_append_text_raw(mda_ctx *c, const char *text, size_t size)
 {
+    /* Stage the fragment; smart_str grows geometrically, so a run of N
+     * fragments costs O(total bytes) instead of the O(n^2) memcpy of an
+     * exact-size zend_string_extend per fragment. The run materializes as
+     * one literal on flush (single extend + memcpy). */
+    if (size == 0) {
+        return;
+    }
+    smart_str_appendl(&c->textrun, text, size);
+}
+
+/* Materialize staged text fragments as one literal on the current top node:
+ * extend the trailing text literal once, or create it. Call before any
+ * structural mutation (push/pop/non-text node) and at end of parse so the
+ * staged bytes land in the same node the per-fragment path would have
+ * extended. */
+static void mda_flush_textrun(mda_ctx *c)
+{
     zval *literal;
     zval node;
 
-    if (size == 0) {
+    if (!c->textrun.s || ZSTR_LEN(c->textrun.s) == 0) {
         return;
     }
     literal = mda_last_text_literal(c);
     if (literal && Z_TYPE_P(literal) == IS_STRING) {
         size_t old_size = Z_STRLEN_P(literal);
-        zend_string *joined = zend_string_extend(Z_STR_P(literal), old_size + size, 0);
-        memcpy(ZSTR_VAL(joined) + old_size, text, size);
-        ZSTR_VAL(joined)[old_size + size] = '\0';
+        size_t add = ZSTR_LEN(c->textrun.s);
+        zend_string *joined = zend_string_extend(Z_STR_P(literal), old_size + add, 0);
+        memcpy(ZSTR_VAL(joined) + old_size, ZSTR_VAL(c->textrun.s), add);
+        ZSTR_VAL(joined)[old_size + add] = '\0';
         Z_STR_P(literal) = joined;
-        return;
+    } else {
+        mda_new_node(&node, MDA_T_text);
+        add_assoc_stringl(&node, "literal", ZSTR_VAL(c->textrun.s), ZSTR_LEN(c->textrun.s));
+        mda_append_child(c, &node);
     }
-
-    mda_new_node(&node, MDA_T_text);
-    add_assoc_stringl(&node, "literal", text, size);
-    mda_append_child(c, &node);
+    smart_str_free(&c->textrun);
 }
 
 static void mda_append_text(mda_ctx *c, const char *text, size_t size)
@@ -246,6 +265,7 @@ static void mda_add_attr(zval *node, const char *key, const MD_ATTRIBUTE *a)
 /* Push a freshly-created container node. Returns false on depth overflow. */
 static bool mda_push(mda_ctx *c, zval *node)
 {
+    mda_flush_textrun(c);
     if (c->depth + 1 >= MDPARSER_MAX_AST_DEPTH) {
         zval_ptr_dtor(node);
         c->error = MDA_ERR_DEPTH;
@@ -258,6 +278,7 @@ static bool mda_push(mda_ctx *c, zval *node)
 /* Pop the top node and append it to its parent. */
 static bool mda_pop(mda_ctx *c)
 {
+    mda_flush_textrun(c);
     /* stack[0] is the document root and is never popped under md4c's
      * balanced enter/leave contract; guard the underflow defensively so a
      * future renderer change or contract break can't index stack[-1]. */
@@ -493,21 +514,20 @@ static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
         }
         return 0;
     }
-
     zval n;
     switch (type) {
-        case MD_TEXT_SOFTBR: mda_new_node(&n, MDA_T_softbreak); break;
-        case MD_TEXT_BR: mda_new_node(&n, MDA_T_linebreak); break;
+        case MD_TEXT_SOFTBR: mda_flush_textrun(c); mda_new_node(&n, MDA_T_softbreak); break;
+        case MD_TEXT_BR: mda_flush_textrun(c); mda_new_node(&n, MDA_T_linebreak); break;
         case MD_TEXT_HTML:
+            mda_flush_textrun(c);
             mda_new_node(&n, MDA_T_html_inline);
             add_assoc_stringl(&n, "literal", text, size);
             break;
         case MD_TEXT_ENTITY: {
-            smart_str b = {0};
-            mdparser_md4c_decode_entity(&b, text, size);
-            smart_str_0(&b);
-            if (b.s) mda_append_text(c, ZSTR_VAL(b.s), ZSTR_LEN(b.s));
-            smart_str_free(&b);
+            /* Decoded bytes contain no NUL (append_cp maps 0 to U+FFFD),
+             * so decode straight into the staged run: no per-entity temp
+             * buffer, mirroring the HTML inline decode. */
+            mdparser_md4c_decode_entity(&c->textrun, text, size);
             return 0;
         }
         case MD_TEXT_NULLCHAR:
@@ -550,13 +570,15 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
 
     bool bailed_out;
     bool limit_exceeded;
+    bool alloc_failed;
     int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &c,
-        &bailed_out, &limit_exceeded);
+        &bailed_out, &limit_exceeded, &alloc_failed);
 
     if (owned) efree((void *)use_src);
     smart_str_free(&c.litbuf);
 
     if (bailed_out) {
+        smart_str_free(&c.textrun);
         for (int i = 0; i <= c.depth; i++) {
             if (Z_TYPE(c.stack[i]) != IS_UNDEF) zval_ptr_dtor(&c.stack[i]);
         }
@@ -565,16 +587,19 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
 
     if (c.error != MDA_OK || rc != 0 || c.depth != 0) {
         if (c.error == MDA_OK) {
-            c.error = limit_exceeded ? MDA_ERR_MEMORY : MDA_ERR_PARSE;
+            c.error = (limit_exceeded || alloc_failed) ? MDA_ERR_MEMORY : MDA_ERR_PARSE;
         }
         /* Free the whole partial tree (stack[0] plus any still-open nodes). */
         for (int i = 0; i <= c.depth; i++) {
             if (Z_TYPE(c.stack[i]) != IS_UNDEF) zval_ptr_dtor(&c.stack[i]);
         }
+        smart_str_free(&c.textrun);
         *status = c.error;
         return;
     }
-
+    /* Trailing text run (no structural event followed it). */
+    mda_flush_textrun(&c);
+    smart_str_free(&c.textrun);
     *status = MDA_OK;
     ZVAL_COPY_VALUE(return_value, &c.stack[0]);
 }

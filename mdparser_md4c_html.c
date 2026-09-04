@@ -21,15 +21,19 @@
 #include <string.h>
 
 #include "md4c.h"
-#include "entity.h"
 #include "mdparser_md4c_html.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_slug.h"
 #include "mdparser_md4c_vendor.h"
+
+/* Naming: file-static helpers use render_* for tag/node open/close jobs
+ * and out_* for raw-bytes-to-buffer jobs; decode/entity/escape helpers
+ * and predicates keep their names. */
 
 /* Status codes returned via the *status out-param. */
 #define MDM_OK            0
 #define MDM_ERR_PARSE     1   /* md_parse returned non-zero */
-#define MDM_ERR_MEMORY    2   /* parse crossed mdparser.parse_memory_limit */
+#define MDM_ERR_MEMORY    2   /* budget refusal or genuine libc NULL */
 
 const char *mdparser_md4c_status_message(int status)
 {
@@ -37,7 +41,7 @@ const char *mdparser_md4c_status_message(int status)
         case MDM_ERR_PARSE:
             return "mdparser: md4c parser failed";
         case MDM_ERR_MEMORY:
-            return "mdparser: parse exceeded mdparser.parse_memory_limit";
+            return "mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)";
         default:
             return "mdparser: unknown error";
     }
@@ -46,14 +50,6 @@ const char *mdparser_md4c_status_message(int status)
 /* ===================================================================
  * Render context
  * =================================================================== */
-
-/* Dedupe state for heading anchors: a set of taken slugs plus a
- * base -> next-suffix cache so repeated collisions stay near O(1). */
-typedef struct {
-    HashTable taken;        /* slug string -> (dummy) */
-    HashTable next_suffix;  /* base slug -> zend_long next suffix */
-    bool active;
-} mdm_slugs;
 
 typedef struct {
     smart_str *cur;         /* active output target */
@@ -113,7 +109,7 @@ void mdparser_md4c_html_minit(void)
  * renderer's `cr()` -- emitting it before every block-element open
  * reproduces its exact inter-block whitespace (e.g. `<li>\n<pre>` when a
  * block follows a bare `<li>`). */
-static void mdm_cr(mdm_ctx *r)
+static void out_cr(mdm_ctx *r)
 {
     zend_string *s = r->cur->s;
     if (s && ZSTR_LEN(s) > 0 && ZSTR_VAL(s)[ZSTR_LEN(s) - 1] != '\n')
@@ -129,27 +125,28 @@ static int mdm_ascii_ncasecmp(const char *a, const char *b, size_t n);
 
 static void mdm_escape_html(mdm_ctx *r, const char *data, size_t size)
 {
-    size_t beg = 0, off = 0;
-    #define NEED_HTML_ESC(ch) (mdm_escape_map_template[(unsigned char)(ch)] & NEED_HTML_ESC_FLAG)
-    while (1) {
-        while (off + 3 < size && !NEED_HTML_ESC(data[off]) && !NEED_HTML_ESC(data[off+1])
-               && !NEED_HTML_ESC(data[off+2]) && !NEED_HTML_ESC(data[off+3]))
-            off += 4;
-        while (off < size && !NEED_HTML_ESC(data[off])) off++;
-        if (off > beg) out_append(r, data + beg, off - beg);
-        if (off < size) {
-            switch (data[off]) {
+    /* Plain runs use the shared unrolled scan over the MINIT-built map;
+     * only the per-byte replacement policy stays local. */
+    size_t beg = 0;
+    while (beg < size) {
+        size_t run = mdparser_md4c_scan_plain(
+            (const unsigned char *)mdm_escape_map_template,
+            NEED_HTML_ESC_FLAG, data + beg, size - beg);
+        if (run > 0) {
+            out_append(r, data + beg, run);
+            beg += run;
+        }
+        if (beg < size) {
+            switch (data[beg]) {
                 case '\0': OUT_LIT(r, "\xef\xbf\xbd"); break;
                 case '"':  OUT_LIT(r, "&quot;"); break;
                 case '&':  OUT_LIT(r, "&amp;");  break;
                 case '<':  OUT_LIT(r, "&lt;");   break;
                 case '>':  OUT_LIT(r, "&gt;");   break;
             }
-            off++;
-        } else break;
-        beg = off;
+            beg++;
+        }
     }
-    #undef NEED_HTML_ESC
 }
 
 static void mdm_escape_url(mdm_ctx *r, const char *data, size_t size)
@@ -178,16 +175,6 @@ static void mdm_escape_url(mdm_ctx *r, const char *data, size_t size)
     #undef NEED_URL_ESC
 }
 
-/* Match mdparser_md4c_util: only 0-9/A-F/a-f; other bytes contribute 0 so
- * non-canonical numeric entities cannot diverge across HTML vs AST/XML. */
-static unsigned mdm_hex_val(char ch)
-{
-    if ('0' <= ch && ch <= '9') return ch - '0';
-    if ('A' <= ch && ch <= 'F') return ch - 'A' + 10;
-    if ('a' <= ch && ch <= 'f') return ch - 'a' + 10;
-    return 0;
-}
-
 static void mdm_append_codepoint(mdm_ctx *r, unsigned cp)
 {
     static const char repl[] = { (char)0xef, (char)0xbf, (char)0xbd };
@@ -203,9 +190,9 @@ static void mdm_append_codepoint(mdm_ctx *r, unsigned cp)
         out_append(r, repl, sizeof(repl));
 }
 
-/* Append a codepoint's UTF-8 with HTML-escaping applied. Used for entity
- * references: a decoded `&amp;`/`&lt;` must re-escape to `&amp;`/`&lt;`,
- * never emit a raw & < > (which would be an injection vector). */
+/* Append a codepoint's UTF-8 with HTML-escaping applied: a decoded
+ * `&amp;`/`&lt;` must re-escape to `&amp;`/`&lt;`, never emit a raw
+ * & < > (which would be an injection vector). */
 static void mdm_append_codepoint_escaped(mdm_ctx *r, unsigned cp)
 {
     static const char repl[] = { (char)0xef, (char)0xbf, (char)0xbd };
@@ -223,28 +210,23 @@ static void mdm_append_codepoint_escaped(mdm_ctx *r, unsigned cp)
 
 /* Render an entity reference (text like "&amp;" / "&#x41;") as its UTF-8
  * codepoint(s) with HTML-escaping, or escaped-verbatim if unknown. Always
- * HTML-safe output. */
-static unsigned mdm_render_entity(mdm_ctx *r, const char *text, size_t size)
+ * HTML-safe output. Dispatches through the shared decode_entity_cps
+ * primitive; only the per-codepoint policy (escape, never raw append --
+ * a decoded `&amp;` must re-escape) and the last-codepoint return for
+ * SmartyPants quote context stay local. */
+static unsigned render_entity(mdm_ctx *r, const char *text, size_t size)
 {
-    if (size > 3 && text[1] == '#') {
-        unsigned cp = 0;
-        if (text[2] == 'x' || text[2] == 'X') {
-            for (size_t i = 3; i < size - 1; i++) cp = 16 * cp + mdm_hex_val(text[i]);
-        } else {
-            for (size_t i = 2; i < size - 1; i++) cp = 10 * cp + (text[i] - '0');
-        }
-        mdm_append_codepoint_escaped(r, cp);
-        return cp;
+    unsigned cps[2];
+    int n = mdparser_md4c_decode_entity_cps(text, (MD_SIZE)size, cps);
+    if (n == 0) {
+        /* Unknown entity: escape the raw text (never emit a bare '&'). */
+        mdm_escape_html(r, text, size);
+        return UINT_MAX;
     }
-    const ENTITY *ent = entity_lookup(text, size);
-    if (ent != NULL) {
-        mdm_append_codepoint_escaped(r, ent->codepoints[0]);
-        if (ent->codepoints[1]) mdm_append_codepoint_escaped(r, ent->codepoints[1]);
-        return ent->codepoints[1] ? ent->codepoints[1] : ent->codepoints[0];
+    for (int k = 0; k < n; k++) {
+        mdm_append_codepoint_escaped(r, cps[k]);
     }
-    /* Unknown entity: escape the raw text (never emit a bare '&'). */
-    mdm_escape_html(r, text, size);
-    return UINT_MAX;
+    return cps[n - 1];
 }
 
 /* ===================================================================
@@ -344,7 +326,7 @@ static bool mdm_tagfilter_blocked(const char *p, size_t avail)
     return false;
 }
 
-static void mdm_render_raw_html_unsafe(mdm_ctx *r, const char *text, size_t size)
+static void render_raw_html_unsafe(mdm_ctx *r, const char *text, size_t size)
 {
     if (!(r->render_opts & MDPARSER_RF_TAGFILTER)) {
         out_append(r, text, size);
@@ -370,10 +352,10 @@ static void mdm_render_raw_html_unsafe(mdm_ctx *r, const char *text, size_t size
 }
 
 /* Emit raw HTML text per the current safety posture. */
-static void mdm_render_raw_html(mdm_ctx *r, const char *text, size_t size)
+static void render_raw_html(mdm_ctx *r, const char *text, size_t size)
 {
     if (r->render_opts & MDPARSER_RF_UNSAFE)
-        mdm_render_raw_html_unsafe(r, text, size);
+        render_raw_html_unsafe(r, text, size);
     else
         mdm_escape_html(r, text, size);  /* safe: escape it */
 }
@@ -434,7 +416,7 @@ static unsigned char mdm_trailing_quote_char(const char *p, size_t n)
     /* U+200B (ZWSP) is category Cf, not White_Space. Treat it as left quote
      * context so a quote after a zero-width space still opens (common in
      * copied text). toInlineHtml's block-suppression sentinel is ASCII ';',
-     * handled separately in mdm_text. */
+     * handled separately in render_text. */
     if (cp == 0x200B) return ' ';
     return mdm_is_unicode_space(cp) ? ' ' : last;
 }
@@ -452,7 +434,7 @@ static unsigned char mdm_codepoint_quote_char(unsigned cp)
 
 /* Render `data` as normal text with smart-punctuation transforms.
  * Anything not transformed is HTML-escaped. */
-static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
+static void render_smart(mdm_ctx *r, const char *data, size_t size)
 {
     size_t i = 0;
     while (i < size) {
@@ -506,145 +488,25 @@ static void mdm_render_smart(mdm_ctx *r, const char *data, size_t size)
 }
 
 /* ===================================================================
- * Heading-anchor slug (self-contained; matches mdparser_slugify)
- * =================================================================== */
-
-static char *mdm_slugify(const char *text, size_t len)
-{
-    static const char hex[] = "0123456789abcdef";
-    /* Single-pass into smart_str: avoids a full UTF-8 sizing walk. Invalid
-     * bytes expand to %xx (3 bytes); smart_str grows on demand so pathological
-     * invalid input does not need a len*3 preallocation. */
-    smart_str s = {0};
-    if (len) {
-        smart_str_alloc(&s, len + 1, 0);
-    }
-    bool prev_dash = true;
-    size_t i = 0;
-    while (i < len) {
-        unsigned char c = (unsigned char)text[i];
-        if (c < 0x80) {
-            if (c >= 'A' && c <= 'Z') {
-                smart_str_appendc(&s, (char)(c + ('a' - 'A')));
-                prev_dash = false;
-            } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
-                smart_str_appendc(&s, (char)c);
-                prev_dash = false;
-            } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '-') {
-                if (!prev_dash) {
-                    smart_str_appendc(&s, '-');
-                    prev_dash = true;
-                }
-            }
-            i++;
-            continue;
-        }
-        size_t n = mdparser_md4c_utf8_seqlen((const unsigned char *)text + i, len - i);
-        if (n) {
-            smart_str_appendl(&s, text + i, n);
-            prev_dash = false;
-            i += n;
-        } else {
-            char enc[3] = { '%', hex[(c >> 4) & 0xF], hex[c & 0xF] };
-            smart_str_appendl(&s, enc, 3);
-            prev_dash = false;
-            i++;
-        }
-    }
-    /* Trim trailing dashes. */
-    if (s.s) {
-        while (ZSTR_LEN(s.s) > 0 && ZSTR_VAL(s.s)[ZSTR_LEN(s.s) - 1] == '-') {
-            ZSTR_LEN(s.s)--;
-        }
-        ZSTR_VAL(s.s)[ZSTR_LEN(s.s)] = '\0';
-    }
-    size_t out_len = s.s ? ZSTR_LEN(s.s) : 0;
-    char *out = emalloc(out_len + 1);
-    if (out_len) {
-        memcpy(out, ZSTR_VAL(s.s), out_len);
-    }
-    out[out_len] = '\0';
-    smart_str_free(&s);
-    return out;
-}
-
-static void mdm_slugs_init(mdm_slugs *s)
-{
-    zend_hash_init(&s->taken, 8, NULL, NULL, 0);
-    zend_hash_init(&s->next_suffix, 8, NULL, NULL, 0);
-    s->active = true;
-}
-
-static void mdm_slugs_destroy(mdm_slugs *s)
-{
-    if (!s->active) return;
-    zend_hash_destroy(&s->taken);
-    zend_hash_destroy(&s->next_suffix);
-    s->active = false;
-}
-
-/* Return a unique slug for `base` (emalloc'd, caller frees), recording it
- * as taken. Empty base returns an empty string (id suppressed at emit). */
-static char *mdm_slug_unique(mdm_slugs *s, char *base)
-{
-    if (base[0] == '\0') return base;
-    size_t blen = strlen(base);
-    if (!zend_hash_str_exists(&s->taken, base, blen)) {
-        zval z; ZVAL_TRUE(&z);
-        zend_hash_str_add(&s->taken, base, blen, &z);
-        return base;
-    }
-    zval *nx = zend_hash_str_find(&s->next_suffix, base, blen);
-    zend_long start = nx ? Z_LVAL_P(nx) : 1;
-    if (start < 1) {
-        efree(base);
-        char *empty = emalloc(1);
-        empty[0] = '\0';
-        return empty;
-    }
-    char *cand = emalloc(blen + 24);
-    for (zend_long n = start; n <= 100000; n++) {
-        int w = snprintf(cand, blen + 24, "%s-" ZEND_LONG_FMT, base, n);
-        if (w < 0 || (size_t)w >= blen + 24) continue;
-        if (!zend_hash_str_exists(&s->taken, cand, (size_t)w)) {
-            zval z; ZVAL_TRUE(&z);
-            zend_hash_str_add(&s->taken, cand, (size_t)w, &z);
-            zval suf; ZVAL_LONG(&suf, n + 1);
-            zend_hash_str_update(&s->next_suffix, base, blen, &suf);
-            efree(base);
-            return cand;
-        }
-    }
-    zval exhausted;
-    ZVAL_LONG(&exhausted, -1);
-    zend_hash_str_update(&s->next_suffix, base, blen, &exhausted);
-    efree(cand);
-    efree(base);
-    char *empty = emalloc(1);
-    empty[0] = '\0';
-    return empty;
-}
-
-/* ===================================================================
  * md4c callbacks
  * =================================================================== */
 
 /* Append a fixed-size snprintf buffer by its written C-string length, never
  * by snprintf's return value (which is the would-be length on truncation). */
-static void mdm_out_buf(mdm_ctx *r, const char *buf)
+static void out_buf(mdm_ctx *r, const char *buf)
 {
     out_append(r, buf, strlen(buf));
 }
 
-static void mdm_render_ol_open(mdm_ctx *r, const MD_BLOCK_OL_DETAIL *d)
+static void render_ol_open(mdm_ctx *r, const MD_BLOCK_OL_DETAIL *d)
 {
     if (d->start == 1) { OUT_LIT(r, "<ol>\n"); return; }
     char buf[64];
     snprintf(buf, sizeof(buf), "<ol start=\"%u\">\n", d->start);
-    mdm_out_buf(r, buf);
+    out_buf(r, buf);
 }
 
-static void mdm_render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
+static void render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
 {
     if (d->is_task) {
         OUT_LIT(r, "<li class=\"task-list-item\"><input type=\"checkbox\" class=\"task-list-item-checkbox\" disabled");
@@ -658,7 +520,7 @@ static void mdm_render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
 /* Emit already-decoded URL bytes safely: run the scheme filter (safe mode)
  * then percent-escape. `image_context` selects whether data: image URLs are
  * permitted (<img src> only). */
-static void mdm_emit_decoded_url(mdm_ctx *r, const char *p, size_t n, bool image_context)
+static void render_decoded_url(mdm_ctx *r, const char *p, size_t n, bool image_context)
 {
     bool safe = !(r->render_opts & MDPARSER_RF_UNSAFE);
     if (!safe || mdm_url_is_safe(p, n, image_context))
@@ -666,19 +528,19 @@ static void mdm_emit_decoded_url(mdm_ctx *r, const char *p, size_t n, bool image
 }
 
 /* Decode an attribute URL to raw bytes, then emit it safely. */
-static void mdm_render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_context)
+static void render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_context)
 {
     mdparser_md4c_attr_view value;
     mdparser_md4c_attr_view_init(&value, attr);
-    mdm_emit_decoded_url(r, value.text, value.size, image_context);
+    render_decoded_url(r, value.text, value.size, image_context);
     mdparser_md4c_attr_view_destroy(&value);
 }
 
 /* Render an MD_ATTRIBUTE (code-fence lang, link/image title) HTML-escaped:
  * NORMAL substrings are HTML-escaped, entities decoded-then-re-escaped, null
  * chars replaced. URLs do NOT go through here -- they route through
- * mdm_render_url_value, which runs the scheme filter and percent-escapes. */
-static void mdm_render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
+ * render_url_value, which runs the scheme filter and percent-escapes. */
+static void render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
 {
     for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
         MD_TEXTTYPE type = attr->substr_types[i];
@@ -687,13 +549,13 @@ static void mdm_render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
         const char *text = attr->text + off;
         switch (type) {
             case MD_TEXT_NULLCHAR: mdm_append_codepoint(r, 0x0000); break;
-            case MD_TEXT_ENTITY:   mdm_render_entity(r, text, sz); break;
+            case MD_TEXT_ENTITY:   render_entity(r, text, sz); break;
             default:               mdm_escape_html(r, text, sz); break;
         }
     }
 }
 
-static void mdm_render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
+static void render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
 {
     OUT_LIT(r, "<pre><code");
     if (d->lang.text != NULL) {
@@ -712,7 +574,7 @@ static void mdm_render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
     OUT_LIT(r, ">");
 }
 
-static void mdm_render_td_open(mdm_ctx *r, const char *cell, const MD_BLOCK_TD_DETAIL *d)
+static void render_td_open(mdm_ctx *r, const char *cell, const MD_BLOCK_TD_DETAIL *d)
 {
     OUT_LIT(r, "<");
     out_append(r, cell, strlen(cell));
@@ -730,7 +592,7 @@ static void mdm_render_td_open(mdm_ctx *r, const char *cell, const MD_BLOCK_TD_D
  * entity-undecoded, so `&#35;section` and `javascript&colon;` would otherwise
  * dodge the respective checks). `class_attr` is NULL for regular links,
  * "wikilink" for wiki-link spans. */
-static void mdm_emit_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
+static void render_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
     const char *class_attr)
 {
     mdparser_md4c_attr_view href;
@@ -756,16 +618,16 @@ static void mdm_emit_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
     }
     OUT_LIT(r, " href=\"");
     /* Link context: data: URLs are rejected (no navigable data: documents). */
-    mdm_emit_decoded_url(r, href.text, href.size, false);
+    render_decoded_url(r, href.text, href.size, false);
     mdparser_md4c_attr_view_destroy(&href);
 }
 
-static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
+static void render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
 {
-    mdm_emit_link_open(r, &d->href, NULL);
+    render_link_open(r, &d->href, NULL);
     if (d->title.text != NULL) {
         OUT_LIT(r, "\" title=\"");
-        mdm_render_attribute(r, &d->title);
+        render_attribute(r, &d->title);
     }
     OUT_LIT(r, "\">");
 }
@@ -773,33 +635,33 @@ static void mdm_render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
 /* Wiki-link target is URL-like, so route it through the same decode ->
  * scheme-filter -> percent-escape path as a normal <a href>. Without this,
  * [[javascript:alert(1)]] would emit a live javascript: link. nofollow and
- * the fragment exception follow the same rule as mdm_render_a_open. */
-static void mdm_render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
+ * the fragment exception follow the same rule as render_a_open. */
+static void render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
 {
-    mdm_emit_link_open(r, &d->target, "wikilink");
+    render_link_open(r, &d->target, "wikilink");
     OUT_LIT(r, "\">");
 }
 
-static void mdm_render_img_open(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
+static void render_img_open(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
 {
     OUT_LIT(r, "<img src=\"");
     /* Image context: data:image/{gif,png,jpeg,webp} permitted. */
-    mdm_render_url_value(r, &d->src, true);
+    render_url_value(r, &d->src, true);
     OUT_LIT(r, "\" alt=\"");
 }
 
-static void mdm_render_img_close(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
+static void render_img_close(mdm_ctx *r, const MD_SPAN_IMG_DETAIL *d)
 {
     if (d->title.text != NULL) {
         OUT_LIT(r, "\" title=\"");
-        mdm_render_attribute(r, &d->title);
+        render_attribute(r, &d->title);
     }
     OUT_LIT(r, "\" />");
 }
 
 /* md4c-html convention: <div class="admonition-TYPE"><p class="admonition-title">TYPE</p>.
  * TYPE is one of note/tip/important/warning/caution (entity-resolved, escaped). */
-static void mdm_render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DETAIL *d)
+static void render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DETAIL *d)
 {
     mdparser_md4c_attr_view type;
     mdparser_md4c_attr_view_init(&type, &d->type);
@@ -811,13 +673,13 @@ static void mdm_render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DET
     mdparser_md4c_attr_view_destroy(&type);
 }
 
-static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
+static int render_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
     /* The CommonMark reference renderer emits a conditional newline before
      * every block open; doing the same reproduces its inter-block whitespace
      * (notably `<li>\n<block>`). */
-    mdm_cr(r);
+    out_cr(r);
     /* A new block starts a fresh SmartyPants quote context; otherwise the
      * previous block's trailing character bleeds in and a leading quote
      * renders as a closing quote (e.g. a paragraph that opens with "..."). */
@@ -826,8 +688,8 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_DOC: break;
         case MD_BLOCK_QUOTE: OUT_LIT(r, "<blockquote>\n"); break;
         case MD_BLOCK_UL: OUT_LIT(r, "<ul>\n"); break;
-        case MD_BLOCK_OL: mdm_render_ol_open(r, (MD_BLOCK_OL_DETAIL *)detail); break;
-        case MD_BLOCK_LI: mdm_render_li_open(r, (MD_BLOCK_LI_DETAIL *)detail); break;
+        case MD_BLOCK_OL: render_ol_open(r, (MD_BLOCK_OL_DETAIL *)detail); break;
+        case MD_BLOCK_LI: render_li_open(r, (MD_BLOCK_LI_DETAIL *)detail); break;
         case MD_BLOCK_HR: OUT_LIT(r, "<hr />\n"); break;
         case MD_BLOCK_BLANK: break;
         case MD_BLOCK_H:
@@ -845,15 +707,15 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 out_append(r, tag, strlen(tag));
             }
             break;
-        case MD_BLOCK_CODE: mdm_render_code_open(r, (MD_BLOCK_CODE_DETAIL *)detail); break;
+        case MD_BLOCK_CODE: render_code_open(r, (MD_BLOCK_CODE_DETAIL *)detail); break;
         case MD_BLOCK_HTML: break;
         case MD_BLOCK_P: OUT_LIT(r, "<p>"); break;
         case MD_BLOCK_TABLE: OUT_LIT(r, "<table>\n"); break;
         case MD_BLOCK_THEAD: OUT_LIT(r, "<thead>\n"); break;
         case MD_BLOCK_TBODY: OUT_LIT(r, "<tbody>\n"); break;
         case MD_BLOCK_TR: OUT_LIT(r, "<tr>\n"); break;
-        case MD_BLOCK_TH: mdm_render_td_open(r, "th", (MD_BLOCK_TD_DETAIL *)detail); break;
-        case MD_BLOCK_TD: mdm_render_td_open(r, "td", (MD_BLOCK_TD_DETAIL *)detail); break;
+        case MD_BLOCK_TH: render_td_open(r, "th", (MD_BLOCK_TD_DETAIL *)detail); break;
+        case MD_BLOCK_TD: render_td_open(r, "td", (MD_BLOCK_TD_DETAIL *)detail); break;
         case MD_BLOCK_FOOTNOTE_DEF_SECTION:
             OUT_LIT(r, "<section class=\"footnotes\">\n<ol>\n");
             break;
@@ -861,18 +723,18 @@ static int mdm_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             char buf[64];
             snprintf(buf, sizeof(buf), "<li id=\"fn-%u\">\n",
                 ((MD_BLOCK_FOOTNOTE_DEF_DETAIL *)detail)->id);
-            mdm_out_buf(r, buf);
+            out_buf(r, buf);
             break;
         }
         case MD_BLOCK_ADMONITION:
-            mdm_render_admonition_open(r, (MD_BLOCK_ADMONITION_DETAIL *)detail);
+            render_admonition_open(r, (MD_BLOCK_ADMONITION_DETAIL *)detail);
             break;
         default: break;
     }
     return 0;
 }
 
-static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
+static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
     switch (type) {
@@ -900,13 +762,13 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 if (slug[0] != '\0') {
                     char open[16];
                     snprintf(open, sizeof(open), "<h%d id=\"", r->heading_level);
-                    mdm_out_buf(r, open);
+                    out_buf(r, open);
                     mdm_escape_html(r, slug, strlen(slug));
                     OUT_LIT(r, "\">");
                 } else {
                     char tag[8];
                     snprintf(tag, sizeof(tag), "<h%d>", r->heading_level);
-                    mdm_out_buf(r, tag);
+                    out_buf(r, tag);
                 }
                 efree(slug);
                 if (r->heading_html.s)
@@ -917,7 +779,7 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 smart_str_free(&r->heading_html);
                 char close[8];
                 snprintf(close, sizeof(close), "</h%d>\n", r->heading_level);
-                mdm_out_buf(r, close);
+                out_buf(r, close);
             } else {
                 char tag[8];
                 snprintf(tag, sizeof(tag), "</h%d>\n", r->heading_level);
@@ -944,7 +806,7 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 snprintf(buf, sizeof(buf),
                     "<a href=\"#fnref-%u-%u\" class=\"footnote-backref\">&#8617;</a>",
                     d->id, ref);
-                mdm_out_buf(r, buf);
+                out_buf(r, buf);
             }
             OUT_LIT(r, "\n</li>\n");
             break;
@@ -955,7 +817,7 @@ static int mdm_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
     return 0;
 }
 
-static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
+static int render_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
     int inside_img = (r->image_nesting_level > 0);
@@ -965,8 +827,8 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_EM: OUT_LIT(r, "<em>"); break;
         case MD_SPAN_STRONG: OUT_LIT(r, "<strong>"); break;
         case MD_SPAN_U: OUT_LIT(r, "<u>"); break;
-        case MD_SPAN_A: mdm_render_a_open(r, (MD_SPAN_A_DETAIL *)detail); break;
-        case MD_SPAN_IMG: mdm_render_img_open(r, (MD_SPAN_IMG_DETAIL *)detail); break;
+        case MD_SPAN_A: render_a_open(r, (MD_SPAN_A_DETAIL *)detail); break;
+        case MD_SPAN_IMG: render_img_open(r, (MD_SPAN_IMG_DETAIL *)detail); break;
         case MD_SPAN_CODE: OUT_LIT(r, "<code>"); break;
         case MD_SPAN_DEL: OUT_LIT(r, "<del>"); break;
         case MD_SPAN_INS: OUT_LIT(r, "<ins>"); break;
@@ -976,14 +838,14 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_SPOILER: OUT_LIT(r, "<span class=\"spoiler\">"); break;
         case MD_SPAN_LATEXMATH: OUT_LIT(r, "<span class=\"math\">"); break;
         case MD_SPAN_LATEXMATH_DISPLAY: OUT_LIT(r, "<span class=\"math display\">"); break;
-        case MD_SPAN_WIKILINK: mdm_render_wikilink_open(r, (MD_SPAN_WIKILINK_DETAIL *)detail); break;
+        case MD_SPAN_WIKILINK: render_wikilink_open(r, (MD_SPAN_WIKILINK_DETAIL *)detail); break;
         case MD_SPAN_FOOTNOTE_REF: {
             const MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
             char buf[128];
             snprintf(buf, sizeof(buf),
                 "<sup><a href=\"#fn-%u\" id=\"fnref-%u-%u\">%u</a></sup>",
                 d->id, d->id, d->ref_id, d->id);
-            mdm_out_buf(r, buf);
+            out_buf(r, buf);
             break;
         }
         default: break;
@@ -991,7 +853,7 @@ static int mdm_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
     return 0;
 }
 
-static int mdm_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
+static int render_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
     if (type == MD_SPAN_IMG) r->image_nesting_level--;
@@ -1001,7 +863,7 @@ static int mdm_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_STRONG: OUT_LIT(r, "</strong>"); break;
         case MD_SPAN_U: OUT_LIT(r, "</u>"); break;
         case MD_SPAN_A: OUT_LIT(r, "</a>"); break;
-        case MD_SPAN_IMG: mdm_render_img_close(r, (MD_SPAN_IMG_DETAIL *)detail); break;
+        case MD_SPAN_IMG: render_img_close(r, (MD_SPAN_IMG_DETAIL *)detail); break;
         case MD_SPAN_CODE: OUT_LIT(r, "</code>"); break;
         case MD_SPAN_DEL: OUT_LIT(r, "</del>"); break;
         case MD_SPAN_INS: OUT_LIT(r, "</ins>"); break;
@@ -1017,7 +879,7 @@ static int mdm_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
     return 0;
 }
 
-static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *userdata)
+static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
 
@@ -1063,10 +925,10 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             break;
         case MD_TEXT_HTML:
             if (r->image_nesting_level > 0) mdm_escape_html(r, text, size);
-            else mdm_render_raw_html(r, text, size);
+            else render_raw_html(r, text, size);
             break;
         case MD_TEXT_ENTITY: {
-            unsigned cp = mdm_render_entity(r, text, size);
+            unsigned cp = render_entity(r, text, size);
             /* Seed quote context from the byte the entity actually rendered
              * (e.g. `&amp;` -> '&' is right-context; `&#32;` -> ' ' is left),
              * not a blanket 0 which would force an opening quote. */
@@ -1085,7 +947,7 @@ static int mdm_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             break;
         default:  /* MD_TEXT_NORMAL */
             if (r->render_opts & MDPARSER_RF_SMART) {
-                mdm_render_smart(r, text, size);
+                render_smart(r, text, size);
             } else {
                 mdm_escape_html(r, text, size);
                 if (size) r->prev_char = mdm_trailing_quote_char(text, size);
@@ -1139,19 +1001,20 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     MD_PARSER parser = {
         0,
         parser_flags,
-        mdm_enter_block,
-        mdm_leave_block,
-        mdm_enter_span,
-        mdm_leave_span,
-        mdm_text,
+        render_enter_block,
+        render_leave_block,
+        render_enter_span,
+        render_leave_span,
+        render_text,
         NULL,
         NULL
     };
 
     bool bailed_out;
     bool limit_exceeded;
+    bool alloc_failed;
     int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &r,
-        &bailed_out, &limit_exceeded);
+        &bailed_out, &limit_exceeded, &alloc_failed);
 
     if (owned) efree((void *)use_src);
     smart_str_free(&r.heading_html);
@@ -1165,7 +1028,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
 
     if (rc != 0) {
         smart_str_free(&r.main);
-        *status = limit_exceeded ? MDM_ERR_MEMORY : MDM_ERR_PARSE;
+        *status = (limit_exceeded || alloc_failed) ? MDM_ERR_MEMORY : MDM_ERR_PARSE;
         return NULL;
     }
 

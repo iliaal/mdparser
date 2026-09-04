@@ -60,11 +60,11 @@ try {
 ?>
 --EXPECT--
 string(2) "4M"
-toHtml: mdparser: parse exceeded mdparser.parse_memory_limit
-toInlineHtml: mdparser: parse exceeded mdparser.parse_memory_limit
-toXml: mdparser: parse exceeded mdparser.parse_memory_limit
-toAst: mdparser: parse exceeded mdparser.parse_memory_limit
-blockquotes: mdparser: parse exceeded mdparser.parse_memory_limit
+toHtml: mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)
+toInlineHtml: mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)
+toXml: mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)
+toAst: mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)
+blockquotes: mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)
 <h1>Hi</h1>
 <blockquote>
 <p>quote</p>
@@ -73,4 +73,4 @@ blockquotes: mdparser: parse exceeded mdparser.parse_memory_limit
 raised: parsed
 limit=0: parsed
 limit=-1: parsed
-relowered: mdparser: parse exceeded mdparser.parse_memory_limit
+relowered: mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)

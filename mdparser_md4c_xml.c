@@ -41,13 +41,16 @@ const char *mdparser_md4c_xml_status_message(int status)
     switch (status) {
         case MDX_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDX_ERR_DEPTH: return "mdparser: XML nesting exceeds maximum depth";
-        case MDX_ERR_MEMORY: return "mdparser: parse exceeded mdparser.parse_memory_limit";
+        case MDX_ERR_MEMORY: return "mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)";
         default: return "mdparser: unknown error";
     }
 }
 
 typedef struct {
     smart_str out;
+    smart_str scratch;   /* reused entity-decode buffer (truncated, not freed, per use) */
+    unsigned char esc_text[256];  /* attention maps for the shared scan */
+    unsigned char esc_attr[256];
     int depth;
     bool collecting;   /* code/code_block/html literal */
     int error;
@@ -68,14 +71,46 @@ static void mdx_indent(mdx_ctx *c)
 /* XML-escape into the output buffer (& < > and, for attrs, "). C0 control
  * bytes other than tab/LF/CR are illegal in XML 1.0 character data, so they
  * are replaced with U+FFFD (matching the NULLCHAR policy) -- emitting them
- * raw would make the whole document unparseable. */
-static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
+ * raw would make the whole document unparseable.
+ *
+ * Plain runs use the shared unrolled scan over the per-render attention
+ * maps; the slow path keeps the exact per-byte policy (C0 branch included). */
+static void mdx_escape_maps_init(mdx_ctx *c)
 {
-    size_t beg = 0, i = 0;
+    memset(c->esc_text, 0, sizeof(c->esc_text));
+    c->esc_text['&'] = 1;
+    c->esc_text['<'] = 1;
+    c->esc_text['>'] = 1;
+    c->esc_text[0xEF] = 1;
+    for (int i = 0; i < 0x20; i++) {
+        if (i != '\t' && i != '\n' && i != '\r') {
+            c->esc_text[i] = 1;
+        }
+    }
+    memcpy(c->esc_attr, c->esc_text, sizeof(c->esc_text));
+    c->esc_attr['"'] = 1;
+    c->esc_attr['\t'] = 1;
+    c->esc_attr['\n'] = 1;
+    c->esc_attr['\r'] = 1;
+}
+
+static void mdx_escape(mdx_ctx *c, smart_str *b, const char *s, size_t n, bool attr)
+{
+    const unsigned char *map = attr ? c->esc_attr : c->esc_text;
     /* 0xEF first: every byte pays this test, and only the lead byte of the
      * U+FFFE/U+FFFF sequences needs the bounds check that follows. */
     const unsigned char *u = (const unsigned char *)s;
-    for (; i < n; i++) {
+    size_t beg = 0;
+    while (beg < n) {
+        size_t run = mdparser_md4c_scan_plain(map, 0xFF, s + beg, n - beg);
+        if (run > 0) {
+            smart_str_appendl(b, s + beg, run);
+            beg += run;
+        }
+        if (beg >= n) {
+            break;
+        }
+        size_t i = beg;
         const char *rep = NULL;
         size_t consumed = 1;
 
@@ -98,24 +133,28 @@ static void mdx_escape(smart_str *b, const char *s, size_t n, bool attr)
             }
         }
         if (rep) {
-            if (i > beg) smart_str_appendl(b, s + beg, i - beg);
             smart_str_appends(b, rep);
             beg = i + consumed;
-            i += consumed - 1;
+        } else {
+            /* Flagged but needing no replacement (lone 0xEF): copy raw. */
+            smart_str_appendl(b, s + beg, 1);
+            beg++;
         }
     }
-    if (i > beg) smart_str_appendl(b, s + beg, i - beg);
 }
 
-/* Decode an entity reference into `tmp` (raw UTF-8), then XML-escape it
- * into the output. */
+/* Decode an entity reference into the reused scratch buffer (raw UTF-8),
+ * then XML-escape it into the output. Truncating keeps the allocation for
+ * the next entity instead of paying emalloc/efree per MD_TEXT_ENTITY. */
 static void mdx_emit_entity(mdx_ctx *c, const char *text, MD_SIZE size)
 {
-    smart_str tmp = {0};
-    mdparser_md4c_decode_entity(&tmp, text, size);
-    smart_str_0(&tmp);
-    if (tmp.s) mdx_escape(&c->out, ZSTR_VAL(tmp.s), ZSTR_LEN(tmp.s), false);
-    smart_str_free(&tmp);
+    mdparser_md4c_decode_entity(&c->scratch, text, size);
+    smart_str_0(&c->scratch);
+    if (c->scratch.s) {
+        mdx_escape(c, &c->out, ZSTR_VAL(c->scratch.s), ZSTR_LEN(c->scratch.s), false);
+        ZSTR_LEN(c->scratch.s) = 0;
+        ZSTR_VAL(c->scratch.s)[0] = '\0';
+    }
 }
 
 static void mdx_open(mdx_ctx *c, const char *tag)
@@ -150,7 +189,7 @@ static void mdx_attr(mdx_ctx *c, const char *name, const MD_ATTRIBUTE *a)
      * raw bytes directly would double-encode entities (&amp; -> &amp;amp;). */
     mdparser_md4c_attr_view value;
     mdparser_md4c_attr_view_init(&value, a);
-    mdx_escape(&c->out, value.text, value.size, true);
+    mdx_escape(c, &c->out, value.text, value.size, true);
     mdparser_md4c_attr_view_destroy(&value);
     smart_str_appendc(&c->out, '"');
 }
@@ -397,7 +436,7 @@ static int mdx_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
 {
     mdx_ctx *c = userdata;
     if (c->collecting) {
-        mdx_escape(&c->out, text, size, false);
+        mdx_escape(c, &c->out, text, size, false);
         return 0;
     }
     switch (type) {
@@ -406,7 +445,7 @@ static int mdx_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
         case MD_TEXT_HTML:
             mdx_indent(c);
             X_LIT(c, "<html_inline xml:space=\"preserve\">");
-            mdx_escape(&c->out, text, size, false);
+            mdx_escape(c, &c->out, text, size, false);
             X_LIT(c, "</html_inline>\n");
             break;
         case MD_TEXT_ENTITY:
@@ -422,7 +461,7 @@ static int mdx_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
         default:
             mdx_indent(c);
             X_LIT(c, "<text xml:space=\"preserve\">");
-            mdx_escape(&c->out, text, size, false);
+            mdx_escape(c, &c->out, text, size, false);
             X_LIT(c, "</text>\n");
             break;
     }
@@ -434,7 +473,7 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
 {
     mdx_ctx c;
     memset(&c, 0, sizeof(c));
-
+    mdx_escape_maps_init(&c);
     X_LIT(&c, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     X_LIT(&c, "<!DOCTYPE document SYSTEM \"CommonMark.dtd\">\n");
     X_LIT(&c, "<document xmlns=\"http://commonmark.org/xml/1.0\">\n");
@@ -466,28 +505,31 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
 
     bool bailed_out;
     bool limit_exceeded;
+    bool alloc_failed;
     int rc = mdparser_md4c_parse(use_src, (MD_SIZE)use_len, &parser, &c,
-        &bailed_out, &limit_exceeded);
+        &bailed_out, &limit_exceeded, &alloc_failed);
     if (owned) efree((void *)use_src);
 
     if (bailed_out) {
         smart_str_free(&c.out);
+        smart_str_free(&c.scratch);
         zend_bailout();
     }
 
     if (c.error != 0 || rc != 0 || c.depth != 1) {
         if (c.error == 0) {
-            c.error = limit_exceeded ? MDX_ERR_MEMORY : MDX_ERR_PARSE;
+            c.error = (limit_exceeded || alloc_failed) ? MDX_ERR_MEMORY : MDX_ERR_PARSE;
         }
         smart_str_free(&c.out);
+        smart_str_free(&c.scratch);
         *status = c.error;
         return NULL;
     }
-
     c.depth = 0;
     X_LIT(&c, "</document>\n");
     *status = MDX_OK;
     smart_str_0(&c.out);
+    smart_str_free(&c.scratch);
     if (!c.out.s) return ZSTR_EMPTY_ALLOC();
     return c.out.s;
 }

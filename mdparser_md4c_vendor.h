@@ -17,10 +17,14 @@
 #include "md4c.h"
 
 /* Runs md_parse() with a per-parse libc allocation registry. Sets *bailed_out
- * when a Zend bailout was caught, and *limit_exceeded when an allocation was
- * refused because the parse crossed mdparser.parse_memory_limit. */
+ * when a Zend bailout was caught, *limit_exceeded when an allocation was
+ * refused because the parse crossed mdparser.parse_memory_limit, and
+ * *alloc_failed when libc malloc/realloc returned NULL without a budget
+ * refusal (genuine out-of-memory, including the SIZE_MAX overflow guard).
+ * Either memory signal maps to ERR_MEMORY at the render entries; only the
+ * limit path claims the limit in the message (see the shared OOM wording). */
 int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     const MD_PARSER *parser, void *userdata, bool *bailed_out,
-    bool *limit_exceeded);
+    bool *limit_exceeded, bool *alloc_failed);
 
 #endif

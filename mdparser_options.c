@@ -144,6 +144,14 @@ static const mdparser_options_field mdparser_options_fields[] = {
  * so use the portable negative-array-size idiom instead. */
 typedef char mdparser_options_field_count_assert[
     (MDOPT_COUNT_ == MDPARSER_OPTIONS_FIELD_COUNT) ? 1 : -1];
+/* The ZPP block in MdParser_Options::__construct takes exactly one
+ * Z_PARAM_BOOL per option (32 today). ZEND_PARSE_PARAMETERS_START's max
+ * arg is MDPARSER_OPTIONS_FIELD_COUNT, so adding option 33 without adding
+ * its Z_PARAM_BOOL line would still compile and silently leave the new
+ * option unsettable. Pin the arity here: bump the 32 alongside the ZPP
+ * block when adding an option. */
+typedef char mdparser_options_zpp_arity_assert[
+    (MDPARSER_OPTIONS_FIELD_COUNT == 32) ? 1 : -1];
 
 void mdparser_options_init_defaults(void)
 {
