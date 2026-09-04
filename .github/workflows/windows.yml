@@ -55,16 +55,18 @@ jobs:
           args: --enable-mdparser
 
       - name: Setup PHP for smoke test
-        if: matrix.arch == 'x64'
+        # setup-php ships NTS only, which matches the NTS lanes exactly.
+        # TS-packaged zips are covered by the builder's in-build suite;
+        # a TS php.exe is not obtainable from setup-php (no TS selector).
+        if: matrix.arch == 'x64' && matrix.ts == 'nts'
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
         with:
           php-version: ${{ matrix.php-version }}
-          phpts: ${{ matrix.ts }}
           coverage: none
           tools: none
 
       - name: Smoke-test built DLL
-        if: matrix.arch == 'x64'
+        if: matrix.arch == 'x64' && matrix.ts == 'nts'
         shell: bash
         run: |
           set -euo pipefail

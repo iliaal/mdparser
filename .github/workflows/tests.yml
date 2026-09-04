@@ -99,6 +99,14 @@ jobs:
   linux-zts:
     name: PHP ${{ matrix.php }} ZTS - Linux (canary)
     runs-on: ubuntu-latest
+    # setup-php offers no thread-safety selector (its input set is
+    # php-version/extensions/ini-*/coverage/tools only) and an env-level
+    # PHPTS is silently ignored, so a setup-php lane can never be a ZTS
+    # canary. Build a real ZTS PHP from source instead (same shape as the
+    # asan job, without sanitizers). Full default extensions, so the skip
+    # budget matches the other lanes.
+    env:
+      PHP_VERSION: ${{ matrix.php }}
     strategy:
       fail-fast: false
       matrix:
@@ -109,33 +117,37 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup PHP (ZTS)
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
-        with:
-          php-version: ${{ matrix.php }}
-          phpts: zts
-          tools: phpize, php-config
-          coverage: none
+      - name: Build PHP with ZTS
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends autoconf bison re2c
+          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
+          cd /tmp/php-src
+          ./buildconf --force
+          ./configure --enable-zts --prefix=/tmp/php-zts
+          make -j$(nproc)
+          make install
 
       - name: Assert ZTS PHP
-        run: "php -r 'exit(PHP_ZTS ? 0 : 1);'"
+        run: "/tmp/php-zts/bin/php -r 'exit(PHP_ZTS ? 0 : 1);'"
 
       - name: Build extension under ZTS
         run: |
+          export PATH="/tmp/php-zts/bin:$PATH"
           phpize
-          ./configure --enable-mdparser --with-php-config=$(which php-config)
+          ./configure --enable-mdparser --with-php-config=/tmp/php-zts/bin/php-config
           make -j$(nproc)
 
       - name: Run tests under ZTS
         run: |
-          export TEST_PHP_EXECUTABLE=$(which php)
+          export TEST_PHP_EXECUTABLE=/tmp/php-zts/bin/php
           export TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export NO_INTERACTION=1
           set +e
-          php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          /tmp/php-zts/bin/php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
-          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
+          # Full default extensions, so the skip budget matches the other lanes.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
   macos:
