@@ -6,6 +6,7 @@ vendored_at: vendor/md4c
 resolver: github-head
 repo: mity/md4c
 branch: master
+defer_until: 2026-10-15
 note: |
   md4c (mity/md4c), vendored at master 61f5ce7 (MDPARSER_MD4C_VERSION =
   0.5.3+git61f5ce7). The vendor directory mirrors a commit rather than a
@@ -23,3 +24,9 @@ note: |
   md_enter_child_containers). All five OOM fixes are proposed upstream.
   See vendor/VENDOR.md. The code-span trailing-whitespace patch was
   accepted upstream as 10e96ad4 and dropped in the 2026-07-27 refresh.
+  2026-09-04 audit: master is one commit ahead (bed011f, "Remove #define
+  inline", src/md4c.c + src/md4c-html.c). The commit deletes only the
+  C89-compat inline shim (dead on C99+ toolchains); zero behavior change
+  and zero interaction with the six local patches or the bailout hook.
+  Refresh deferred to the next cycle rather than churning the vendor tree
+  for a no-op; re-audit on expiry. md4c-html.c is not compiled in.
