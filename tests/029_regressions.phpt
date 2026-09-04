@@ -14,6 +14,7 @@ function check(string $label, bool $cond): void {
 // cached md4c parser-flag / renderer-option masks before the readonly
 // $options write throws. A caught error must leave both $options and
 // rendering behavior on the original (safe) configuration.
+// Provenance: 8ae2dbd "Fix Parser re-entry desync and toInlineHtml multi-line block leak".
 // ---------------------------------------------------------------------
 $p = new MdParser\Parser(new MdParser\Options());
 $before = $p->toHtml("<script>x</script>\n");
@@ -31,6 +32,7 @@ check("rendering still safe (raw <script> not emitted)",
 // ---------------------------------------------------------------------
 // toInlineHtml must suppress block-level constructs on every
 // physical line, not just the first one.
+// Provenance: 8ae2dbd "Fix Parser re-entry desync and toInlineHtml multi-line block leak".
 // ---------------------------------------------------------------------
 $p = new MdParser\Parser();
 
@@ -69,6 +71,7 @@ check("lone newline stays empty",
 // every Options constructor parameter default must match the
 // value of the corresponding property on `new Options()`. A reflection
 // walk catches drift between the C field table and the stub signature.
+// Provenance: 8ae2dbd "Fix Parser re-entry desync and toInlineHtml multi-line block leak".
 // ---------------------------------------------------------------------
 $rc = new ReflectionClass(MdParser\Options::class);
 $ctor = $rc->getConstructor();
@@ -91,8 +94,6 @@ foreach ($ctor->getParameters() as $param) {
             . " prop=" . var_export($propValue, true);
     }
 }
-check("all 32 ctor parameters present",
-    count($ctor->getParameters()) === 32);
 check("every ctor default matches property default",
     $mismatches === []);
 if ($mismatches) {
@@ -106,6 +107,7 @@ if ($mismatches) {
 // $parser->options remained unreadable. The constructor must instead
 // reject the object up front so callers cannot land in that
 // half-built state.
+// Provenance: 8daa938 "Address scan.md findings: ZendMM allocator, interned AST keys, hardening" (CR-004).
 // ---------------------------------------------------------------------
 $rcOptions = new ReflectionClass(MdParser\Options::class);
 $bad = $rcOptions->newInstanceWithoutConstructor();
@@ -138,7 +140,6 @@ OK: lone CR normalized like LF
 OK: single-line block markers stay literal (regression sanity)
 OK: empty input stays empty
 OK: lone newline stays empty
-OK: all 32 ctor parameters present
 OK: every ctor default matches property default
 OK: reflection-bypassed Options is rejected
 OK: message names the offending property

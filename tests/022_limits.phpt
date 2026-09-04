@@ -35,9 +35,9 @@ echo "toAst on 50-level blockquote: ", (is_array($ast) && $ast['type'] === 'docu
 
 // === Input size cap: the wrapper rejects >256MB inputs up front with a
 // documented exception rather than handing arbitrary sizes to md4c's
-// 32-bit MD_SIZE / MD_OFFSET internals. We can't actually allocate a 257MB string
-// in a test without blowing memory_limit, so just verify the normal
-// path passes and trust the cap is in the code. ===
+// 32-bit MD_SIZE / MD_OFFSET internals. The throw/accept boundary itself
+// is pinned in 025_size_cap.phpt (257 MB throws, exactly 256 MB passes),
+// so here just verify the normal path passes. ===
 
 $normal = str_repeat("hello world\n", 100);
 $out = $p->toHtml($normal);

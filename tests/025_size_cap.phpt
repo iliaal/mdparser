@@ -32,15 +32,31 @@ foreach (["toHtml", "toInlineHtml", "toXml", "toAst"] as $method) {
     }
 }
 
-// Free the big buffer before building the next one.
-unset($over);
+// Free the big buffer before building the next one. unset($e) matters as
+// much as unset($over): each caught exception's trace still references
+// the 257 MB argument, keeping it alive past unset($over) alone.
+unset($over, $e);
 
-// Just under the cap should still work. 256 MB exactly is the boundary
-// (MDPARSER_MAX_INPUT_SIZE == 256 * 1024 * 1024), so 256 MB - 1 byte is
-// valid. We only verify that the wrapper accepts the size; the resulting
-// render time on a 256 MB input is ~seconds, so we use a 1 MB input here
-// as a cheap sanity case and trust the cap boundary is a constant
-// comparison.
+// The boundary itself is proven below, not trusted: 256 MB exactly
+// (MDPARSER_MAX_INPUT_SIZE == 256 * 1024 * 1024) is accepted by all
+// four entries, while the 257 MB input above throws. The input is one
+// short heading padded with blank lines: exactly-cap length with tiny
+// output, so the four-way accept proof needs no more headroom than the
+// 257 MB throw case above and stays inside the 768 MB limit. The 1 MB
+// render stays as a cheap sanity case for the normal path.
+$exact = "# hi\n" . str_repeat("\n", 256 * $mb - 5);
+echo "built boundary input: ", strlen($exact), " bytes\n";
+foreach (["toHtml", "toInlineHtml", "toXml", "toAst"] as $method) {
+    try {
+        $result = $parser->$method($exact);
+        unset($result);
+        echo "OK: $method accepted exactly-256MB input\n";
+    } catch (MdParser\Exception $e) {
+        echo "FAIL: $method threw on exactly-256MB input: ", $e->getMessage(), "\n";
+    }
+}
+unset($exact, $e);
+
 $under = str_repeat("word ", intdiv($mb, 5)); // ~1 MB of plain text
 $html = $parser->toHtml($under);
 echo "1 MB input renders: ", (str_starts_with($html, "<p>word ") ? "ok" : "FAIL"), "\n";
@@ -52,4 +68,9 @@ OK: toHtml threw MdParser\Exception with size message
 OK: toInlineHtml threw MdParser\Exception with size message
 OK: toXml threw MdParser\Exception with size message
 OK: toAst threw MdParser\Exception with size message
+built boundary input: 268435456 bytes
+OK: toHtml accepted exactly-256MB input
+OK: toInlineHtml accepted exactly-256MB input
+OK: toXml accepted exactly-256MB input
+OK: toAst accepted exactly-256MB input
 1 MB input renders: ok

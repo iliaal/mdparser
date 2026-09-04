@@ -64,21 +64,80 @@ static void *oom_realloc(void *ptr, size_t size)
 #undef realloc
 #undef malloc
 
+/* Callback-layer failure discipline (md-cr-008). The extension renders
+ * through md4c callbacks that append into growable output buffers; a refused
+ * allocation there must discard partial state and abort the parse with a
+ * distinct failure instead of returning 0. This harness mimics that contract
+ * with one growable byte buffer fed by every callback through the
+ * fault-injecting allocator, so the fail_at sweep covers callback
+ * allocations as well as md4c-core ones. */
+#define HARNESS_BAILOUT (-2)  /* callback-abort sentinel; core OOM is -1 */
+
+static char *h_buf = NULL;
+static size_t h_len = 0;
+static size_t h_cap = 0;
+static int h_cb_refused = 0;
+
+static void h_discard(void)
+{
+    free(h_buf);
+    h_buf = NULL;
+    h_len = 0;
+    h_cap = 0;
+}
+
+static int h_append(const char *p, size_t n)
+{
+    if (n == 0) {
+        return 0;
+    }
+    if (h_len + n + 1 > h_cap) {
+        size_t ncap = h_cap ? h_cap * 2 : 64;
+        char *nb;
+        while (ncap < h_len + n + 1) {
+            ncap *= 2;
+        }
+        nb = (char *) oom_realloc(h_buf, ncap);
+        if (nb == NULL) {
+            /* Simulated bailout path: drop all partial state so the leak
+             * check sees a clean heap, and report the refusal distinctly. */
+            h_discard();
+            h_cb_refused = 1;
+            return -1;
+        }
+        h_buf = nb;
+        h_cap = ncap;
+    }
+    memcpy(h_buf + h_len, p, n);
+    h_len += n;
+    h_buf[h_len] = '\0';
+    return 0;
+}
+
 static int on_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     (void) type; (void) detail; (void) userdata;
+    if (h_append("B", 1) != 0) {
+        return HARNESS_BAILOUT;
+    }
     return 0;
 }
 
 static int on_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     (void) type; (void) detail; (void) userdata;
+    if (h_append("S", 1) != 0) {
+        return HARNESS_BAILOUT;
+    }
     return 0;
 }
 
 static int on_text(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, void *userdata)
 {
-    (void) type; (void) text; (void) size; (void) userdata;
+    (void) type; (void) userdata;
+    if (h_append(text, size) != 0) {
+        return HARNESS_BAILOUT;
+    }
     return 0;
 }
 
@@ -120,19 +179,35 @@ int main(int argc, char **argv)
     oom_fail_at = atol(argv[2]);
     oom_counter = 0;
     oom_fired = 0;
+    h_buf = NULL;
+    h_len = 0;
+    h_cap = 0;
+    h_cb_refused = 0;
     /* Sequenced deliberately: oom_counter must be read after md_parse() runs,
      * which an argument list would not guarantee. */
     ret = md_parse(doc, (MD_SIZE) len, &parser, NULL);
-    printf("fail_at=%ld ret=%d allocs=%ld fired=%d\n",
-        oom_fail_at, ret, oom_counter, oom_fired);
+    printf("fail_at=%ld ret=%d allocs=%ld fired=%d cb=%d\n",
+        oom_fail_at, ret, oom_counter, oom_fired, h_cb_refused);
     free(doc);
+    free(h_buf);
+    h_buf = NULL;
 
     /* Sanitizers cover memory safety. This covers the other half of the
      * contract: once an allocation has been refused, md_parse() must report
      * failure rather than hand back a document rendered from partial state. */
-    if (oom_fired && ret == 0) {
+    if ((oom_fired || h_cb_refused) && ret == 0) {
         fprintf(stderr, "refused allocation %ld but md_parse() returned 0\n",
             oom_fail_at);
+        return 1;
+    }
+    /* The callback bailout path must surface distinctly: md_parse() returns
+     * the aborting callback's value, so a refused callback allocation must
+     * come back as HARNESS_BAILOUT, never as core OOM (-1) or success (0).
+     * The discard ran inside h_append; the frees above plus the ASan leak
+     * check prove it released everything. */
+    if (h_cb_refused && ret != HARNESS_BAILOUT) {
+        fprintf(stderr, "callback allocation refused at %ld but md_parse() returned %d, want %d\n",
+            oom_fail_at, ret, HARNESS_BAILOUT);
         return 1;
     }
     return 0;

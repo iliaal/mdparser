@@ -15,7 +15,7 @@ bin="$tmp/oom_sweep"
 
 trap 'rm -rf "$tmp"' EXIT
 
-"$cc" -g -O0 -fsanitize=address -I "$vendor" \
+"$cc" -g -O0 -fsanitize=address,undefined -I "$vendor" \
     -o "$bin" "$here/oom_sweep.c" "$vendor/entity.c" || exit 2
 
 status=0
