@@ -64,25 +64,39 @@ void mdparser_md4c_append_cp(smart_str *out, unsigned cp)
     smart_str_appendl(out, (char *)u, size);
 }
 
+int mdparser_md4c_decode_entity_cps(const char *text, MD_SIZE size, unsigned cps[2])
+{
+    if (size > 3 && text[1] == '#') {
+        unsigned cp = 0;
+        if (text[2] == 'x' || text[2] == 'X') {
+            for (MD_SIZE k = 3; k < size - 1; k++) cp = 16 * cp + mdu_hex_val(text[k]);
+        } else {
+            for (MD_SIZE k = 2; k < size - 1; k++) cp = 10 * cp + (unsigned)(text[k] - '0');
+        }
+        cps[0] = cp;
+        return 1;
+    }
+    const ENTITY *e = entity_lookup(text, size);
+    if (e == NULL) {
+        return 0;
+    }
+    cps[0] = e->codepoints[0];
+    if (e->codepoints[1]) {
+        cps[1] = e->codepoints[1];
+        return 2;
+    }
+    return 1;
+}
+
 void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size)
 {
-    unsigned cps[2] = {0, 0};
-    if (size > 3 && text[1] == '#') {
-        if (text[2] == 'x' || text[2] == 'X')
-            for (MD_SIZE k = 3; k < size - 1; k++) cps[0] = 16 * cps[0] + mdu_hex_val(text[k]);
-        else
-            for (MD_SIZE k = 2; k < size - 1; k++) cps[0] = 10 * cps[0] + (text[k] - '0');
-    } else {
-        const ENTITY *e = entity_lookup(text, size);
-        if (e == NULL) {
-            smart_str_appendl(out, text, size);
-            return;
-        }
-        cps[0] = e->codepoints[0];
-        cps[1] = e->codepoints[1];
+    unsigned cps[2];
+    int n = mdparser_md4c_decode_entity_cps(text, size, cps);
+    if (n == 0) {
+        smart_str_appendl(out, text, size);
+        return;
     }
-    for (int k = 0; k < 2; k++) {
-        if (k == 1 && cps[k] == 0) break;
+    for (int k = 0; k < n; k++) {
         mdparser_md4c_append_cp(out, cps[k]);
     }
 }

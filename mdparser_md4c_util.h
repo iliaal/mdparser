@@ -36,6 +36,17 @@ void mdparser_md4c_append_cp(smart_str *out, unsigned cp);
  * own output context. */
 void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size);
 
+/* Single entity-dispatch primitive behind the decode family. Stores up to
+ * two codepoints in `cps` and returns how many (1 or 2); returns 0 for
+ * unknown entities, whose raw text the caller passes through for its own
+ * output context. Raw sinks (AST/XML/attrs) feed the codepoints to
+ * mdparser_md4c_append_cp via mdparser_md4c_decode_entity; the HTML sink
+ * feeds them to its escaping appender instead (a decoded `&amp;` must
+ * re-escape, never emit a bare `&`), and additionally returns the last
+ * codepoint to seed SmartyPants quote context -- so the dispatch is shared
+ * but each sink keeps its own policy function. */
+int mdparser_md4c_decode_entity_cps(const char *text, MD_SIZE size, unsigned cps[2]);
+
 /* validateUtf8 pre-pass shared by every md4c render path (HTML/XML/AST).
  * md4c never validates UTF-8; this restores the U+FFFD substitution for
  * invalid sequences. If `src` is already clean, returns `src` and sets
@@ -57,6 +68,26 @@ typedef struct {
 void mdparser_md4c_attr_view_init(mdparser_md4c_attr_view *view,
     const MD_ATTRIBUTE *attr);
 void mdparser_md4c_attr_view_destroy(mdparser_md4c_attr_view *view);
+
+/* Length of the leading run of bytes needing no escaping: the unrolled
+ * 4-wide scan shared by the HTML and XML escapers. `map` marks attention
+ * bytes (nonzero & `mask`); the caller handles the first flagged byte with
+ * its own output-context policy (HTML entities vs XML+C0 rules). */
+static inline size_t mdparser_md4c_scan_plain(const unsigned char *map,
+    unsigned char mask, const char *s, size_t n)
+{
+    size_t off = 0;
+    while (off + 3 < n && !(map[(unsigned char)s[off]] & mask)
+        && !(map[(unsigned char)s[off + 1]] & mask)
+        && !(map[(unsigned char)s[off + 2]] & mask)
+        && !(map[(unsigned char)s[off + 3]] & mask)) {
+        off += 4;
+    }
+    while (off < n && !(map[(unsigned char)s[off]] & mask)) {
+        off++;
+    }
+    return off;
+}
 
 /* Skip a single leading UTF-8 BOM (EF BB BF) on the (src,len) pair in place.
  * md4c does not strip a BOM: left in, it leaks into output verbatim and also

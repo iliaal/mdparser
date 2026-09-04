@@ -252,15 +252,11 @@ PHP_METHOD(MdParser_Parser, toAst)
         obj->md4c_pflags, (obj->md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0);
 }
 
-/* Parsedown::line() semantics: render `source` as inline-only HTML
- * without the `<p>` wrapper, and suppress all block-level constructs
- * so `# h` / `- a` / `> q` / `1. x` render as literal text.
- *
- * md4c does not expose an inline-only parse mode. Block parsing
- * is line-oriented and triggers off the first byte of every physical
- * line, so a single sentinel before the source only protects the first
- * line. We instead build a normalized buffer where every line starts
- * with an ordinary punctuation sentinel (`;`):
+/* md-cr-032 decision ACCEPT (keep copies): measured one-liner inline p50 5.6-7.8us vs toHtml 5.3-6.0us (delta 0.3-1.8us, flips between runs; run-to-run swing ~28% dwarfs signal), small-corpus inline p50 ~8.1us vs html ~8.6-9.0us (inline faster); >=5% bar not cleared, no offset-view rewrite. The normalize copy below and the <p>-strip memmove in toInlineHtml stay. */
+/* Build the normalized inline buffer: every retained physical line starts
+ * with an ordinary punctuation sentinel (`;`), so md4c sees a single
+ * paragraph whose every line begins with punctuation and block-level
+ * constructs cannot fire on any line.
  *
  *   - \r\n and lone \r are normalized to \n (md4c normalizes too,
  *     but doing it here lets us know exactly where line breaks are);
@@ -269,28 +265,17 @@ PHP_METHOD(MdParser_Parser, toAst)
  *   - leading, trailing, and whitespace-only physical lines are dropped;
  *   - `;` is prepended at the start, and after every retained \n.
  *
- * md4c sees a single paragraph whose every line begins with punctuation, so
- * ATX headings, list markers, blockquotes, indented code, thematic
- * breaks, fenced code, and HTML blocks cannot fire on any line. Unlike a
- * zero-width-space prefix, punctuation preserves delimiter flanking for
- * line-leading `_`, `~`, and `=` spans. The HTML callback consumes exactly
- * the inserted sentinel at each line start; literal source bytes are not
- * searched or removed afterward.
- */
-PHP_METHOD(MdParser_Parser, toInlineHtml)
+ * Unlike a zero-width-space prefix, punctuation preserves delimiter flanking
+ * for line-leading `_`, `~`, and `=` spans. The HTML callback consumes
+ * exactly the inserted sentinel at each line start; literal source bytes
+ * are not searched or removed afterward. */
+static void mdparser_inline_normalize(smart_str *norm, const char *src, size_t src_len)
 {
-    zend_string *source;
-
-    ZEND_PARSE_PARAMETERS_START(1, 1)
-        Z_PARAM_STR(source)
-    ZEND_PARSE_PARAMETERS_END();
-
-    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
-        RETURN_THROWS();
-    }
-
-    mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
-
+    /* A leading BOM is content-free: drop it here, not at the call site.
+     * render_html owns the BOM skip for the plain paths, but the inline
+     * path normalizes first and its sentinel prefix would hide a BOM from
+     * that skip, leaking it into output verbatim. */
+    mdparser_md4c_skip_bom(&src, &src_len);
     static const char sentinel = ';';
 
     /* Build the normalized buffer incrementally with smart_str. The
@@ -302,11 +287,6 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
      * tiny: 40 MB of `\n` would emalloc ~168 MB even though the
      * normalized buffer is empty. smart_str grows on demand, so the
      * peak allocation tracks the actual normalized size. */
-    const char *src = ZSTR_VAL(source);
-    size_t src_len = ZSTR_LEN(source);
-    mdparser_md4c_skip_bom(&src, &src_len);
-    smart_str norm = {0};
-
     /* Single-line fast path: with no line break the per-line
      * normalization reduces to one leading sentinel, so the normalized
      * buffer is exactly sentinel+input -- or empty when the line is all blanks
@@ -318,8 +298,8 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         size_t s = 0;
         while (s < src_len && (src[s] == ' ' || src[s] == '\t')) s++;
         if (s < src_len) {
-            smart_str_appendc(&norm, sentinel);
-            smart_str_appendl(&norm, src, src_len);
+            smart_str_appendc(norm, sentinel);
+            smart_str_appendl(norm, src, src_len);
         }
     }
 
@@ -342,7 +322,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
                 /* leading newline, or run of newlines; drop. */
                 continue;
             }
-            smart_str_appendc(&norm, '\n');
+            smart_str_appendc(norm, '\n');
             need_sentinel = true;
             continue;
         }
@@ -355,9 +335,9 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
             continue;
         }
         if (need_sentinel) {
-            smart_str_appendc(&norm, sentinel);
+            smart_str_appendc(norm, sentinel);
             if (pending_indent_len != 0) {
-                smart_str_appendl(&norm, src + pending_indent_start, pending_indent_len);
+                smart_str_appendl(norm, src + pending_indent_start, pending_indent_len);
                 pending_indent_len = 0;
             }
             need_sentinel = false;
@@ -367,12 +347,35 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         while (run < src_len && src[run] != '\n' && src[run] != '\r') {
             run++;
         }
-        smart_str_appendl(&norm, src + i, run - i);
+        smart_str_appendl(norm, src + i, run - i);
         i = run;
     }
     /* If the input ended on a \n, norm already has no trailing newline
      * (we deferred the sentinel for a non-existent next line). */
+}
 
+PHP_METHOD(MdParser_Parser, toInlineHtml)
+{
+    zend_string *source;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_STR(source)
+    ZEND_PARSE_PARAMETERS_END();
+
+    if (!mdparser_check_input_size(ZSTR_LEN(source))) {
+        RETURN_THROWS();
+    }
+
+    mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
+
+    /* Normalize: one sentinel-prefixed paragraph (Parsedown::line()
+     * semantics -- block markers can't fire on any line). */
+    const char *src = ZSTR_VAL(source);
+    size_t src_len = ZSTR_LEN(source);
+    smart_str norm = {0};
+    mdparser_inline_normalize(&norm, src, src_len);
+
+    /* Render. */
     const char *buf = norm.s ? ZSTR_VAL(norm.s) : "";
     size_t buf_len = norm.s ? ZSTR_LEN(norm.s) : 0;
 
@@ -392,6 +395,7 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     }
     const char *rendered = ZSTR_VAL(rendered_zs);
 
+    /* Strip the <p> wrapper. */
     size_t out_len = ZSTR_LEN(rendered_zs);
     static const char prefix[] = "<p>";
     static const size_t prefix_len = sizeof(prefix) - 1;

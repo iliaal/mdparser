@@ -21,7 +21,7 @@ if (PHP_MDPARSER != "no") {
 
     var wrapper_sources = "mdparser.c mdparser_parser.c mdparser_options.c " +
         "mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c " +
-        "mdparser_md4c_xml.c mdparser_md4c_util.c mdparser_md4c_vendor.c";
+        "mdparser_md4c_xml.c mdparser_md4c_util.c mdparser_md4c_vendor.c mdparser_md4c_slug.c";
 
     EXTENSION("mdparser", wrapper_sources);
     ADD_SOURCES(configure_module_dirname + "\\" + md4c_src_dir, md4c_sources, "mdparser");

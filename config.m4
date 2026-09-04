@@ -23,7 +23,7 @@ if test "$PHP_MDPARSER" != "no"; then
   MD4C_SOURCES="\
     $MD4C_SRC_DIR/entity.c"
 
-  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c mdparser_md4c_xml.c mdparser_md4c_util.c mdparser_md4c_vendor.c"
+  WRAPPER_SOURCES="mdparser.c mdparser_parser.c mdparser_options.c mdparser_exception.c mdparser_md4c_html.c mdparser_md4c_ast.c mdparser_md4c_xml.c mdparser_md4c_util.c mdparser_md4c_vendor.c mdparser_md4c_slug.c"
 
   dnl -Wall -Wextra are on by default so wrapper regressions get caught in
   dnl every local build; --enable-mdparser-dev upgrades warnings to -Werror.

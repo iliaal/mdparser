@@ -51,6 +51,11 @@ final readonly class Options
     public bool $insert;
     public bool $preserveBlankLines;
 
+    /**
+     * Inert but accepted for compatibility (no effect): $sourcepos,
+     * $githubPreLang, $liberalHtmlTag, $strikethroughDoubleTilde,
+     * $tablePreferStyleAttributes, $fullInfoString.
+     */
     public function __construct(
         bool $sourcepos = false,
         bool $hardbreaks = false,
