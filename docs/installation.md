@@ -20,11 +20,10 @@ No external libraries are required. md4c is bundled under
 pie install iliaal/mdparser
 ```
 
-PIE resolves the package via the canonical `composer.json` at the repo
-root (which declares `type: "php-ext"` and the `configure-options`
-schema), downloads the source from the matching GitHub release, and
-handles the configure + build + install cycle plus writing the INI
-fragment automatically. You'll see output like:
+PIE resolves the package through the root `composer.json` (`type:
+"php-ext"` plus the `configure-options` schema), downloads the source
+from the matching GitHub release, builds and installs it, and writes the
+INI fragment. The output looks like this:
 
 ```
 🥧 PHP Installer for Extensions (PIE) 1.4.0, from The PHP Foundation
@@ -52,16 +51,14 @@ On macOS:
 brew install bison libtool
 ```
 
-The PHP image `php:8.x-cli` from Docker Hub does not ship with these
-pre-installed. `scripts/pie-smoke.sh` in this repo installs them for
-you before running PIE and is the reference end-to-end verification
-harness.
+The Docker Hub `php:8.x-cli` image doesn't include them.
+`scripts/pie-smoke.sh` installs them before running PIE and serves as
+the end-to-end install check.
 
 ### Before the first stable tag is indexed
 
-If you install mdparser immediately after a new release tag is
-pushed, Packagist may not have crawled the tag yet. In that window
-`pie install iliaal/mdparser` will fail with "Unable to find an
+Right after a release tag is pushed, Packagist may not have crawled it
+yet, and `pie install iliaal/mdparser` fails with "Unable to find an
 installable package ... with minimum stability stable". You can
 either:
 
@@ -96,21 +93,21 @@ echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
 
 ## Configure options
 
-- `--enable-mdparser` — required, builds the extension.
-- `--enable-mdparser-dev` — optional, treats wrapper compiler warnings as
-  errors and enables stricter prototype checks. Use during development;
-  don't use for release builds.
+- `--enable-mdparser`: required, builds the extension.
+- `--enable-mdparser-dev`: optional, treats wrapper compiler warnings as
+  errors and enables stricter prototype checks. Use it for development,
+  not release builds.
 
 ## Platform notes
 
 ### Linux
 
-Build cleanly with GCC 11+ or Clang 14+. No known platform issues.
+Builds cleanly with GCC 11+ or Clang 14+.
 
 ### macOS
 
 Xcode command-line tools provide `cc` and `make`. `brew install php`
-ships a compatible `phpize`. Intel and Apple Silicon both supported.
+ships a compatible `phpize`. Intel and Apple Silicon are both supported.
 
 ### Windows
 
@@ -118,7 +115,7 @@ The Windows build uses `config.w32` and the `php/php-windows-builder`
 GitHub Action (see `.github/workflows/windows.yml`). Prebuilt DLLs are
 attached to GitHub releases for PHP 8.2-8.5, TS and NTS, x64 and x86.
 
-If you're building Windows from source manually:
+To build on Windows from source:
 
 ```
 phpize
@@ -156,6 +153,6 @@ After building:
 make test
 ```
 
-The test suite includes a CommonMark 0.31 spec conformance check that
-runs every example from `spec.txt` and pins md4c's result. See
+The suite includes a CommonMark 0.31 conformance check that runs every
+example from `spec.txt` and pins md4c's result. See
 `docs/spec-coverage.md` for the current baseline.

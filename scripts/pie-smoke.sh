@@ -17,7 +17,7 @@ apt-get update -qq >/dev/null
 # phpize expects: git (PIE clones source via git clone, not a tarball),
 # bison and libtoolize (PIE's build-tools check insists on both even
 # though phpize itself doesn't), ca-certificates (for the HTTPS clone
-# from github), and `unzip` — composer shells out to /usr/bin/unzip
+# from github), and `unzip`: composer shells out to /usr/bin/unzip
 # when extracting the prebuilt-binary zip PIE sets via setDistUrl().
 # If unzip is missing, composer silently falls back to PHP's ZipArchive
 # which lays out the file at a path PIE's prePackagedBinary check

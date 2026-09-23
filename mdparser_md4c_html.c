@@ -104,11 +104,9 @@ void mdparser_md4c_html_minit(void)
     }
 }
 
-/* Conditional newline: append '\n' only if the current buffer is non-empty
- * and does not already end in one. This is the CommonMark reference
- * renderer's `cr()` -- emitting it before every block-element open
- * reproduces its exact inter-block whitespace (e.g. `<li>\n<pre>` when a
- * block follows a bare `<li>`). */
+/* Conditional newline: append '\n' only if the buffer is non-empty and
+ * doesn't already end in one. Mirrors the CommonMark reference renderer's
+ * `cr()`, which reproduces its inter-block whitespace (`<li>\n<pre>`). */
 static void out_cr(mdm_ctx *r)
 {
     zend_string *s = r->cur->s;
@@ -208,12 +206,9 @@ static void mdm_append_codepoint_escaped(mdm_ctx *r, unsigned cp)
         out_append(r, repl, sizeof(repl));
 }
 
-/* Render an entity reference (text like "&amp;" / "&#x41;") as its UTF-8
- * codepoint(s) with HTML-escaping, or escaped-verbatim if unknown. Always
- * HTML-safe output. Dispatches through the shared decode_entity_cps
- * primitive; only the per-codepoint policy (escape, never raw append --
- * a decoded `&amp;` must re-escape) and the last-codepoint return for
- * SmartyPants quote context stay local. */
+/* Render an entity reference ("&amp;", "&#x41;") as its UTF-8 codepoint(s),
+ * HTML-escaped, or escaped verbatim if unknown. Returns the last codepoint
+ * for SmartyPants quote context. */
 static unsigned render_entity(mdm_ctx *r, const char *text, size_t size)
 {
     unsigned cps[2];
@@ -537,9 +532,8 @@ static void render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_co
 }
 
 /* Render an MD_ATTRIBUTE (code-fence lang, link/image title) HTML-escaped:
- * NORMAL substrings are HTML-escaped, entities decoded-then-re-escaped, null
- * chars replaced. URLs do NOT go through here -- they route through
- * render_url_value, which runs the scheme filter and percent-escapes. */
+ * entities are decoded then re-escaped, NULs replaced. URLs go through
+ * render_url_value instead, which runs the scheme filter. */
 static void render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
 {
     for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
@@ -606,8 +600,7 @@ static void render_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
     }
     bool fragment = frag_i < href.size && href.text[frag_i] == '#';
 
-    /* rel before href to match the prior (postprocess-injected) attribute
-     * order, keeping output stable for nofollow callers. */
+    /* rel before href: nofollow output keeps this attribute order. */
     OUT_LIT(r, "<a");
     if ((r->render_opts & MDPARSER_RF_NOFOLLOW) && !fragment)
         OUT_LIT(r, " rel=\"nofollow noopener noreferrer\"");
@@ -632,10 +625,8 @@ static void render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
     OUT_LIT(r, "\">");
 }
 
-/* Wiki-link target is URL-like, so route it through the same decode ->
- * scheme-filter -> percent-escape path as a normal <a href>. Without this,
- * [[javascript:alert(1)]] would emit a live javascript: link. nofollow and
- * the fragment exception follow the same rule as render_a_open. */
+/* Wiki-link targets take the same decode -> scheme-filter -> percent-escape
+ * path as <a href>, so [[javascript:alert(1)]] can't emit a live link. */
 static void render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
 {
     render_link_open(r, &d->target, "wikilink");
@@ -676,9 +667,6 @@ static void render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DETAIL 
 static int render_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
-    /* The CommonMark reference renderer emits a conditional newline before
-     * every block open; doing the same reproduces its inter-block whitespace
-     * (notably `<li>\n<block>`). */
     out_cr(r);
     /* A new block starts a fresh SmartyPants quote context; otherwise the
      * previous block's trailing character bleeds in and a leading quote
@@ -747,7 +735,6 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_BLANK: break;
         case MD_BLOCK_H:
             if (r->in_heading) {
-                /* Compute the slug, emit the full heading to the main buffer. */
                 r->in_heading = false;
                 r->cur = &r->main;
                 char *base = mdm_slugify(
@@ -755,10 +742,6 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                     r->heading_text.s ? ZSTR_LEN(r->heading_text.s) : 0);
                 char *slug = mdm_slug_unique(&r->slugs, base);
                 smart_str_free(&r->heading_text);
-                /* strlen, not snprintf's return value: a truncating snprintf
-                 * returns the would-be length, and (size_t)w would then
-                 * over-read past the buffer. md4c caps the level at 6 so no
-                 * truncation happens, but strlen is over-read-proof regardless. */
                 if (slug[0] != '\0') {
                     char open[16];
                     snprintf(open, sizeof(open), "<h%d id=\"", r->heading_level);
@@ -773,9 +756,8 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 efree(slug);
                 if (r->heading_html.s)
                     out_append(r, ZSTR_VAL(r->heading_html.s), ZSTR_LEN(r->heading_html.s));
-                /* Drop the side buffer now that main holds the body; keeps
-                 * peak ≈ main rather than main + last heading until the next
-                 * heading or render teardown. */
+                /* Free now so peak memory stays at main, not main + the
+                 * last heading. */
                 smart_str_free(&r->heading_html);
                 char close[8];
                 snprintf(close, sizeof(close), "</h%d>\n", r->heading_level);

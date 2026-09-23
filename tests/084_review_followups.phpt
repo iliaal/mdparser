@@ -42,7 +42,7 @@ check("toAst('') is bare document node",
 // Stub/runtime defaults agreement: every bool default declared in
 // mdparser.stub.php must equal the runtime constructor default and
 // the live property value on `new Options()`, in both directions.
-// Fully dynamic — the stub file supplies the parameter list, so
+// Fully dynamic: the stub file supplies the parameter list, so
 // adding an option cannot silently desync the three spellings.
 // ---------------------------------------------------------------------
 $stub = file_get_contents(__DIR__ . "/../mdparser.stub.php");

@@ -6,18 +6,18 @@ name: Release Linux & macOS binaries
 # with PIE's pre-packaged-binary naming convention. Each archive is unpacked
 # and loaded before it is uploaded to the release.
 #
-# 8.3 is intentionally absent: PIE's composer-default fallback
+# 8.3 is absent: PIE's composer-default fallback
 # source-builds for any PHP version not covered by a prebuilt, so 8.3
 # users still get an install path; it just requires a build toolchain.
 # Drop the 8.4 lane when 8.4 hits actual EOL.
 #
-# macOS Intel (macos-13) is intentionally absent: GitHub's Intel runner
+# macOS Intel (macos-13) is absent: GitHub's Intel runner
 # pool is too contended to ship reliably (jobs queue 30+ min on busy
 # days, blocking release closeout), and macOS 26 drops Intel support
 # anyway. Intel-Mac users source-build via PIE's composer-default
 # fallback, same path PHP 8.3 users already take.
 #
-# Linux musl (Alpine) is intentionally absent: shivammathur/setup-php
+# Linux musl (Alpine) is absent: shivammathur/setup-php
 # in Alpine containers needs more setup, and Alpine users get install
 # via PIE's composer-default source-build fallback in the meantime.
 #
@@ -27,13 +27,13 @@ name: Release Linux & macOS binaries
 # back to source-build when no asset matches.
 #
 # Third-party actions are pinned to commit SHAs because this job has
-# contents:write -- a moved tag would inherit the release-write token.
+# contents:write, and a moved tag would inherit the release-write token.
 
 on:
   release:
     types: [published]
   # Manual trigger to (re)build and upload prebuilt binaries for an
-  # existing release -- recovery when a lane flaked, or pre-tag build
+  # existing release: recovery when a lane flaked, or pre-tag build
   # validation on a throwaway branch (the build still runs; the upload
   # targets whatever release-tag is given).
   workflow_dispatch:

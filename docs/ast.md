@@ -8,22 +8,19 @@ emitted; an empty container omits the key. When present, `children` holds an
 ordered array of child nodes. Leaf nodes carry type-specific fields such as
 `literal`, `url`, or `level`.
 
-The AST is assembled in C directly from md4c's parser callbacks: as
-md4c emits enter/leave block, enter/leave span, and text events, the
-builder pushes and pops nodes on a zval stack and fills in each node's
-fields as the event arrives. There is no intermediate document tree and
-no string re-parsing, so building the array is roughly as fast as
-`toHtml`. Adjacent normal/entity/NUL text callbacks are coalesced into one
-`text` node so parser callback fragmentation does not multiply PHP array
-overhead.
+The builder assembles the AST in C from md4c's enter/leave block,
+enter/leave span, and text callbacks, pushing and popping nodes on a zval
+stack. With no intermediate tree and no string re-parsing, it runs at
+roughly `toHtml` speed. Adjacent normal, entity, and NUL text callbacks
+coalesce into one `text` node.
 
-> **Security: the AST is unsanitized.** `html_block` / `html_inline`
-> `literal` fields are preserved byte-for-byte. Link / image `url` and
-> `title` fields are **entity-decoded** (so `&amp;` becomes `&`) but are
-> **not** scheme-filtered. `Options::unsafe`, `Options::tagfilter`, and
-> the URL-scheme defenses apply only to the HTML paths (`toHtml` /
-> `toInlineHtml`), NOT to `toAst` or `toXml`. If you build HTML out of
-> the AST yourself, you own the sanitization: apply a URL scheme
+> Security: the AST is unsanitized. `html_block` / `html_inline`
+> `literal` fields are preserved byte-for-byte. Link and image `url` and
+> `title` fields are entity-decoded (so `&amp;` becomes `&`) but not
+> scheme-filtered. `Options::unsafe`, `Options::tagfilter`, and the
+> URL-scheme defenses apply only to the HTML paths (`toHtml` /
+> `toInlineHtml`), not to `toAst` or `toXml`. If you build HTML from
+> the AST, you own the sanitization: apply a URL scheme
 > allowlist (`http`, `https`, `mailto`, `tel`, …) before emitting
 > `href`, and run HTML through a sanitizer before emitting raw
 > `html_block` / `html_inline` literal text.
@@ -51,7 +48,7 @@ overhead.
 
 ### `document`
 
-Root container. Only appears once, at the top level.
+Root container. Appears once, at the top level.
 
 An empty document is `['type' => 'document']`; the `children` key shown below
 appears when the document contains at least one block.
@@ -265,9 +262,9 @@ a regular `item`.
 
 ## Dialect extension node types
 
-md4c supports several non-GFM dialect extensions. Each is off by default
-and surfaces as its own node type only when you enable the matching
-option. None of these are part of CommonMark or GFM.
+md4c supports several dialect extensions outside CommonMark and GFM.
+Each is off by default and surfaces as its own node type only when you
+enable the matching option.
 
 ### `underline`
 
@@ -333,11 +330,10 @@ Appears with `Options(wikiLinks: true)`, for `[[target]]` and
 
 Appear with `Options(footnotes: true)`. Both nodes carry the numeric
 footnote id in `literal`; `footnote_definition` is a block node and
-`footnote_reference` is inline. The AST does **not** emit a wrapping
-`footnote_section` node — definitions are direct children of
-`document` (or their enclosing block). `toXml()` *does* wrap them in
-`<footnote_section>`; treat the two structural formats as dual
-contracts, not isomorphic serializations.
+`footnote_reference` is inline. The AST emits no wrapping
+`footnote_section` node; definitions are direct children of `document`
+(or their enclosing block). `toXml()` does wrap them in
+`<footnote_section>`, so don't assume the two formats map one-to-one.
 
 ```php
 ['type' => 'footnote_reference', 'literal' => '1']
@@ -353,7 +349,7 @@ API compatibility but has no effect on any output path.
 
 ## Walking the tree
 
-For most use cases a simple recursive function does the job:
+A recursive function covers most uses:
 
 ```php
 function walk(array $node, callable $visitor): void {
@@ -380,11 +376,10 @@ walk($ast, function (array $node) use (&$headings) {
 
 See `examples/03-ast-toc.php` for a complete version.
 
-## What's NOT in the AST
+## What's not in the AST
 
-- `custom_block` / `custom_inline` types — md4c has no third-party
-  extension node system, so there are no caller-defined node types and
-  none of these appear in the output.
+- `custom_block` / `custom_inline` types. md4c has no extension node
+  system, so there are no caller-defined node types.
 - Any node type beyond what's documented here. The reachable set is
   fixed: the CommonMark block and inline types, the GFM types (table,
   strikethrough, tasklist), and the md4c dialect extension types above
@@ -392,8 +387,7 @@ See `examples/03-ast-toc.php` for a complete version.
 
 ## Performance
 
-Building the AST is slightly slower than `toHtml` because we allocate
-PHP arrays for every node. On typical GitHub-comment-sized documents
-(~1-5 KB), the overhead is negligible (tens of microseconds). For very
-large documents (100+ KB) consider using `toHtml` directly if you don't
-need to walk the tree.
+Building the AST is slightly slower than `toHtml` because every node is
+a PHP array. On GitHub-comment-sized documents (~1-5 KB) the overhead is
+tens of microseconds. For large documents (100+ KB), use `toHtml` if you
+don't need to walk the tree.

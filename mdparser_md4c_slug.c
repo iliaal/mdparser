@@ -24,7 +24,7 @@
 #include "mdparser_md4c_slug.h"
 
 /* ===================================================================
- * Heading-anchor slug (self-contained; matches mdparser_slugify)
+ * Heading-anchor slug
  * =================================================================== */
 
 char *mdm_slugify(const char *text, size_t len)

@@ -1,24 +1,23 @@
 # Security
 
-mdparser is designed to be safe by default when rendering **untrusted
-input**. The default options strip dangerous URL schemes, escape raw
-HTML, and apply GitHub's tag filter. You can opt out of each layer
-individually, but the defaults assume you're rendering user content.
+mdparser's defaults are safe for rendering untrusted input: they strip
+dangerous URL schemes, escape raw HTML, and apply GitHub's tag filter.
+You can opt out of each layer individually.
 
 ## Threat model
 
-The primary threat is **XSS via user-authored markdown**: an attacker
-submits markdown that, when rendered, produces HTML executing
-JavaScript in other users' browsers. The typical attack vectors are:
+The primary threat is XSS via user-authored markdown: an attacker
+submits markdown that renders to HTML executing JavaScript in other
+users' browsers. The typical attack vectors are:
 
-1. `[text](javascript:alert(1))` — dangerous URL scheme in a link
-2. `![alt](data:text/html,<script>...</script>)` — dangerous URL in an
+1. `[text](javascript:alert(1))`: dangerous URL scheme in a link
+2. `![alt](data:text/html,<script>...</script>)`: dangerous URL in an
    image
 3. Raw `<script>`, `<iframe>`, `<style>` tags embedded in the markdown
 4. HTML attribute injection via unquoted or partially-quoted URLs
 
-mdparser blocks all four in default mode. The `tests/020_security.phpt`
-suite is the regression gate for these vectors.
+mdparser blocks all four in default mode. `tests/020_security.phpt`
+covers these vectors.
 
 ## Default behavior
 
@@ -50,9 +49,8 @@ echo $p->toHtml('[xss](data:text/html,<b>boom</b>)');
 
 ### Other URL schemes
 
-The filter is a **blocklist, not an allowlist**: every scheme except the
-four dangerous ones above passes through untouched. That includes the
-common safe schemes —
+The filter is a blocklist: every scheme except the four above passes
+through untouched. That includes the common safe schemes:
 
 - `http:`, `https:`
 - `mailto:`, `tel:`
@@ -61,13 +59,13 @@ common safe schemes —
   (`image/svg+xml` is NOT allowed because SVG can execute JavaScript)
 - Relative URLs (no scheme)
 
-— but it also passes through **any other scheme** (`livescript:`,
-`intent://`, custom app schemes, etc.). This matches the CommonMark
-reference renderer: only the schemes that execute script in a current
-browser via `<a href>` / `<img src>` (`javascript:`, `vbscript:`,
-non-image `data:`) are blocked. `file:` is blocked as a local-resource
-guard. If your threat model needs a strict scheme allowlist, enforce it
-on the rendered output downstream — mdparser does not.
+It also passes through any other scheme (`livescript:`, `intent://`,
+custom app schemes, etc.). This matches the CommonMark reference
+renderer: only the schemes that execute script in a current browser via
+`<a href>` / `<img src>` (`javascript:`, `vbscript:`, non-image `data:`)
+are blocked. `file:` is blocked as a local-resource guard. If your threat
+model needs a strict scheme allowlist, enforce it on the rendered output
+downstream.
 
 ```php
 echo $p->toHtml('[docs](https://example.com/docs)');
@@ -81,8 +79,7 @@ echo $p->toHtml('![logo](data:image/png;base64,iVBORw0KGgo=)');
 
 Any raw HTML block or inline tag is HTML-escaped: `<` becomes `&lt;`,
 `>` becomes `&gt;`, so the markup renders as visible text instead of
-live elements. The content is preserved verbatim (escaped), and no tag
-executes.
+live elements. The content is preserved (escaped), and no tag executes.
 
 ```php
 echo $p->toHtml('<script>alert(1)</script>');
@@ -92,9 +89,9 @@ echo $p->toHtml('before <b>x</b> after');
 // <p>before &lt;b&gt;x&lt;/b&gt; after</p>
 ```
 
-Escaping (rather than stripping) keeps the output faithful to the
-input while neutralizing every tag — there is no parser-quirk gap for a
-crafted tag to slip through.
+Escaping instead of stripping keeps the output faithful to the input
+while neutralizing every tag, leaving no parser-quirk gap for a crafted
+tag.
 
 ## Tag filter (GFM, default-on)
 
@@ -111,8 +108,7 @@ dangerous tags even when raw HTML is otherwise allowed. It covers:
 - `<script>`
 - `<plaintext>`
 
-The filter fires even when `unsafe: true`, so you get defense in depth
-when you've explicitly allowed raw HTML:
+The filter still applies under `unsafe: true`:
 
 ```php
 $p = new Parser(new Options(unsafe: true));
@@ -123,17 +119,15 @@ echo $p->toHtml('<script>alert(1)</script>');
 // &lt;script>alert(1)&lt;/script>         (still escaped by tagfilter)
 ```
 
-To disable the tag filter as well, pass `tagfilter: false` explicitly.
-This is the maximum-permissive configuration and should only be used
-for input you fully control.
+To disable the tag filter too, pass `tagfilter: false`. Use this
+fully permissive configuration only for input you control.
 
 ## Unsafe mode
 
 `Options(unsafe: true)` disables URL and raw-HTML sanitization. Use it
-only for content you trust — your own release notes, internal wiki
-content, markdown from a vetted author, etc. Never pass user input
-through a parser with `unsafe: true` unless you have a separate sanitizer
-downstream.
+only for content you trust, such as your own release notes, internal wiki
+content, or markdown from a vetted author. Don't pass user input through
+a parser with `unsafe: true` unless a separate sanitizer runs downstream.
 
 ```php
 $parser = new Parser(new Options(unsafe: true));
@@ -154,7 +148,7 @@ echo $parser->toHtml('[xss](javascript:alert(1))');
 
 ## Not in scope
 
-mdparser does NOT:
+mdparser doesn't:
 
 - Sanitize allowed HTML attributes (if you pass `unsafe: true` and
   embed `<img onerror="...">`, that passes through). Use a separate
@@ -166,17 +160,15 @@ mdparser does NOT:
   renderer adds it in-stream to the links it generates from the Markdown
   source (inline links, reference links, autolinks), skipping
   fragment-only `#anchor` links (including footnote references and
-  backrefs). Raw `<a href="...">` written directly in the source under
-  `unsafe: true` is raw HTML, not a parsed link, so it is emitted
-  verbatim and is not rewritten — sanitize raw HTML yourself if you allow
-  it. Same-origin allow/deny policy and CSP are still application
-  concerns.
+  backrefs). Raw `<a href="...">` in the source under `unsafe: true` is
+  emitted verbatim; sanitize raw HTML yourself if you allow it.
+  Same-origin policy and CSP remain application concerns.
 - Sanitize `Parser::toAst()` or `Parser::toXml()` output. Both are
   structural views: raw HTML literals (`html_block` / `html_inline`) are
   preserved byte-for-byte, and link/image URLs and titles are
   entity-decoded but otherwise unsanitized (a `javascript:` URL stays a
-  live `javascript:` string — `toXml` only XML-escapes it for
-  well-formedness, it does not scheme-filter). The rendering-side defenses
+  live `javascript:` string; `toXml` only XML-escapes it for
+  well-formedness). The rendering-side defenses
   (`unsafe`, `tagfilter`, scheme stripping) apply only to `toHtml` /
   `toInlineHtml`. Apply your own URL-scheme allowlist and HTML
   sanitization before emitting HTML built from the AST or XML. See
@@ -187,7 +179,7 @@ mdparser does NOT:
 
 ## Reporting security issues
 
-If you find an XSS or similar security bug, please open a private
+If you find an XSS or similar security bug, open a private
 security advisory on GitHub at `iliaal/mdparser` rather than a public
 issue. Include:
 

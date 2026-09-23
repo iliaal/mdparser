@@ -68,9 +68,8 @@ Before filing, try to reproduce against the latest `master` branch.
   "Update baz".
 - Body wraps at 72 columns, explains **why** not **what**.
 - No `Co-Authored-By` lines. No AI attribution.
-- Audit the message against `git show --stat HEAD` before pushing —
-  if the subject claims a fix is in X file, the diff had better show
-  X.
+- Check the message against `git show --stat HEAD` before pushing:
+  if the subject claims a fix in file X, the diff must touch X.
 
 ### Test guidelines
 
@@ -100,7 +99,7 @@ Before filing, try to reproduce against the latest `master` branch.
   from `mdparser.stub.php` by `php $PHP_SRC/build/gen_stub.php`).
   Do not hand-edit `mdparser_arginfo.h`.
 - Memory: use PHP's `emalloc`/`efree` in the wrapper code at the Zend
-  boundary. md4c uses libc `malloc`/`free` internally — don't route
+  boundary. md4c uses libc `malloc`/`free` internally; don't route
   md4c-internal allocation through Zend MM, and don't mix the two.
 - In `zend_try` / `catch` blocks, don't duplicate cleanup in the
   catch arm; set a `bool bailout` flag, fall through to the shared
@@ -109,13 +108,10 @@ Before filing, try to reproduce against the latest `master` branch.
 ### Vendored md4c
 
 `vendor/md4c/` is a mostly clean upstream copy of md4c. Its local
-modifications — the NUL-replacement fix, five out-of-memory error-path
-fixes, and the `MD_PARSER_BAILOUT_GUARD` embedding hook — are inventoried
-in `vendor/VENDOR.md`, which is the authority on what is local versus
-upstream. (The old code-span whitespace patch dropped out in the
-2026-07-27 refresh once upstream `10e96ad4` carried the fix.) Do not add
-cherry-picks or hand-edited build shims. md4c targets CommonMark 0.31
-natively, so there's no spec gap to bridge in the vendored sources.
+modifications (the NUL-replacement fix, five out-of-memory error-path
+fixes, and the `MD_PARSER_BAILOUT_GUARD` embedding hook) are listed in
+`vendor/VENDOR.md`, the authority on what is local versus upstream. Do
+not add cherry-picks or hand-edited build shims.
 
 Refreshing md4c is a drop-in file swap:
 
@@ -146,9 +142,8 @@ For maintainers cutting a new version:
    scripts/check_version.sh
    ```
 
-   This verifies `PHP_MDPARSER_VERSION` in `php_mdparser.h` matches
-   the top section of `CHANGELOG.md` and that the version is a
-   valid SemVer 2.0.0 string.
+   It checks that `PHP_MDPARSER_VERSION` matches the top section of
+   `CHANGELOG.md` and is valid SemVer 2.0.0.
 
 3. Commit + push to master. CI (Tests + Windows Build) must be
    green on the resulting commit before tagging.
@@ -176,20 +171,17 @@ For maintainers cutting a new version:
    lane needs recovery, dispatch `release-linux.yml` manually with the same
    tag; the workflow verifies that it checked out the tag commit before it
    builds.
-7. Packagist's GitHub webhook (configured on the repo) fires on
-   the tag push and re-scans versions. `pie install
-   iliaal/mdparser` resolves to the new tag within a minute or
-   two. If Packagist hasn't indexed the tag yet, users can fall
-   back to `pie install iliaal/mdparser:@dev` or hit the
-   `api/update-package` endpoint with your Packagist API token
-   to force a re-crawl. See
-   `~/ai/wiki/tools/packagist-quirks.md` for the full list of
-   Packagist indexing gotchas.
-8. Before the first tag of any new release cycle, double-check
-   that `composer.json` exists in the tree at HEAD (`git ls-tree
-   HEAD | grep composer.json`). Packagist silently skips tags
-   whose commit doesn't contain `composer.json` at the root —
-   mdparser's 0.1.0 release hit this trap.
+7. Packagist's GitHub webhook fires on the tag push, and
+   `pie install iliaal/mdparser` resolves to the new tag within a
+   minute or two. If Packagist hasn't indexed the tag yet, users can
+   fall back to `pie install iliaal/mdparser:@dev`, or you can force a
+   re-crawl through the `api/update-package` endpoint with your
+   Packagist API token. See `~/ai/wiki/tools/packagist-quirks.md` for
+   other Packagist indexing issues.
+8. Before the first tag of a new release cycle, confirm that
+   `composer.json` exists at HEAD (`git ls-tree HEAD | grep
+   composer.json`). Packagist silently skips tags whose commit lacks a
+   root `composer.json`, as happened with 0.1.0.
 
 ### License
 

@@ -31,13 +31,10 @@ int mdparser_default_md4c_ropts = 0;
 /* Each Options property maps to an md4c parser flag (MD_FLAG_*), a renderer
  * behavior bit (MDPARSER_RF_*), or neither (accepted-but-inert legacy options).
  *
- * IMPORTANT: default_value MUST match the constructor default in
- * mdparser.stub.php. ZPP does not auto-apply arginfo defaults to
- * internal methods, so the C-side __construct seeds values[] from this
- * table before ZPP runs. If the two drift, `$opts->tagfilter` will
- * lie about whether tagfilter is actually enabled. The MINIT init
- * step caches the result of walking this table once, so runtime cost
- * is zero. */
+ * default_value MUST match the constructor default in mdparser.stub.php.
+ * ZPP doesn't apply arginfo defaults to internal methods, so __construct
+ * seeds values[] from this table; if the two drift, `$opts->tagfilter`
+ * misreports whether tagfilter is enabled. */
 /* Field indices, used by the preset factories and by __construct to
  * address individual entries in the field table without hard-coding
  * positions. MUST stay in sync with mdparser_options_fields[] below. */
@@ -133,15 +130,11 @@ static const mdparser_options_field mdparser_options_fields[] = {
 #define MDPARSER_OPTIONS_FIELD_COUNT \
     (sizeof(mdparser_options_fields) / sizeof(mdparser_options_fields[0]))
 
-/* If a new option is inserted in either the enum or the field table
- * without updating its sibling, the preset factories silently target
- * the wrong bit. A misaligned MDOPT_UNSAFE would flip the XSS safety
- * default for permissive() / strict() / github(); pin the alignment
- * at compile time.
- *
- * MSVC-cl in default C mode rejects _Static_assert (C11) without
- * /std:c11, and the PHP Windows build harness doesn't pass that flag,
- * so use the portable negative-array-size idiom instead. */
+/* An option added to the enum or the field table but not both makes the
+ * presets target the wrong bit (a misaligned MDOPT_UNSAFE flips the XSS
+ * default), so pin the alignment at compile time. Negative-array idiom
+ * because MSVC rejects _Static_assert without /std:c11, which the PHP
+ * Windows build doesn't pass. */
 typedef char mdparser_options_field_count_assert[
     (MDOPT_COUNT_ == MDPARSER_OPTIONS_FIELD_COUNT) ? 1 : -1];
 /* The ZPP block in MdParser_Options::__construct takes exactly one
@@ -171,14 +164,9 @@ void mdparser_options_init_defaults(void)
     mdparser_default_md4c_ropts = mro;
 }
 
-/* Write the value vector into a freshly-allocated Options object's
- * properties (one bool per MDOPT_* index, sized via
- * MDPARSER_OPTIONS_FIELD_COUNT so additions don't drift this
- * signature). Used by __construct and by the static preset factories.
- * Safe to call only on an object whose properties are still in their
- * post-object_init_ex (IS_UNDEF) state, because readonly enforcement
- * allows first-writes within the declaring class scope but rejects
- * any subsequent assignment. */
+/* Write one bool per MDOPT_* index into a fresh Options object. Call only
+ * while the properties are still IS_UNDEF after object_init_ex: readonly
+ * allows the first write from the declaring scope and rejects later ones. */
 static void mdparser_options_populate_object(zend_object *this_obj,
     const bool values[MDPARSER_OPTIONS_FIELD_COUNT])
 {
@@ -230,15 +218,11 @@ void mdparser_options_read_masks(zval *options_zv, unsigned *md4c_pflags, int *m
         prop = zend_read_property(mdparser_options_ce, obj,
             f->name, f->name_len, 1, &rv);
 
-        /* Options is final + readonly with typed bool properties; the
-         * only way to land here with anything other than IS_TRUE /
-         * IS_FALSE is to skip __construct (e.g. via
-         * ReflectionClass::newInstanceWithoutConstructor). Silent
-         * reads of an uninit typed property return &EG(uninitialized_zval)
-         * (IS_NULL), so an IS_UNDEF check alone would miss this case.
-         * Treating uninit as false would silently flip the safety
-         * defaults (validateUtf8 / tagfilter) off while $parser->options
-         * remains unreadable. Reject the object outright. */
+        /* A non-bool here means __construct was skipped (e.g.
+         * ReflectionClass::newInstanceWithoutConstructor). Silent reads of
+         * an uninitialized typed property return IS_NULL, not IS_UNDEF.
+         * Treating it as false would turn validateUtf8 / tagfilter off, so
+         * reject the object. */
         if (UNEXPECTED(!prop ||
                 (Z_TYPE_P(prop) != IS_TRUE && Z_TYPE_P(prop) != IS_FALSE))) {
             zend_throw_exception_ex(mdparser_exception_ce, 0,
@@ -271,10 +255,8 @@ PHP_METHOD(MdParser_Options, __construct)
 {
     bool values[MDPARSER_OPTIONS_FIELD_COUNT];
 
-    /* Seed with stub defaults; ZPP only overwrites args that were
-     * actually provided by the caller (Z_PARAM_BOOL is a no-op for
-     * missing optional args), so unspecified fields keep their
-     * table-driven default. */
+    /* Z_PARAM_BOOL leaves missing optional args untouched, so seed the
+     * stub defaults first. */
     mdparser_options_seed_defaults(values);
 
     ZEND_PARSE_PARAMETERS_START(0, MDPARSER_OPTIONS_FIELD_COUNT)
@@ -350,9 +332,7 @@ PHP_METHOD(MdParser_Options, permissive)
 
 static void mdparser_options_permissive_mod(bool v[MDPARSER_OPTIONS_FIELD_COUNT])
 {
-    /* Trusted-input mode: raw HTML passes through and tagfilter is off.
-     * Explicitly disables the XSS safety net -- only for markdown the
-     * caller authored themselves. */
+    /* Trusted input only: raw HTML passes through and tagfilter is off. */
     v[MDOPT_UNSAFE] = true;
     v[MDOPT_TAGFILTER] = false;
 }

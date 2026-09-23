@@ -35,9 +35,8 @@ rendered HTML byte-for-byte to the library's expected output, and
 reports a total / match / diverge count plus a pinned baseline of which
 fixtures diverge.
 
-**Divergences are expected and not blocking.** Each of these libraries
-diverges from CommonMark (and from each other) on edge cases. The
-parity counts are pinned so that future changes are visible, not so
-that mdparser must agree with any particular library. If a future
-change moves a parity count in a way we don't understand, that's worth
-investigating — not a test failure to suppress.
+Divergences are expected. Each library departs from CommonMark (and
+from the others) on edge cases. The counts are pinned so changes are
+visible, not so mdparser matches any one library. If a change moves a
+parity count for a reason you can't explain, investigate it instead of
+updating the pin.

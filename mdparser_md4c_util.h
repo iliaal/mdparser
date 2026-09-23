@@ -36,15 +36,10 @@ void mdparser_md4c_append_cp(smart_str *out, unsigned cp);
  * own output context. */
 void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size);
 
-/* Single entity-dispatch primitive behind the decode family. Stores up to
- * two codepoints in `cps` and returns how many (1 or 2); returns 0 for
- * unknown entities, whose raw text the caller passes through for its own
- * output context. Raw sinks (AST/XML/attrs) feed the codepoints to
- * mdparser_md4c_append_cp via mdparser_md4c_decode_entity; the HTML sink
- * feeds them to its escaping appender instead (a decoded `&amp;` must
- * re-escape, never emit a bare `&`), and additionally returns the last
- * codepoint to seed SmartyPants quote context -- so the dispatch is shared
- * but each sink keeps its own policy function. */
+/* Entity dispatch shared by every decoder. Stores up to two codepoints in
+ * `cps` and returns how many (1 or 2), or 0 for unknown entities, whose raw
+ * text the caller passes through. Each sink applies its own output policy:
+ * raw sinks use mdparser_md4c_append_cp, the HTML sink re-escapes. */
 int mdparser_md4c_decode_entity_cps(const char *text, MD_SIZE size, unsigned cps[2]);
 
 /* validateUtf8 pre-pass shared by every md4c render path (HTML/XML/AST).
@@ -89,12 +84,10 @@ static inline size_t mdparser_md4c_scan_plain(const unsigned char *map,
     return off;
 }
 
-/* Skip a single leading UTF-8 BOM (EF BB BF) on the (src,len) pair in place.
- * md4c does not strip a BOM: left in, it leaks into output verbatim and also
- * displaces the first physical line's start, breaking line-leading recognition
- * (ATX headings, list markers, blockquotes, ...). Mirrors md4c-html's
- * MD_HTML_FLAG_SKIP_UTF8_BOM. A BOM is never semantically meaningful in
- * Markdown, so this is unconditional. */
+/* Skip a single leading UTF-8 BOM (EF BB BF) in place. md4c doesn't strip
+ * it, so it would leak into output and hide line-leading syntax on the first
+ * line (ATX headings, list markers, blockquotes). Mirrors md4c-html's
+ * MD_HTML_FLAG_SKIP_UTF8_BOM. */
 static inline void mdparser_md4c_skip_bom(const char **src, size_t *len)
 {
     const unsigned char *p = (const unsigned char *)*src;

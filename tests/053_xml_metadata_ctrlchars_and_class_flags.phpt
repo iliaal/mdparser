@@ -17,7 +17,7 @@ ok("control bytes became U+FFFD", str_contains($xml, "\xEF\xBF\xBD"));
 // tab/newline/CR are legal and must survive (here: a literal tab in code)
 ok("legal whitespace preserved", str_contains($p->toXml("`a\tb`"), "\t"));
 
-// --- CR-001: XML carries tasklist/align/footnote metadata ----------------
+// --- XML carries tasklist/align/footnote metadata ----------------
 $pf = new MdParser\Parser(new MdParser\Options(footnotes: true));
 
 $tl = $pf->toXml("- [x] a\n- [ ] b\n");
@@ -36,7 +36,7 @@ ok("footnote_definition carries id", str_contains($fn, '<footnote_definition id=
 ok("plain item has no checked attr",
    str_contains($pf->toXml("- plain\n"), '<item>'));
 
-// --- CR-002: readonly/no-dynamic-property classes reject typos ------------
+// --- readonly/no-dynamic-property classes reject typos ------------
 $o = new MdParser\Options();
 try { $o->headingAnchor = true; ok("Options rejects dynamic property", false); }
 catch (\Error $e) { ok("Options rejects dynamic property", str_contains($e->getMessage(), "dynamic property")); }
@@ -45,7 +45,7 @@ $pp = new MdParser\Parser();
 try { $pp->bogus = 1; ok("Parser rejects dynamic property", false); }
 catch (\Error $e) { ok("Parser rejects dynamic property", str_contains($e->getMessage(), "dynamic property")); }
 
-// --- CR-004: __construct re-entry reports the FIRST failed property -------
+// --- __construct re-entry reports the FIRST failed property -------
 $o2 = new MdParser\Options();
 try { $o2->__construct(unsafe: true); ok("re-construct throws", false); }
 catch (\Error $e) {

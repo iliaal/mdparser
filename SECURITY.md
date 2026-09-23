@@ -1,7 +1,6 @@
 # Security policy
 
-mdparser is designed to render untrusted Markdown input safely by
-default. See `docs/security.md` for the full threat model, allowed
+mdparser renders untrusted Markdown safely by default. See `docs/security.md` for the full threat model, allowed
 URL schemes, and tag-filter behavior.
 
 ## Supported versions
@@ -46,9 +45,8 @@ In scope:
 
 Out of scope:
 
-- Behavior when `unsafe: true` and `tagfilter: false` — this
-  configuration explicitly disables sanitization and is only for
-  trusted input.
+- Behavior when `unsafe: true` and `tagfilter: false`. This
+  configuration disables sanitization and is only for trusted input.
 - Attacks requiring write access to the PHP source or extension binary.
 - Third-party applications that use mdparser incorrectly (e.g. pass
   mdparser's output through another unsafe template engine).

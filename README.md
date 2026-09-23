@@ -93,7 +93,7 @@ Against the major pure-PHP Markdown libraries, on PHP 8.4 (clean optimized build
 | 1.8 KB | ~110,000 | ~6,000 (cebe/GitHub) | ~19× |
 | 200 KB | ~980     | ~95 (cebe/GitHub)    | ~10× |
 
-~10-20× faster across the corpora (up to ~45× vs the slowest), from small messages to full 200 KB spec documents. [`bench/README.md`](bench/README.md) is the source of truth: methodology, all parsers, caveats, league/commonmark notes, and how to reproduce. (Always benchmark a clean optimized PHP build; a debug/ASan build inflates these numbers.)
+Against the slowest pure-PHP parser the gap reaches ~45×. [`bench/README.md`](bench/README.md) has the methodology, all parsers, caveats, league/commonmark notes, and reproduction steps. Benchmark a clean optimized PHP build; a debug or ASan build skews the numbers.
 
 ## ✨ Feature matrix
 
@@ -120,11 +120,11 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 
 ## Opt-in dialect extensions
 
-Beyond CommonMark + GFM, md4c ships several dialect extensions, each exposed as an opt-in `Options` flag (all default off, so the standard CommonMark + GFM parse is unaffected): `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`||text||`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), `subscript` (`~text~`), `admonitions` (GitHub-style `> [!NOTE]` alert blocks), `insert` (`++text++` renders `<ins>`), and `preserveBlankLines` (blank-line runs are reported instead of discarded, visible in `toXml()` and `toAst()`). Plus parser-behavior toggles (`noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`). See [`docs/options.md`](docs/options.md) for behavior and edge cases.
+md4c also ships dialect extensions beyond CommonMark + GFM. Each one is an opt-in `Options` flag, off by default: `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`||text||`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), `subscript` (`~text~`), `admonitions` (GitHub-style `> [!NOTE]` alert blocks), `insert` (`++text++` renders `<ins>`), and `preserveBlankLines` (blank-line runs are reported instead of discarded, visible in `toXml()` and `toAst()`). Parser-behavior toggles: `noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`. See [`docs/options.md`](docs/options.md) for behavior and edge cases.
 
 ## What we don't cover
 
-mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It does **not** cover the "Markdown Extra" family of features that Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions offer. If you need any of the following, reach for league/commonmark, the most actively-maintained pure-PHP option for extended Markdown:
+mdparser covers CommonMark core plus the GFM extensions. It doesn't implement the "Markdown Extra" features found in Parsedown Extra, michelf Markdown Extra, and league/commonmark's optional extensions. If you need any of the following, use league/commonmark, the most actively maintained pure-PHP option for extended Markdown:
 
 - Definition lists (`Term :: definition`)
 - Abbreviations (`*[HTML]: ...`)
@@ -139,24 +139,22 @@ mdparser is deliberately scoped to CommonMark core plus the GFM extensions. It d
   alert blocks are supported via `Options::admonitions`, and are on by
   default in `Options::github()`
 
-These are real features. They're just out of scope for a CommonMark+GFM core parser.
-
 ## Bounding parse memory
 
-The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. Markdown amplifies that memory: one `[` byte commits about 72 bytes of parser state, one `>` byte about 40 to 56, which means a few megabytes of hostile input can ask for gigabytes.
+The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. Markdown amplifies that memory: one `[` byte commits about 72 bytes of parser state and one `>` byte about 40 to 56, so a few megabytes of hostile input can ask for gigabytes.
 
-`mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception` rather than letting the process grow. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats `0` or any negative value as unlimited. With the limit off, 256MB of the worst-case byte (~72B per '[') can ask libc for ~18GB; keep a limit for untrusted input in long-lived workers. Raise it if you legitimately render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit` as before.
+`mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception`. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats `0` or any negative value as unlimited. With the limit off, 256MB of the worst-case byte (~72B per '[') can ask libc for ~18GB. Raise the limit if you render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit`.
 
 ## A note on `unsafe: true`
 
-`Options::unsafe = true` tells the renderer to pass raw HTML through verbatim instead of escaping or stripping it. The contract for this mode is that you own the input: it is yours, or it comes from a pipeline you trust. `headingAnchors` and `nofollowLinks` are applied in-stream as md4c parses the source, so they touch only Markdown-derived nodes; raw HTML you write directly is emitted verbatim and is never rewritten:
+`Options::unsafe = true` passes raw HTML through verbatim instead of escaping or stripping it. Use it only for input you own or a pipeline you trust. `headingAnchors` and `nofollowLinks` run in-stream as md4c parses the source, so they touch only Markdown-derived nodes. Raw HTML is emitted verbatim and never rewritten:
 
-- **Heading anchors apply to Markdown headings only.** A `# heading` gets an `id` slug. A raw `<h1>x</h1>` block written directly in the source (possible under `unsafe: true, tagfilter: false`) is raw HTML, not a parsed heading node, so it is emitted untouched and gets no id. A raw heading and a later Markdown heading with the same text do not collide.
-- **`nofollowLinks` applies to Markdown links only.** Inline links, reference links, and autolinks get `rel="nofollow noopener noreferrer"`; in-document fragment anchors (`href="#..."`, including footnote references and backrefs) are skipped. A raw `<a href="...">` written directly in the source is passed through verbatim rather than rewritten. Sanitize raw HTML yourself if you allow it.
+- Heading anchors apply to Markdown headings only. A `# heading` gets an `id` slug. A raw `<h1>x</h1>` block (possible under `unsafe: true, tagfilter: false`) is emitted untouched and gets no id, so it never collides with a later Markdown heading that has the same text.
+- `nofollowLinks` applies to Markdown links only. Inline links, reference links, and autolinks get `rel="nofollow noopener noreferrer"`; in-document fragment anchors (`href="#..."`, including footnote references and backrefs) are skipped. A raw `<a href="...">` passes through verbatim. Sanitize raw HTML yourself if you allow it.
 
 ### Structural outputs are unsanitized
 
-`Parser::toXml()` and `Parser::toAst()` return structural representations of the parsed document. `html_block` / `html_inline` literals are preserved byte-for-byte (XML-escaped in `toXml()`); link / image URLs and titles are **entity-decoded** but **not** scheme-filtered. The `unsafe`, `tagfilter`, and URL-scheme defenses do **not** make these structural outputs safe to transform back into HTML. If you build HTML out of XML or AST data yourself, you own the sanitization: apply a URL scheme allowlist before emitting `href`, and run HTML through a sanitizer before emitting raw `html_block` / `html_inline` literal text. See `docs/ast.md` for examples.
+`Parser::toXml()` and `Parser::toAst()` return structural representations of the parsed document. `html_block` / `html_inline` literals are preserved byte-for-byte (XML-escaped in `toXml()`); link and image URLs and titles are entity-decoded but not scheme-filtered. The `unsafe`, `tagfilter`, and URL-scheme defenses don't make these outputs safe to turn back into HTML. If you build HTML from XML or AST data, apply a URL scheme allowlist before emitting `href`, and run `html_block` / `html_inline` literal text through a sanitizer. See `docs/ast.md` for examples.
 
 ## 🔗 Native PHP extensions
 
@@ -174,7 +172,7 @@ Companion native PHP extensions:
 
 ## 📚 Read more
 
-Full background, design rationale, and benchmark methodology in the launch post: [mdparser: A Native CommonMark + GFM Parser for PHP](https://ilia.ws/blog/mdparser-a-native-commonmark-gfm-parser-for-php).
+The launch post covers background, design rationale, and benchmark methodology: [mdparser: A Native CommonMark + GFM Parser for PHP](https://ilia.ws/blog/mdparser-a-native-commonmark-gfm-parser-for-php).
 
 ## License
 

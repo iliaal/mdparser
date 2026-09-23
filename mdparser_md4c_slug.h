@@ -24,7 +24,7 @@ typedef struct {
 } mdm_slugs;
 
 /* Lowercase/percent-encode `text` into a URL-fragment slug (emalloc'd,
- * caller frees). Matches the legacy mdparser_slugify behavior. */
+ * caller frees). */
 char *mdm_slugify(const char *text, size_t len);
 
 void mdm_slugs_init(mdm_slugs *s);

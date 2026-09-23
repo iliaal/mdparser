@@ -22,11 +22,10 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - id: matrix
-        # Pinned to the 1.8.1 commit SHA (CR-002): mutable @v1 is a
-        # supply-chain risk for a workflow that has contents:write on the
-        # release job. The comment names the release, not the floating tag;
-        # `v1` moves on every upstream bump, which leaves a `# v1` comment
-        # stale and fails the zizmor pin audit. Bump via dependabot.
+        # Pinned to a commit SHA because the release job has contents:write.
+        # The trailing comment names the release, not the floating `v1` tag,
+        # which would go stale and fail the zizmor pin audit. Bump via
+        # dependabot.
         uses: php/php-windows-builder/extension-matrix@29352c0ef9e8ce65264ea9e287881a6f7758a953 # 1.9.0
         with:
           extension-url: ${{ github.event.repository.html_url }}
@@ -106,12 +105,9 @@ jobs:
     permissions:
       contents: write # Uploads Windows binaries to the published release.
     steps:
-      # Pinned to the commit SHA that v6 resolves to; this job runs
-      # under contents:write, so a moved tag on a third-party action
-      # would inherit the release-write token. persist-credentials:
-      # false drops the GITHUB_TOKEN from the local git config so any
-      # shell step in the workflow cannot reuse it for an unrelated
-      # push.
+      # SHA-pinned because this job has contents:write and a moved tag
+      # would inherit the release-write token. persist-credentials: false
+      # keeps GITHUB_TOKEN out of the local git config.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

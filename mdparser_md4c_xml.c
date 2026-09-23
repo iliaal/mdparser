@@ -69,12 +69,9 @@ static void mdx_indent(mdx_ctx *c)
 #define X_LIT(c, lit) smart_str_appendl(&(c)->out, "" lit, sizeof(lit) - 1)
 
 /* XML-escape into the output buffer (& < > and, for attrs, "). C0 control
- * bytes other than tab/LF/CR are illegal in XML 1.0 character data, so they
- * are replaced with U+FFFD (matching the NULLCHAR policy) -- emitting them
- * raw would make the whole document unparseable.
- *
- * Plain runs use the shared unrolled scan over the per-render attention
- * maps; the slow path keeps the exact per-byte policy (C0 branch included). */
+ * bytes other than tab/LF/CR are illegal in XML 1.0, so they become U+FFFD
+ * (the NULLCHAR policy); emitting them raw would make the document
+ * unparseable. */
 static void mdx_escape_maps_init(mdx_ctx *c)
 {
     memset(c->esc_text, 0, sizeof(c->esc_text));

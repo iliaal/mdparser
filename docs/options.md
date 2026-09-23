@@ -4,9 +4,9 @@
 
 Holds 32 bool toggles that control parser and renderer behavior:
 core parser options, GFM extension toggles, HTML output flags (heading
-anchors, nofollow), and md4c dialect extensions. All fields are readonly after
-construction, and the class is `final` so it can't be subclassed.
-Use named arguments to set only the fields you care about.
+anchors, nofollow), parser-behavior toggles, and md4c dialect extensions.
+All fields are readonly after construction, and the class is `final`.
+Use named arguments to set only the fields you need.
 
 ## Defaults
 
@@ -56,8 +56,7 @@ new Options(
 );
 ```
 
-The defaults are tuned for rendering untrusted input as GitHub-style
-markdown: safe URL filtering, tag filter, UTF-8 validation, GFM
+The defaults suit rendering untrusted input as GitHub-style markdown: safe URL filtering, tag filter, UTF-8 validation, GFM
 extensions enabled, GitHub-style code block class attribute, no heading
 anchors or nofollow.
 
@@ -65,10 +64,9 @@ anchors or nofollow.
 
 ### `sourcepos: bool = false`
 
-**Accepted but inert.** The md4c backend does not expose source
-positions, so this option has no effect — no `data-sourcepos` attributes
-are emitted regardless of its value. It is retained for API
-compatibility and may be removed in a future major version.
+Accepted but inert. md4c exposes no source positions, so no
+`data-sourcepos` attributes are emitted regardless of this value. Kept
+for API compatibility; a future major version may remove it.
 
 ```php
 echo (new Parser(new Options(sourcepos: true)))->toHtml("# hi\n");
@@ -118,12 +116,12 @@ echo (new Parser(new Options(smart: true)))
 
 ### `unsafe: bool = false`
 
-**Security-relevant.** When `false` (default), dangerous URL schemes in
+Security-relevant. When `false` (default), dangerous URL schemes in
 links and images are stripped to empty, and raw HTML in markdown is
 HTML-escaped (rendered as visible text). When `true`, raw HTML and all
 URL schemes pass through verbatim.
 
-Use `true` only for input you fully trust. See `docs/security.md` for
+Use `true` only for input you trust. See `docs/security.md` for
 the threat model.
 
 ### `validateUtf8: bool = true`
@@ -136,10 +134,9 @@ Leave on unless you know your input is pre-validated UTF-8.
 
 ### `githubPreLang: bool = true`
 
-**Accepted but inert.** The md4c backend always renders a fenced code
-block with a language as `<pre><code class="language-X">` (the
-CommonMark spec form); this option does not change that. Retained for
-API compatibility.
+Accepted but inert. md4c always renders a fenced code block with a
+language as `<pre><code class="language-X">` (the CommonMark spec form).
+Kept for API compatibility.
 
 ```php
 echo (new Parser())->toHtml("```php\necho 1;\n```");
@@ -149,8 +146,8 @@ echo (new Parser())->toHtml("```php\necho 1;\n```");
 
 ### `liberalHtmlTag: bool = false`
 
-**Accepted but inert.** Had no md4c equivalent after the backend
-migration; the value is ignored. Retained for API compatibility.
+Accepted but inert. md4c has no equivalent, so the value is ignored.
+Kept for API compatibility.
 
 ### `footnotes: bool = false`
 
@@ -170,34 +167,29 @@ echo (new Parser(new Options(footnotes: true)))->toHtml($md);
 // </section>
 ```
 
-Definition bodies are emitted tight — no `<p>` wrapper — with the
-backref anchor appended directly to the body text.
+Definition bodies are emitted tight, without a `<p>` wrapper, and the
+backref anchor follows the body text directly.
 
 When `false`, `[^1]` and `[^1]: ...` parse as literal text.
 
 ### `strikethroughDoubleTilde: bool = false`
 
-**Accepted but inert.** md4c's strikethrough does not expose a
-single-vs-double-tilde toggle; the value is ignored. Retained for API
-compatibility.
+Accepted but inert. md4c's strikethrough has no single-vs-double-tilde
+toggle, so the value is ignored. Kept for API compatibility.
 
 ### `tablePreferStyleAttributes: bool = false`
 
-**Accepted but inert.** Table cell alignment always renders as
-`align="..."`; this option does not switch it to `style`. Retained for
-API compatibility.
+Accepted but inert. Table cell alignment always renders as
+`align="..."`. Kept for API compatibility.
 
 ### `fullInfoString: bool = false`
 
-**Accepted but inert.** The full info string is not exposed as a
-`data-meta` attribute; the value is ignored. Retained for API
-compatibility.
+Accepted but inert. The full info string is not exposed as a
+`data-meta` attribute. Kept for API compatibility.
 
 ## GFM extension toggles
 
-Each of these enables or disables a specific GFM feature. All default
-to `true` because the dominant use case for mdparser is GitHub-style
-rendering.
+Each toggle enables one GFM feature. All default to `true`.
 
 ### `tables: bool = true`
 
@@ -221,17 +213,14 @@ requiring `<angle bracket>` wrapping.
 
 GitHub's tag filter: escapes `<title>`, `<textarea>`, `<style>`,
 `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<script>`, and
-`<plaintext>` tags even when raw HTML is otherwise allowed. This is a
-defense-in-depth layer when `unsafe: true` — the filter still prevents
-the most dangerous tags from passing through.
+`<plaintext>` tags even when raw HTML is otherwise allowed, so under
+`unsafe: true` these tags still don't pass through.
 
 ## HTML output flags (heading anchors, nofollow)
 
-These two flags are applied in-stream by the HTML renderer as md4c emits
-its events, not as a separate string pass over the finished HTML. They
-act only on nodes md4c parses from the Markdown source; raw HTML written
-directly in the document (under `unsafe: true`) is passed through
-verbatim and never rewritten. They affect `toHtml()` (and
+The HTML renderer applies these two flags in-stream as md4c emits its
+events. They act only on nodes md4c parses from the Markdown source; raw
+HTML in the document (under `unsafe: true`) passes through verbatim. They affect `toHtml()` (and
 `toInlineHtml()` where applicable). XML and AST output are unaffected.
 The static `Parser::html()` / `Parser::xml()` shortcuts use the module
 defaults and do not apply either transform.
@@ -260,12 +249,9 @@ echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Foo\n## Foo\n");
 ```
 
 Because ids are attached as md4c emits each heading node, a raw HTML
-heading and a later Markdown heading with the same text no longer
-collide: the raw one (`<h1>same</h1>`) stays plain and the Markdown one
-(`# same`) gets `id="same"`. This is the in-stream behavior pinned by
-`tests/030_anchor_unsafe_collision.phpt`. (Earlier versions ran the
-anchor pass as a byte search over the finished HTML, where the raw block
-could absorb the id; the in-stream renderer resolves that.)
+heading and a later Markdown heading with the same text don't collide:
+the raw one (`<h1>same</h1>`) stays plain and the Markdown one (`# same`)
+gets `id="same"`. `tests/030_anchor_unsafe_collision.phpt` pins this.
 
 ### `nofollowLinks: bool = false`
 
@@ -273,10 +259,9 @@ When `true`, every link md4c parses from the Markdown source gets
 `rel="nofollow noopener noreferrer"`. Applies to inline links, reference
 links, and autolinks across `toHtml()` and `toInlineHtml()`. In-document
 fragment anchors (`href="#..."`, including footnote references and
-backrefs) are intentionally skipped. Anchors inside fenced or inline
-code never become links, so they are untouched. A raw `<a href="...">`
-written directly in the source (under `unsafe: true`) is raw HTML, not a
-parsed link node, so it is emitted verbatim and is not rewritten.
+backrefs) are skipped. Anchors inside fenced or inline code never
+become links. A raw `<a href="...">` in the source (under `unsafe: true`)
+is emitted verbatim.
 
 ```php
 echo (new Parser(new Options(nofollowLinks: true)))
@@ -287,8 +272,7 @@ echo (new Parser(new Options(nofollowLinks: true)))
 ## Parser behavior toggles
 
 These map directly to md4c parser flags. They change how the source is
-parsed (not how nodes render), add no new HTML tags, and default off so
-the standard CommonMark + GFM parse is unaffected.
+parsed, add no new HTML tags, and default off.
 
 ### `noIndentedCodeBlocks: bool = false`
 
@@ -310,19 +294,18 @@ code blocks.
 
 ## Dialect extensions
 
-These are md4c extensions outside the CommonMark and GFM specs. They are
-opt-in and default off; mdparser's spec-conformance contract holds only
-with all of them off. Each renders as standard HTML (a semantic tag, or
-an element carrying a `class` hook), so no custom elements or scripts are
-introduced. In `toXml()` / `toAst()` they surface as the node types
+These md4c extensions fall outside the CommonMark and GFM specs. They
+default off, and spec conformance holds only with all of them off. Each
+renders as standard HTML: a semantic tag, or an element with a `class`
+hook. In `toXml()` / `toAst()` they surface as the node types
 `underline`, `highlight`, `superscript`, `subscript`, `spoiler`,
 `latex_math`, `latex_math_display`, `wikilink`, and the block-level
 `admonition`.
 
 ### `underline: bool = false`
 
-When `true`, `_text_` renders as `<u>text</u>`. Note this **disables `_`
-as an emphasis delimiter** (md4c semantics); use `*text*` and `**text**`
+When `true`, `_text_` renders as `<u>text</u>`. This disables `_` as an
+emphasis delimiter (md4c semantics); use `*text*` and `**text**`
 for emphasis and strong when underline is on. `__text__` becomes nested
 underline (`<u><u>text</u></u>`), not strong emphasis.
 
@@ -357,8 +340,8 @@ KaTeX or MathJax against the `.math` class to typeset it.
 
 When `true`, `[[target]]` renders as
 `<a class="wikilink" href="target">target</a>`, and `[[target|label]]`
-uses `label` as the link text. The target runs through the **same URL
-scheme filter as a normal link** (decode → check → emit), so a
+uses `label` as the link text. The target runs through the same URL
+scheme filter as a normal link (decode → check → emit), so a
 `[[javascript:...]]` target is neutralized to an empty `href` in safe
 mode. `nofollowLinks` applies to wiki links as it does to other links.
 
@@ -391,8 +374,8 @@ stay literal text.
 When `true`, runs of blank lines between blocks are reported instead of
 discarded. `toHtml()` output is unchanged, since blank runs carry no
 HTML; `toXml()` emits `<blank />` between the surrounding blocks and
-`toAst()` emits a `blank` node. Use it when you need to round-trip a
-document's vertical spacing rather than just render it.
+`toAst()` emits a `blank` node. Use it to round-trip a document's
+vertical spacing.
 
 ## Patterns
 
@@ -425,10 +408,9 @@ new Options(
 );
 ```
 
-Note: md4c exposes no source positions, so mdparser cannot emit
-`data-sourcepos` for editor click-to-jump (the `sourcepos` option is
-inert). If you need source mapping, a different parser is the better
-fit.
+md4c exposes no source positions, so mdparser can't emit
+`data-sourcepos` for editor click-to-jump. If you need source mapping,
+use a different parser.
 
 ### Rendering trusted internal docs
 

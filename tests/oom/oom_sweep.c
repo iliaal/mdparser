@@ -64,7 +64,7 @@ static void *oom_realloc(void *ptr, size_t size)
 #undef realloc
 #undef malloc
 
-/* Callback-layer failure discipline (md-cr-008). The extension renders
+/* Callback-layer failure discipline. The extension renders
  * through md4c callbacks that append into growable output buffers; a refused
  * allocation there must discard partial state and abort the parse with a
  * distinct failure instead of returning 0. This harness mimics that contract

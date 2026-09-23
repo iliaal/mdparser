@@ -17,7 +17,7 @@ function eq(string $label, string $got, string $want): void {
     if ($got !== $want) echo "  got:  $got\n  want: $want\n";
 }
 
-// ---- CR-009: a new block starts a fresh quote context ----------------
+// ---- a new block starts a fresh quote context ----------------
 // Without the reset the heading's trailing 'e' / paragraph's trailing '.'
 // bleeds in and the leading quote renders as a *closing* quote.
 eq("quote opens after heading",
@@ -27,7 +27,7 @@ eq("quote opens after paragraph",
    trim($p->toHtml("End one.\n\n\"Start\"")),
    "<p>End one.</p>\n<p>{$LDQ}Start{$RDQ}</p>");
 
-// ---- CR-003: a trailing multibyte Unicode space reads as left context -
+// ---- a trailing multibyte Unicode space reads as left context -
 // A non-breaking space (literal or via numeric entity) before a quote must
 // open it; its UTF-8 tail byte alone would otherwise read as right context.
 eq("literal NBSP before quote opens",

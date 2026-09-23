@@ -2,12 +2,11 @@
 
 `final class MdParser\Parser`
 
-The main entry point. Holds a precomputed md4c parser-flags bitmask
-plus a renderer-options bitmask, then offers four rendering methods
-(`toHtml`, `toXml`, `toAst`, `toInlineHtml`) and three static shortcuts
-that render with the default Options. Options are translated to those
-two bitmasks once at construction time, so each parse runs md4c with
-the flags already resolved — no per-call option walking.
+The main entry point. It offers four rendering methods (`toHtml`,
+`toXml`, `toAst`, `toInlineHtml`) and three static shortcuts that render
+with the default Options. The constructor translates Options into an
+md4c parser-flags bitmask and a renderer-options bitmask once, so no
+parse call re-reads the options.
 
 ## Synopsis
 
@@ -41,8 +40,8 @@ Creates a parser. If `$options` is `null`, an `Options` instance with
 default values is created and attached. The options are translated to
 md4c's parser-flags and renderer-options bitmasks once, then frozen.
 
-The `options` property is readonly — it can't be reassigned after
-construction. Create a new `Parser` if you need different options.
+The `options` property is readonly. Create a new `Parser` if you need
+different options.
 
 ```php
 $default = new Parser();
@@ -79,7 +78,6 @@ echo $parser->toHtml("| a | b |\n|---|---|\n| 1 | 2 |\n");
 By default, dangerous URL schemes (`javascript:`, `vbscript:`,
 `data:text/html`, ...) are stripped to empty `href`/`src`, and raw HTML
 is HTML-escaped so it renders as visible text rather than live markup.
-This is the right default for rendering untrusted input.
 
 ```php
 $parser = new Parser();
@@ -108,15 +106,14 @@ echo $parser->toHtml('<b>bold</b>');
 // <p><b>bold</b></p>
 ```
 
-The `tagfilter` option remains active even in unsafe mode (unless you
-explicitly pass `tagfilter: false`), which escapes `<script>`,
-`<iframe>`, and a handful of other dangerous tags as a defense layer.
+The `tagfilter` option stays active in unsafe mode unless you pass
+`tagfilter: false`. It escapes `<script>`, `<iframe>`, and a few other
+dangerous tags.
 
 ## `toXml(string $source): string`
 
-Renders the same parse result as CommonMark XML. Useful for piping into
-XSLT or other external tooling, or for inspecting the document structure
-as a serialized tree.
+Renders the same parse result as CommonMark XML, for XSLT or other
+external tooling, or for inspecting the document structure.
 
 ```php
 $parser = new Parser();
@@ -139,10 +136,9 @@ exposes no source positions, so the `<document>` tree carries no
 ## `toAst(string $source): array`
 
 Parses `$source` and returns a nested PHP array representation of the
-document tree. See `docs/ast.md` for the full shape — every node type
-has a documented set of fields.
+document tree. `docs/ast.md` documents the fields of every node type.
 
-> **Security note: AST and XML output are not sanitized.** Raw HTML
+> Security note: AST and XML output are not sanitized. Raw HTML
 > literals are preserved byte-for-byte. Link / image URLs and titles are
 > entity-decoded but not scheme-filtered. The `unsafe`, `tagfilter`, and
 > URL-scheme defenses operate only on the HTML paths (`toHtml`,
@@ -169,9 +165,8 @@ $ast = $parser->toAst("# Hi\n\n- one\n- two");
 // ]
 ```
 
-This is the most powerful output mode — you can walk the tree yourself
-to extract headings for a TOC, collect all links, transform or filter
-nodes, or emit your own custom format.
+Walk the tree to extract headings for a TOC, collect links, filter
+nodes, or emit your own format.
 
 ## `toInlineHtml(string $source): string`
 
@@ -185,41 +180,38 @@ echo $parser->toInlineHtml("a *b* `c`");
 // a <em>b</em> <code>c</code>
 ```
 
-This is a **snippet renderer**, tuned for short single-line inputs (chat
+`toInlineHtml` is a snippet renderer for short single-line inputs (chat
 messages, table cells, display names). It runs a per-line normalization
-pass that `toHtml` does not, so for large multi-line documents prefer
-`toHtml`. `headingAnchors` is a no-op here (no headings are emitted);
+pass that `toHtml` doesn't, so use `toHtml` for large multi-line
+documents. `headingAnchors` is a no-op here (no headings are emitted);
 `nofollowLinks` still applies.
 
 ## Error model
 
 All render methods can throw `MdParser\Exception` (final, extends
-`\RuntimeException`). The throw cases are deliberately narrow:
+`\RuntimeException`) in these cases:
 
-- **Wrapper validation guards.** Inputs over `MDPARSER_MAX_INPUT_SIZE`
-  (256 MB) throw before md4c ever sees them. `toAst()` builds the node
+- Wrapper validation guards. Inputs over `MDPARSER_MAX_INPUT_SIZE`
+  (256 MB) throw before md4c sees them. `toAst()` builds the node
   array on a fixed-depth stack and throws if nesting exceeds
-  `MDPARSER_MAX_AST_DEPTH` (1000) — adversarial inputs like `> ` × 50000
-  hit this. `toXml()` applies the same structural depth cap and limits visual
+  `MDPARSER_MAX_AST_DEPTH` (1000), as with `> ` × 50000. `toXml()` applies the same structural depth cap and limits visual
   indentation to 32 levels, preserving the complete tree without letting
   whitespace grow quadratically near the cap. `toHtml()` streams md4c's
   callbacks straight to output (no indentation, output linear in input) and
   is not depth-capped.
-- **md4c / render null path.** The rare case where `md_parse()` reports
-  failure, or the renderer returns `NULL`, raises an exception identifying
-  the renderer failure.
-- **Reflection-bypassed Options.** Constructing a Parser with an
+- md4c or renderer failure. If `md_parse()` reports failure or the
+  renderer returns `NULL`, the exception names the renderer failure.
+- Reflection-bypassed Options. Constructing a Parser with an
   `Options` object built via
   `ReflectionClass::newInstanceWithoutConstructor()` (uninitialized
   typed properties) throws before any parser state is cached.
-- **Cloning / serializing.** Parser blocks both via Zend ACC flags;
+- Cloning or serializing. Parser blocks both via Zend ACC flags;
   `clone $parser` and `serialize($parser)` raise the engine's standard
   Error.
 
-md4c is extremely tolerant of malformed markdown by design — any byte
-sequence parses to something — so normal rendering of well-formed or
-malformed input does not need a try/catch. The exception path covers
-hostile inputs and resource limits.
+md4c parses any byte sequence to something, so rendering malformed
+input doesn't need a try/catch. The exception path covers hostile inputs
+and resource limits.
 
 ```php
 try {
@@ -246,7 +238,7 @@ Each side has its own bound:
 | Input | `MDPARSER_MAX_INPUT_SIZE`, 256 MB, compiled in | `MdParser\Exception` |
 
 `mdparser.parse_memory_limit` caps the libc bytes a single parse may hold at
-once. It exists because markdown amplifies: one `[` byte commits about 72 bytes
+once. Markdown amplifies memory: one `[` byte commits about 72 bytes
 of md4c mark records, and one `>` byte about 40 to 56 bytes of container and
 block records, so a few megabytes of hostile input can ask for gigabytes that
 `memory_limit` never sees. When a parse crosses the limit the allocation is
@@ -256,9 +248,8 @@ refused, md4c unwinds, and you get `MdParser\Exception` with the message
 The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
 treats `0` or any negative value as unlimited. The count includes the registry
 header each md4c allocation carries, so it bounds what the parse asks libc for
-rather than only the payload md4c sees. Raise it if you legitimately render very
-large documents; lower it if you render untrusted markdown in long-lived
-workers and want a tighter ceiling than the default.
+rather than only the payload md4c sees. Raise it if you render very large
+documents; lower it if you render untrusted markdown in long-lived workers.
 
 `memory_limit` can still interrupt a parse when an output buffer or AST
 allocation crosses it. The wrapper catches that bailout at md4c's parse frame,
@@ -271,10 +262,9 @@ what the parser does with it.
 
 ## Reusing parsers
 
-Parsers are cheap to construct, but if you're rendering many documents
-with the same options it's more efficient to reuse one instance — the
-md4c flag bitmasks are computed once at construction and reused on every
-`toHtml`/`toXml`/`toAst` call. Each call still runs an independent
+Parsers are cheap to construct, but when you render many documents with
+the same options, reuse one instance: the md4c flag bitmasks are computed
+once at construction. Each call still runs an independent
 `md_parse()` over its own input; md4c keeps no state between calls, so
 reference-link definitions resolve within a single document and never
 leak across separate calls.
@@ -288,5 +278,5 @@ foreach ($documents as $doc) {
 
 Thread safety: each `Parser` instance is single-threaded, but different
 instances in different threads (ZTS builds) are safe. md4c holds no
-global state — every parse runs from the per-instance flag bitmasks and
-the input you pass — so there is no shared registry to contend on.
+global state; every parse runs from the per-instance flag bitmasks and
+the input you pass.

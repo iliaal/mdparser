@@ -112,21 +112,16 @@ PHP_METHOD(MdParser_Parser, __construct)
         default_owned = true;
     }
 
-    /* Read masks into locals first, then publish the readonly $options
-     * property, and only commit the cached masks on success. A second
-     * __construct() call throws on the readonly write below; without
-     * this ordering the cached masks would have already been replaced,
-     * leaving the public $options out of sync with rendering behavior
-     * (security-relevant: an unsafe-mask object reporting safe options).
-     */
+    /* Commit the cached masks only after the readonly $options write
+     * succeeds. A second __construct() throws on that write; committing
+     * first would leave $options reporting safe options while rendering
+     * with an unsafe mask. */
     unsigned new_md4c_pflags;
     int new_md4c_ropts;
     mdparser_options_read_masks(options_zv, &new_md4c_pflags, &new_md4c_ropts);
 
-    /* read_masks throws if the Options object skipped __construct
-     * (uninitialized typed properties). Bail before publishing
-     * $options so the parser never holds a reference to a
-     * half-constructed Options. */
+    /* read_masks throws if the Options object skipped __construct; bail
+     * before publishing a half-constructed Options. */
     if (EG(exception)) {
         if (default_owned) {
             zval_ptr_dtor(&default_options);
@@ -252,7 +247,6 @@ PHP_METHOD(MdParser_Parser, toAst)
         obj->md4c_pflags, (obj->md4c_ropts & MDPARSER_RF_VALIDATE_UTF8) != 0);
 }
 
-/* md-cr-032 decision ACCEPT (keep copies): measured one-liner inline p50 5.6-7.8us vs toHtml 5.3-6.0us (delta 0.3-1.8us, flips between runs; run-to-run swing ~28% dwarfs signal), small-corpus inline p50 ~8.1us vs html ~8.6-9.0us (inline faster); >=5% bar not cleared, no offset-view rewrite. The normalize copy below and the <p>-strip memmove in toInlineHtml stay. */
 /* Build the normalized inline buffer: every retained physical line starts
  * with an ordinary punctuation sentinel (`;`), so md4c sees a single
  * paragraph whose every line begins with punctuation and block-level
@@ -278,20 +272,11 @@ static void mdparser_inline_normalize(smart_str *norm, const char *src, size_t s
     mdparser_md4c_skip_bom(&src, &src_len);
     static const char sentinel = ';';
 
-    /* Build the normalized buffer incrementally with smart_str. The
-     * worst-case pre-pass bound is 2*src_len + 1 (every byte becomes a
-     * newline that gains a one-byte sentinel prefix), which is mathematically
-     * safe under MDPARSER_MAX_INPUT_SIZE = 256 MB on 64-bit size_t.
-     * Pre-allocating the worst-case eagerly, however, can blow past
-     * memory_limit on newline-heavy inputs whose normalized form is
-     * tiny: 40 MB of `\n` would emalloc ~168 MB even though the
-     * normalized buffer is empty. smart_str grows on demand, so the
-     * peak allocation tracks the actual normalized size. */
-    /* Single-line fast path: with no line break the per-line
-     * normalization reduces to one leading sentinel, so the normalized
-     * buffer is exactly sentinel+input -- or empty when the line is all blanks
-     * (the loop below defers leading whitespace and emits nothing if no
-     * content follows). Two bulk appends instead of the per-byte loop. */
+    /* Grow on demand rather than reserving the 2*src_len + 1 worst case:
+     * newline-heavy input normalizes to almost nothing, and an eager
+     * reserve can cross memory_limit (40 MB of `\n` would reserve ~168 MB). */
+    /* Single-line fast path: the normalized buffer is sentinel+input, or
+     * empty when the line is all blanks. */
     bool single_line = (memchr(src, '\n', src_len) == NULL &&
                         memchr(src, '\r', src_len) == NULL);
     if (single_line) {
@@ -368,20 +353,17 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
 
     mdparser_parser_obj *obj = Z_MDPARSER_PARSER_P(ZEND_THIS);
 
-    /* Normalize: one sentinel-prefixed paragraph (Parsedown::line()
-     * semantics -- block markers can't fire on any line). */
+    /* One sentinel-prefixed paragraph (Parsedown::line() semantics). */
     const char *src = ZSTR_VAL(source);
     size_t src_len = ZSTR_LEN(source);
     smart_str norm = {0};
     mdparser_inline_normalize(&norm, src, src_len);
 
-    /* Render. */
     const char *buf = norm.s ? ZSTR_VAL(norm.s) : "";
     size_t buf_len = norm.s ? ZSTR_LEN(norm.s) : 0;
 
-    /* Heading anchors are meaningless here -- block markers are suppressed
-     * by the sentinel normalization, so no headings emit. nofollow stays:
-     * inline snippets can contain links, applied in-stream by the renderer. */
+    /* The sentinel normalization suppresses headings, so heading anchors
+     * are dropped; nofollow still applies to inline links. */
     int inline_status = 0;
     int inline_ropts = (obj->md4c_ropts & ~MDPARSER_RF_HEADING_ANCHORS)
         | MDPARSER_RF_INLINE_SENTINEL;

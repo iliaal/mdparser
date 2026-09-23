@@ -9,12 +9,10 @@ final class Exception extends \RuntimeException
 }
 
 /**
- * IMPORTANT: default values below MUST agree with the `default_value`
- * column in `mdparser_options_fields[]` inside `mdparser_options.c`.
- * ZPP does not auto-apply arginfo defaults to internal methods, so
- * the C constructor seeds values[] from the C table and this stub is
- * only used for reflection / IDE signatures. If you change a default,
- * change it in both places.
+ * Default values below MUST agree with the `default_value` column in
+ * `mdparser_options_fields[]` in `mdparser_options.c`. The C constructor
+ * seeds values from that table; this stub only feeds reflection and IDE
+ * signatures. Change a default in both places.
  */
 final readonly class Options
 {
@@ -92,28 +90,24 @@ final readonly class Options
     ) {}
 
     /**
-     * Maximum-safety preset: the standard defaults plus autolink off,
-     * so bare URLs in untrusted input do not get wrapped in live <a>
-     * tags. Use for forum comments, email rendering, or any rendering
-     * path where the source is untrusted and link creation should be
-     * explicit.
+     * Maximum-safety preset: the standard defaults plus autolink off, so
+     * bare URLs in untrusted input stay plain text. Use it for forum
+     * comments, email rendering, or other untrusted sources where links
+     * should be explicit.
      */
     public static function strict(): Options {}
 
     /**
-     * GitHub-flavored preset: standard defaults plus footnotes and alerts, to
-     * match the feature set github.com renders for README files and
-     * issue comments. Everything else (tables, strikethrough,
-     * tasklist, autolink, tagfilter) is already on in the default
-     * constructor.
+     * GitHub-flavored preset: the standard defaults plus footnotes and
+     * alerts, matching what github.com renders for READMEs and issue
+     * comments.
      */
     public static function github(): Options {}
 
     /**
      * Trusted-input preset: raw HTML passthrough (unsafe: true) with
-     * tagfilter disabled. Use only when the markdown source is authored
-     * by you or comes from a trusted pipeline; this preset explicitly
-     * disables the XSS safety net.
+     * tagfilter disabled. Disables XSS protection; use it only for
+     * markdown you author or that comes from a trusted pipeline.
      */
     public static function permissive(): Options {}
 }
@@ -131,8 +125,8 @@ final class Parser
      * structural representation, not sanitized HTML: raw HTML nodes are
      * XML-escaped but their source literals are preserved; link/image
      * destinations are entity-decoded then XML-escaped. The `unsafe`,
-     * `tagfilter`, and URL-scheme defenses do not apply -- same trust
-     * boundary as `toAst()`.
+     * `tagfilter`, and URL-scheme defenses don't apply, same as for
+     * `toAst()`.
      */
     public function toXml(string $source): string {}
 
@@ -140,39 +134,31 @@ final class Parser
      * Returns a structural representation of the markdown source as
      * a nested array. Raw HTML literals (`html_block` / `html_inline`)
      * are preserved byte-for-byte. Link and image `url` / `title` fields
-     * are entity-decoded but not scheme-filtered -- the `unsafe`,
-     * `tagfilter`, and URL-scheme defenses apply only to the HTML
-     * rendering paths (`toHtml` / `toInlineHtml`), NOT to `toXml` or
-     * `toAst`. Consumers that emit HTML from XML or the AST must apply
+     * are entity-decoded but not scheme-filtered. The `unsafe`,
+     * `tagfilter`, and URL-scheme defenses apply only to `toHtml` /
+     * `toInlineHtml`, not to `toXml` or `toAst`. Consumers that emit
+     * HTML from XML or the AST must apply
      * their own URL scheme allowlist and HTML sanitization.
      */
     public function toAst(string $source): array {}
 
     /**
      * Render `$source` as inline-only HTML: no `<p>` wrapper and no
-     * block-level constructs. Block markers like `#`, `-`, `>`, `1.`
-     * are emitted as literal text instead of being parsed as
-     * headings / lists / blockquotes. Matches the semantics of
-     * Parsedown::line() and cebe/markdown::parseParagraph() so users
-     * migrating from those libraries have a drop-in path for
-     * rendering short strings (chat messages, table cell contents,
-     * user display names) without the surrounding paragraph tags.
+     * block-level constructs, for short strings such as chat messages,
+     * table cells, and display names. Block markers like `#`, `-`, `>`,
+     * `1.` are emitted as literal text. Matches Parsedown::line() and
+     * cebe/markdown::parseParagraph().
      *
-     * `headingAnchors` is silently a no-op for this method (no headings
-     * are ever emitted in inline mode); `nofollowLinks` still applies.
-     * On empty or whitespace-only input the return value is the empty
-     * string. Block markers are suppressed by prepending an ASCII `;`
-     * sentinel on each retained physical line (consumed by the HTML
-     * renderer, not present in the output). Literal U+200B (zero-width
-     * space) bytes in the source are preserved.
+     * `headingAnchors` has no effect here; `nofollowLinks` still applies.
+     * Empty or whitespace-only input returns the empty string. Literal
+     * U+200B (zero-width space) bytes in the source are preserved.
      */
     public function toInlineHtml(string $source): string {}
 
     /**
      * Static shortcut: parse `$source` with the default Options and
-     * return HTML. Equivalent to `(new Parser)->toHtml($source)` but
-     * without the object boilerplate for one-off conversions. Mirrors
-     * `Markdown::defaultTransform()` from michelf/php-markdown.
+     * return HTML. Equivalent to `(new Parser)->toHtml($source)`, like
+     * michelf/php-markdown's `Markdown::defaultTransform()`.
      */
     public static function html(string $source): string {}
 

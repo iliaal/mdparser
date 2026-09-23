@@ -57,12 +57,10 @@ typedef struct {
     int error;
 } mda_ctx;
 
-/* Interned keys for the two hot per-node inserts ("type" on every node,
- * "children" on every container) and the interned node-type *values*. All
- * created once at MINIT and reused, so the builder neither re-allocates nor
- * re-hashes (nor re-interns) them per node. The node-type set is defined once
- * here; the enum, the interned-string table, and the MINIT interning are all
- * generated from it, so adding a node type is a one-line change. */
+/* "type", "children", and the node-type values are interned once at MINIT
+ * so the builder never allocates or hashes them per node. The enum, the
+ * interned-string table, and the MINIT interning are all generated from
+ * this list. */
 #define MDA_NODE_TYPES(_) \
     _(document) _(block_quote) _(list) _(tasklist) _(item) \
     _(thematic_break) _(blank) _(heading) _(code_block) _(html_block) _(paragraph) \
@@ -174,21 +172,17 @@ static zval *mda_last_text_literal(mda_ctx *c)
 
 static void mda_append_text_raw(mda_ctx *c, const char *text, size_t size)
 {
-    /* Stage the fragment; smart_str grows geometrically, so a run of N
-     * fragments costs O(total bytes) instead of the O(n^2) memcpy of an
-     * exact-size zend_string_extend per fragment. The run materializes as
-     * one literal on flush (single extend + memcpy). */
+    /* Stage in a geometrically growing smart_str: O(total bytes) per run
+     * instead of O(n^2) from an exact-size extend per fragment. */
     if (size == 0) {
         return;
     }
     smart_str_appendl(&c->textrun, text, size);
 }
 
-/* Materialize staged text fragments as one literal on the current top node:
- * extend the trailing text literal once, or create it. Call before any
- * structural mutation (push/pop/non-text node) and at end of parse so the
- * staged bytes land in the same node the per-fragment path would have
- * extended. */
+/* Materialize staged text fragments as one literal on the current top node,
+ * extending the trailing text literal or creating one. Call before any
+ * structural mutation (push/pop/non-text node) and at end of parse. */
 static void mda_flush_textrun(mda_ctx *c)
 {
     zval *literal;
@@ -279,9 +273,8 @@ static bool mda_push(mda_ctx *c, zval *node)
 static bool mda_pop(mda_ctx *c)
 {
     mda_flush_textrun(c);
-    /* stack[0] is the document root and is never popped under md4c's
-     * balanced enter/leave contract; guard the underflow defensively so a
-     * future renderer change or contract break can't index stack[-1]. */
+    /* md4c's balanced enter/leave never pops stack[0]; guard anyway so a
+     * contract break can't index stack[-1]. */
     if (c->depth < 1) {
         c->error = MDA_ERR_PARSE;
         return false;
@@ -525,8 +518,7 @@ static int mda_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *user
             break;
         case MD_TEXT_ENTITY: {
             /* Decoded bytes contain no NUL (append_cp maps 0 to U+FFFD),
-             * so decode straight into the staged run: no per-entity temp
-             * buffer, mirroring the HTML inline decode. */
+             * so decode straight into the staged run. */
             mdparser_md4c_decode_entity(&c->textrun, text, size);
             return 0;
         }

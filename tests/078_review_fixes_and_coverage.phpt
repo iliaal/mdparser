@@ -9,7 +9,7 @@ function check(string $label, bool $cond): void {
     echo ($cond ? "OK" : "FAIL"), ": $label\n";
 }
 
-// ---- CR-004: fence language- prefix after entity decode -------------
+// ---- fence language- prefix after entity decode -------------
 $p = new MdParser\Parser();
 $h = $p->toHtml("```language&#45;php\ncode\n```\n");
 check("entity language- not double-prefixed",
@@ -23,7 +23,7 @@ check("already-prefixed language- not doubled",
     str_contains($h, 'class="language-js"') &&
     !str_contains($h, 'language-language-js'));
 
-// ---- CR-008: fragment nofollow trims leading C0/space ----------------
+// ---- fragment nofollow trims leading C0/space ----------------
 $nf = new MdParser\Parser(new MdParser\Options(nofollowLinks: true));
 $REL = 'rel="nofollow noopener noreferrer"';
 $h = $nf->toHtml("[x](#section)\n");
@@ -37,7 +37,7 @@ $h = $nf->toHtml("[x](https://e.com)\n");
 check("normal link still gets nofollow",
     str_contains($h, $REL));
 
-// ---- CR-012: admonition type matrix ---------------------------------
+// ---- admonition type matrix ---------------------------------
 $adm = new MdParser\Parser(new MdParser\Options(admonitions: true));
 foreach (['NOTE' => 'note', 'TIP' => 'tip', 'IMPORTANT' => 'important',
           'WARNING' => 'warning', 'CAUTION' => 'caution'] as $src => $cls) {
@@ -54,7 +54,7 @@ foreach (['NOTE' => 'note', 'TIP' => 'tip', 'IMPORTANT' => 'important',
         ($node['admonition_type'] ?? '') === $cls);
 }
 
-// ---- CR-012: latex AST/XML nodes ------------------------------------
+// ---- latex AST/XML nodes ------------------------------------
 $math = new MdParser\Parser(new MdParser\Options(latexMath: true));
 $md = "see \$x\$ and \$\$y\$\$\n";
 $a = $math->toAst($md);
@@ -73,7 +73,7 @@ $x = $math->toXml($md);
 check("XML has latex_math", str_contains($x, '<latex_math'));
 check("XML has latex_math_display", str_contains($x, '<latex_math_display'));
 
-// ---- CR-012: data:image gif/jpeg/webp allowlist positives ------------
+// ---- data:image gif/jpeg/webp allowlist positives ------------
 foreach (['gif', 'jpeg', 'webp'] as $mime) {
     $md = "![x](data:image/$mime;base64,AA==)\n";
     $h = $p->toHtml($md);
@@ -84,7 +84,7 @@ $h = $p->toHtml("![x](data:image/svg+xml;base64,AA==)\n");
 check("data:image/svg+xml still blocked",
     str_contains($h, 'src=""') || !str_contains($h, 'svg+xml'));
 
-// ---- CR-012: strikethrough / tasklist off ---------------------------
+// ---- strikethrough / tasklist off ---------------------------
 $off = new MdParser\Parser(new MdParser\Options(
     strikethrough: false,
     tasklist: false,
@@ -98,13 +98,13 @@ check("tasklist off is normal li",
     !str_contains($h, 'task-list-item') &&
     !str_contains($h, 'checkbox'));
 
-// ---- CR-012: headingAnchors no-op on toInlineHtml -------------------
+// ---- headingAnchors no-op on toInlineHtml -------------------
 $ha = new MdParser\Parser(new MdParser\Options(headingAnchors: true));
 $h = $ha->toInlineHtml("# not a heading");
 check("toInlineHtml headingAnchors no-op",
     $h === "# not a heading" && !str_contains($h, 'id='));
 
-// ---- CR-011: AST flattens footnote section; XML keeps it ------------
+// ---- AST flattens footnote section; XML keeps it ------------
 $fn = new MdParser\Parser(new MdParser\Options(footnotes: true));
 $md = "A[^1]\n\n[^1]: note\n";
 $ast = $fn->toAst($md);
