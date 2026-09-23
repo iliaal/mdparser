@@ -96,6 +96,65 @@ jobs:
           # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
+  linux-branch:
+    name: PHP ${{ matrix.php }} - Linux (PHP-${{ matrix.php }} branch)
+    runs-on: ubuntu-latest
+    # setup-php's '8.6' resolves to a master snapshot, not the PHP-8.6
+    # branch, so build the branch from source in release mode. dom is the
+    # only non-default extension the suite needs (069).
+    env:
+      PHP_VERSION: ${{ matrix.php }}
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.6']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build PHP from branch
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends autoconf bison re2c libxml2-dev
+          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
+          cd /tmp/php-src
+          ./buildconf --force
+          ./configure \
+            --disable-all \
+            --enable-cli \
+            --with-libxml \
+            --enable-dom \
+            --prefix=/tmp/php-branch
+          make -j"$(nproc)"
+          make install
+
+      - name: Build extension
+        run: |
+          set -o pipefail
+          export PATH="/tmp/php-branch/bin:$PATH"
+          phpize
+          ./configure --enable-mdparser --enable-mdparser-dev --with-php-config=/tmp/php-branch/bin/php-config
+          WARNINGS=$(make -j"$(nproc)" 2>&1 | tee /dev/stderr | grep -c 'warning:' || true)
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "::error::Build produced $WARNINGS warning(s)"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          export TEST_PHP_EXECUTABLE=/tmp/php-branch/bin/php
+          TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
+          export TEST_PHP_ARGS
+          export NO_INTERACTION=1
+          set +e
+          /tmp/php-branch/bin/php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+
   linux-zts:
     name: PHP ${{ matrix.php }} ZTS - Linux (canary)
     runs-on: ubuntu-latest
@@ -196,7 +255,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.4']
+        php: ['8.4', '8.6']
 
     env:
       # detect_leaks=1 is LSan's Linux default; pinning it keeps a later
