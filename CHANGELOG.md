@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- GFM tables with 65,536 or more columns no longer wrap md4c's 16-bit column bit-field back to zero and render an empty skeleton; the over-wide underline is rejected before the count is narrowed.
+- `headingAnchors` now includes LaTeX math text in heading slugs, so a heading wrapped in OMML Math keeps its LaTeX content in the anchor.
+
 ## [0.6.1] - 2026-09-03
 
 ### Added
