@@ -6100,8 +6100,13 @@ md_is_table_underline(MD_CTX* ctx, OFF beg, OFF* p_end, unsigned* p_col_count)
         if(off < ctx->size  &&  CH(off) == _T(':'))
             off++;
 
+        /* mdparser local patch (see vendor/VENDOR.md): MD_BLOCK::data is a
+         * 16-bit bit-field. Reject an over-wide underline before the count
+         * is narrowed there; otherwise a valid 65,536-column table wraps to
+         * zero and renders an empty skeleton. */
+        if(col_count >= UINT16_MAX)
+            return false;
         col_count++;
-
         /* Pipe delimiter (optional at the end of line). */
         while(off < ctx->size  &&  ISWHITESPACE(off))
             off++;

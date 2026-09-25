@@ -15,18 +15,19 @@ note: |
   404'd on every run, and degraded to warn-and-proceed without ever
   comparing anything.
 
-  Carries six local behavior patches plus the MD_PARSER_BAILOUT_GUARD
+  Carries seven local behavior patches plus the MD_PARSER_BAILOUT_GUARD
   embedding hook in md_parse: NUL replacement in
-  md_text_with_null_replacement, and five out-of-memory error-path fixes
+  md_text_with_null_replacement, five out-of-memory error-path fixes
   (double free plus leak in md_free_attribute, double free and two
   swallowed md_add_label_def errors in md_is_link_reference_definition,
   and dropped md_end_current_block return values in md_process_doc and
-  md_enter_child_containers). All five OOM fixes are proposed upstream.
+  md_enter_child_containers), and the table column-count guard in
+  md_is_table_underline. All five OOM fixes are proposed upstream.
   See vendor/VENDOR.md. The code-span trailing-whitespace patch was
   accepted upstream as 10e96ad4 and dropped in the 2026-07-27 refresh.
   2026-09-04 audit: master is one commit ahead (bed011f, "Remove #define
   inline", src/md4c.c + src/md4c-html.c). The commit deletes only the
   C89-compat inline shim (dead on C99+ toolchains); zero behavior change
-  and zero interaction with the six local patches or the bailout hook.
+  and zero interaction with the seven local patches or the bailout hook.
   Refresh deferred to the next cycle rather than churning the vendor tree
   for a no-op; re-audit on expiry. md4c-html.c is not compiled in.
