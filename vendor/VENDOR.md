@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Six behavior patches and one embedding hook are carried in `md4c/md4c.c`.
+Seven behavior patches and one embedding hook are carried in `md4c/md4c.c`.
 Every change site is marked with an `mdparser local patch` comment.
 
 ### Out-of-memory error paths
@@ -97,6 +97,16 @@ patches wrap the call in `MD_CHECK`.
 All five are still present in md4c master as of the `61f5ce7` pin, so a
 refresh does not drop them. Re-apply all five and re-check upstream first.
 They are proposed upstream as separate pull requests.
+
+### Table column-count guard
+
+`md_is_table_underline` counts GFM table columns before the count is copied
+into `MD_BLOCK::data`, a 16-bit bit-field. The patch rejects underlines with
+more than `UINT16_MAX` columns before that narrowing can wrap the count to
+zero or a small value. Tables at the 16-bit boundary remain supported; wider
+underlines are treated as ordinary text instead of rendering an empty or
+mis-shaped table skeleton. Re-apply this guard on refresh and run
+`tests/085_table_column_count.phpt` at the 65,535/65,536/65,537 boundaries.
 
 ### Behavior
 
