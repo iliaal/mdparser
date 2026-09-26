@@ -109,7 +109,8 @@ Before filing, try to reproduce against the latest `master` branch.
 
 `vendor/md4c/` is a mostly clean upstream copy of md4c. Its local
 modifications (the NUL-replacement fix, five out-of-memory error-path
-fixes, and the `MD_PARSER_BAILOUT_GUARD` embedding hook) are listed in
+fixes, the `md_is_table_underline` table-column guard, and the
+`MD_PARSER_BAILOUT_GUARD` embedding hook) are listed in
 `vendor/VENDOR.md`, the authority on what is local versus upstream. Do
 not add cherry-picks or hand-edited build shims.
 
@@ -119,7 +120,10 @@ Refreshing md4c is a drop-in file swap:
    `entity.c`, `entity.h`, and `LICENSE.md` from the new md4c
    release into `vendor/md4c/`.
 2. Bump `MDPARSER_MD4C_VERSION` in `php_mdparser.h`.
-3. Rebuild and re-check the spec baseline. If
+3. Re-apply all seven behavior patches and the embedding hook listed in
+   `vendor/VENDOR.md`, including the `md_is_table_underline` table-column
+   guard; run the focused table-boundary regression.
+4. Rebuild and re-check the spec baseline. If
    `tests/005_commonmark_spec.phpt` moves, explain the delta in the
    commit message.
 

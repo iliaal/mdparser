@@ -74,6 +74,7 @@ static void *oom_realloc(void *ptr, size_t size)
 #define HARNESS_BAILOUT (-2)  /* callback-abort sentinel; core OOM is -1 */
 
 static char *h_buf = NULL;
+static unsigned h_wikilinks;
 static size_t h_len = 0;
 static size_t h_cap = 0;
 static int h_cb_refused = 0;
@@ -125,7 +126,10 @@ static int on_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 
 static int on_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
-    (void) type; (void) detail; (void) userdata;
+    (void) detail; (void) userdata;
+    if (type == MD_SPAN_WIKILINK) {
+        h_wikilinks++;
+    }
     if (h_append("S", 1) != 0) {
         return HARNESS_BAILOUT;
     }
@@ -144,7 +148,7 @@ static int on_text(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, void *us
 int main(int argc, char **argv)
 {
     static const MD_PARSER parser = {
-        0, MD_DIALECT_GITHUB | MD_FLAG_FOOTNOTES,
+        0, MD_DIALECT_GITHUB | MD_FLAG_FOOTNOTES | MD_FLAG_WIKILINKS,
         on_block, on_block, on_span, on_span, on_text, NULL, NULL
     };
     char *doc;
@@ -183,14 +187,20 @@ int main(int argc, char **argv)
     h_len = 0;
     h_cap = 0;
     h_cb_refused = 0;
+    h_wikilinks = 0;
     /* Sequenced deliberately: oom_counter must be read after md_parse() runs,
      * which an argument list would not guarantee. */
     ret = md_parse(doc, (MD_SIZE) len, &parser, NULL);
-    printf("fail_at=%ld ret=%d allocs=%ld fired=%d cb=%d\n",
-        oom_fail_at, ret, oom_counter, oom_fired, h_cb_refused);
+    printf("fail_at=%ld ret=%d allocs=%ld fired=%d cb=%d wikilinks=%u\n",
+        oom_fail_at, ret, oom_counter, oom_fired, h_cb_refused, h_wikilinks);
     free(doc);
     free(h_buf);
     h_buf = NULL;
+
+    if (oom_fail_at == -1 && h_wikilinks == 0 && strstr(argv[1], "06-wikilink.md") != NULL) {
+        fprintf(stderr, "%s: MD_SPAN_WIKILINK was not reached\n", argv[1]);
+        return 1;
+    }
 
     /* Sanitizers cover memory safety. This covers the other half of the
      * contract: once an allocation has been refused, md_parse() must report

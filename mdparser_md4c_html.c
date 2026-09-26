@@ -884,7 +884,8 @@ static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *u
      * Entities are decoded to their raw bytes so `# &copy;` slugs the same
      * as a literal `# ©` (otherwise the heading would get no id at all). */
     if (r->in_heading) {
-        if (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE)
+        if (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE ||
+            type == MD_TEXT_LATEXMATH)
             smart_str_appendl(&r->heading_text, text, size);
         else if (type == MD_TEXT_ENTITY)
             mdparser_md4c_decode_entity(&r->heading_text, text, size);
