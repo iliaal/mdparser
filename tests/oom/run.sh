@@ -59,7 +59,14 @@ else
 fi
 
 for doc in "$here"/corpus/*.md; do
-    baseline="$("$bin" "$doc" -1)"
+    baseline="$("$bin" "$doc" -1 2>&1)"
+    baseline_rc=$?
+    if [ "$baseline_rc" -ne 0 ] || printf '%s' "$baseline" | grep -Eq 'ERROR: (Address|Leak)Sanitizer|UndefinedBehaviorSanitizer|runtime error:'; then
+        echo "FAIL $(basename "$doc"): baseline parse failed"
+        printf '%s\n' "$baseline"
+        status=1
+        continue
+    fi
     total="$(printf '%s\n' "$baseline" | sed -n 's/.*allocs=\([0-9]*\).*/\1/p')"
     if [ "$(basename "$doc")" = "06-wikilink.md" ] && \
        ! printf '%s\n' "$baseline" | grep -Eq 'wikilinks=[1-9][0-9]*'; then
