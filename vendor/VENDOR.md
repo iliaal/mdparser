@@ -46,8 +46,9 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Seven behavior patches and one embedding hook are carried in `md4c/md4c.c`.
-Every change site is marked with an `mdparser local patch` comment.
+Seven behavior patches, two performance patches, and one embedding hook are
+carried in `md4c/md4c.c`. Every change site is marked with an
+`mdparser local patch` comment.
 
 ### Out-of-memory error paths
 
@@ -126,6 +127,51 @@ valid while the unchanged cleanup frees reference definitions, footnotes,
 buffers, marks, block storage, and containers. Standalone md4c builds do not
 define the macro and compile the stock path.
 
+### Performance
+
+Two patches replace per-byte character tests on md4c's scan paths. A
+callback-trace diff against stock md4c shows neither changes the event
+stream: 108 inputs (bench corpora, the CommonMark spec, the parity fixtures,
+CR-only, CRLF, and mixed CR/LF variants of the corpora and spec, and
+NUL/control-byte inputs) under three flag sets are byte-identical. That diff
+checks event identity only, not running time; the CR-only complexity case
+below is covered by `tests/088_cr_only_line_endings.phpt`.
+
+The end-of-line scan in `md_analyze_line` tested every byte against `'\n'`
+and `'\r'`, about 20% of md4c's instructions on the spec corpus (x86
+callgrind). The patch finds the first `'\n'` with `memchr` and then searches
+for `'\r'` only before that hit, so a lone `'\r'` or a `"\r\n"` pair still
+ends the line at its first byte, exactly as `ISNEWLINE` did. Both searches
+are bounded by `ctx->size`. The `'\n'` result is cached in `MD_CTX`
+(`newline_cache_*`, zeroed by `md_parse`) together with the offset it was
+searched from, and reused while the scan offset stays inside that range.
+Without the cache, a CR-only document searches from every line to the end of
+the input, which is quadratic: 250,000 `"a\r"` lines took 2.2 s in `toHtml()`
+against 0.02 s stock. `md_process_doc` is the only caller and its offset only
+grows, but the range check keeps the cache correct without relying on that.
+The stock loop is kept under `MD4C_USE_UTF16`, where `CHAR` is wider than a
+byte.
+
+The link-destination scan in `md_is_link_destination_B` stopped on
+`ISWHITESPACE(off) || ISCNTRL(off)`, six comparisons per byte. The union of
+those two sets is exactly bytes 0..32 plus 127 (space is the only whitespace
+member above 31), so the patch tests
+`(unsigned) CH(off) <= 32 || CH(off) == 127`. An exhaustive check over all
+256 byte values, under both signed and unsigned `char`, agrees with the
+stock macros.
+
+Measured with `toHtml()` on the gir bench host (aarch64, release PHP 8.4,
+`-O2`): median paired delta over 20 interleaved rounds against an unpatched
+build, with an A/A control within 0.1%. The end-of-line patch alone is
+-3.8% on `links.md`, -2.4% on `large.md`, and -2.6% on `medium.md`; the
+link-destination patch alone is -1.5% on `links.md` (its md4c instruction
+count there drops 4.8%); together -5.3%, -2.7%, and -1.4%. Corpora that
+parse almost no link destinations still move by up to 1% between builds,
+which is code-layout noise rather than either patch. CR-only input with the
+cache runs at stock speed (1,000,000 lines: 0.073 s against 0.070 s stock).
+Both patches are optional on refresh: drop either one if upstream rewrites
+the loop, and re-measure before re-applying it to changed code.
+
 No other vendored files are modified; md4c.c is otherwise self-contained C
 (no CMake, no re2c, no generated headers to maintain).
 
@@ -138,13 +184,15 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    `vendor/md4c/`.
 2. Update `MDPARSER_MD4C_VERSION` in `php_mdparser.h`.
 3. Rebuild and run `make test`.
-4. Re-apply or drop each behavior patch and the embedding hook (see Local
-   modifications). If the new release already carries an upstream fix, the
-   copy in step 1 removes that patch. Confirm 005 still passes 652/652, run
-   `tests/070_nul_replacement.phpt` for the NUL behavior, and run
-   `tests/oom/run.sh` for the out-of-memory error paths. That sweep is the
-   only gate on most of them; `mdparser.parse_memory_limit` reaches only the
-   paths near its own boundary.
+4. Re-apply or drop each behavior patch, performance patch, and the
+   embedding hook (see Local modifications). If the new release already
+   carries an upstream fix, the copy in step 1 removes that patch. Confirm
+   005 still passes 652/652, run `tests/088_cr_only_line_endings.phpt` for
+   the end-of-line scan, run `tests/070_nul_replacement.phpt` for the NUL
+   behavior, and run `tests/oom/run.sh` for the out-of-memory error paths.
+   That sweep is the only gate on most of them;
+   `mdparser.parse_memory_limit` reaches only the paths near its own
+   boundary.
 5. If `tests/005_commonmark_spec.phpt` moves, explain the delta in the
    commit message (a new md4c release may change conformance in either
    direction). Re-baseline the pinned list only after confirming the

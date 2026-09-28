@@ -289,6 +289,17 @@ struct MD_CTX_tag {
     int html_block_type;    /* For checking closing raw HTML condition. */
     int last_line_has_list_loosening_effect;
     int last_list_item_starts_with_two_blank_lines;
+
+    /* mdparser local patch (see vendor/VENDOR.md): the end-of-line scan in
+     * md_analyze_line() remembers its last '\n' search. When
+     * newline_cache_valid is set, no '\n' lies in
+     * [newline_cache_beg, newline_cache_hit), and newline_cache_hit is the
+     * offset of the first '\n' at or after newline_cache_beg (or ctx->size
+     * if there is none). Without it, CR-only input re-searches to the end of
+     * the document on every line. */
+    int newline_cache_valid;
+    OFF newline_cache_beg;
+    OFF newline_cache_hit;
 };
 
 enum MD_LINETYPE_tag {
@@ -2307,7 +2318,11 @@ md_is_link_destination_B(MD_CTX* ctx, OFF beg, OFF max_end, OFF* p_end,
             continue;
         }
 
-        if(ISWHITESPACE(off) || ISCNTRL(off))
+        /* mdparser local patch (see vendor/VENDOR.md): stock md4c tests
+         * ISWHITESPACE(off) || ISCNTRL(off), six comparisons per byte. The
+         * union is exactly 0..32 plus 127 (' ' is the only whitespace member
+         * above 31), so two comparisons decide it. */
+        if((unsigned) CH(off) <= 32  ||  CH(off) == 127)
             break;
 
         /* Link destination may include balanced pairs of unescaped '(' ')'.
@@ -7012,12 +7027,40 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
     }
 
     /* Scan for end of the line. */
+#if defined MD4C_USE_UTF16
     /* Optimization: Use some loop unrolling. */
     while(off + 3 < ctx->size  &&  !ISNEWLINE(off+0)  &&  !ISNEWLINE(off+1)
                                &&  !ISNEWLINE(off+2)  &&  !ISNEWLINE(off+3))
         off += 4;
     while(off < ctx->size  &&  !ISNEWLINE(off))
         off++;
+#else
+    /* mdparser local patch (see vendor/VENDOR.md): find the first '\n' with
+     * memchr, then the first '\r' before it, instead of testing both bytes
+     * one at a time. The '\r' search is bounded by the '\n' hit so a lone
+     * '\r' or a "\r\n" pair still ends the line at its first byte. The '\n'
+     * hit is cached so that CR-terminated lines reuse it instead of
+     * searching to the end of the document again; the cache is consulted
+     * only for offsets inside the range it vouches for, so it stays correct
+     * even if a caller ever rewinds. */
+    if(off < ctx->size) {
+        OFF lim;
+        const CHAR* cr;
+
+        if(ctx->newline_cache_valid  &&  ctx->newline_cache_beg <= off
+                &&  off <= ctx->newline_cache_hit) {
+            lim = ctx->newline_cache_hit;
+        } else {
+            const CHAR* nl = (const CHAR*) memchr(STR(off), _T('\n'), ctx->size - off);
+            lim = (nl != NULL) ? (OFF) (nl - ctx->text) : ctx->size;
+            ctx->newline_cache_valid = true;
+            ctx->newline_cache_beg = off;
+            ctx->newline_cache_hit = lim;
+        }
+        cr = (const CHAR*) memchr(STR(off), _T('\r'), lim - off);
+        off = (cr != NULL) ? (OFF) (cr - ctx->text) : lim;
+    }
+#endif
 
     /* Set end of the line. */
     line->end = off;
