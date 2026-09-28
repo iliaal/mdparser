@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- md4c's end-of-line scan uses `memchr` and its link-destination scan uses a two-comparison byte test, as two local vendor patches with byte-identical parse events. Measured `toHtml()` on a release build: `links.md` −5.3%, `large.md` −2.7%, `medium.md` −1.4%, `small.md` flat; CR-only input stays linear.
+
 ### Fixed
 
 - GFM tables with 65,536 or more columns no longer wrap md4c's 16-bit column bit-field back to zero and render an empty skeleton; the over-wide underline is rejected before the count is narrowed.
