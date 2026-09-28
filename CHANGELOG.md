@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - md4c's end-of-line scan uses `memchr` and its link-destination scan uses a two-comparison byte test, as two local vendor patches with byte-identical parse events. Measured `toHtml()` on a release build: `links.md` −5.3%, `large.md` −2.7%, `medium.md` −1.4%, `small.md` flat; CR-only input stays linear.
+- `toAst()` interns its node field keys and shares one array per parse for `softbreak` and `linebreak` leaves. Retained trees shrink 7–20% on the bench corpora and 47% on softbreak-dense input, and `toAst()` runs 8–10% faster. A shared leaf is still an independent PHP value: writing to one copy separates it.
+- `toHtml()` and `toXml()` results no longer carry the output reserve as dead capacity. The retained `toHtml()` string for the CommonMark spec shrinks 11%, and a code-heavy `toXml()` result 49%, with no measurable time cost.
 
 ### Fixed
 

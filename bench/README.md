@@ -170,6 +170,41 @@ longer than mdparser on the same input.
    Multi-request scaling on a process-per-request model (FPM,
    CLI-server) is roughly linear.
 
+## Optimization log
+
+Internal optimizations measured for 0.6.2 on an idle aarch64 host (PHP
+8.4.25 NTS release, `-O2`, pinned to one core, interleaved rounds, with an
+A/A control). The noise floor is about ±0.3% run to run and about 1% from
+code-layout shifts, so a gain has to clear 1% on a corpus the change
+actually exercises.
+
+### Shipped
+
+| Change | Result |
+|---|---|
+| md4c end-of-line scan via `memchr`, with the `\n` hit cached so CR-only input stays linear (vendor patch) | `toHtml()` links −3.8%, large −2.4%, medium −2.6% |
+| md4c link-destination byte test (vendor patch) | `toHtml()` links −1.5%; md4c runs 4.8% fewer instructions on links |
+| Both md4c patches together | `toHtml()` links −5.3%, large −2.7%, medium −1.4%, small flat |
+| Interned `toAst()` field keys | `toAst()` 5–9% faster; retained AST memory −5% (large, medium) to −9% (links) |
+| One shared array per parse for `softbreak`/`linebreak` AST leaves | Total `toAst()` retained memory −20% on large, −47% on softbreak-dense input |
+| Trim capacity slack from returned HTML/XML strings | Retained `toHtml()` string −11% (large), −25% (medium); code-heavy `toXml()` −49%; time neutral |
+
+### Rejected
+
+| Candidate | Why |
+|---|---|
+| An uncached `memchr` end-of-line scan | Quadratic on CR-only input (2 MB of `a\r` took 39.7 s instead of 0.07 s); replaced by the cached version above |
+| Inline `strchr` for md4c's `ISANYOF` character-class tests | −0.9% large, −1.3% links, flat on small/medium: inside the layout floor |
+| md4c NUL scan via `memchr` | −1.2% on large, not reproducible above noise |
+| Replacing the per-parse allocation registry with plain libc | +0.9% / −0.1% / −1.2%: the registry's O(1) list splice is free |
+| Reusing an md4c parser context across calls | md4c exposes only `md_parse()`; setup is a 672-byte `memset` plus a 256-byte char map, about 1% at 200 B |
+
+### Deferred
+
+- Skip md4c's href/title rebuild on link close (`md_enter_leave_span_a`): −7.2% on links, flat elsewhere. It changes md4c's callback contract, since the close event would carry an empty detail, so it needs a decision on vendor-patch scope.
+- `-O3`: −3% to −7% on this host, but not yet cross-checked on x86 against the layout floor.
+- Vectorize `mdm_escape_html` (SSE2/NEON or SWAR): about 20% of `toHtml()` time on the code-heavy large corpus (x86 `perf`). Not yet measured.
+
 ## When mdparser doesn't help
 
 - Tiny one-off parses. If you parse one ~50-byte string at application
