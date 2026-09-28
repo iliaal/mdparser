@@ -525,8 +525,6 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     c.depth = 0;
     X_LIT(&c, "</document>\n");
     *status = MDX_OK;
-    smart_str_0(&c.out);
     smart_str_free(&c.scratch);
-    if (!c.out.s) return ZSTR_EMPTY_ALLOC();
-    return c.out.s;
+    return smart_str_extract(&c.out);
 }

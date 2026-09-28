@@ -1016,8 +1016,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     }
 
     *status = MDM_OK;
-    smart_str_0(&r.main);
-    if (!r.main.s)
-        return ZSTR_EMPTY_ALLOC();
-    return r.main.s;  /* ownership transfers to caller */
+    /* Trims the reserve/page-rounding slack: the returned string can outlive
+     * the call by a long time (render caches), so it should not pin it. */
+    return smart_str_extract(&r.main);  /* ownership transfers to caller */
 }
