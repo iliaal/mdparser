@@ -23,6 +23,10 @@ note: |
   and dropped md_end_current_block return values in md_process_doc and
   md_enter_child_containers), and the table column-count guard in
   md_is_table_underline. All five OOM fixes are proposed upstream.
+  0.6.2 adds two performance patches (cached memchr end-of-line scan in
+  md_analyze_line, two-comparison byte test in md_is_link_destination_B);
+  both keep parse events byte-identical to stock and must be re-applied
+  on refresh.
   See vendor/VENDOR.md. The code-span trailing-whitespace patch was
   accepted upstream as 10e96ad4 and dropped in the 2026-07-27 refresh.
   2026-09-04 audit: master is one commit ahead (bed011f, "Remove #define

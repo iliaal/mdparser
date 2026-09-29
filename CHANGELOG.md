@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-09-28
+
 ### Changed
 
 - md4c's end-of-line scan uses `memchr` and its link-destination scan uses a two-comparison byte test, as two local vendor patches with byte-identical parse events. Measured `toHtml()` on a release build: `links.md` −5.3%, `large.md` −2.7%, `medium.md` −1.4%, `small.md` flat; CR-only input stays linear.
@@ -534,7 +536,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.6.1...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.6.2...HEAD
+[0.6.2]: https://github.com/iliaal/mdparser/releases/tag/0.6.2
 [0.6.1]: https://github.com/iliaal/mdparser/releases/tag/0.6.1
 [0.6.0]: https://github.com/iliaal/mdparser/releases/tag/0.6.0
 [0.5.0]: https://github.com/iliaal/mdparser/releases/tag/0.5.0
