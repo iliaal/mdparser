@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed vendored md4c from `0.5.3+git61f5ce7` to `0.6.0+gitc7ba975` (32 commits). CommonMark conformance is unchanged at 652/652. On a release build, `large.md` parses 4.3% faster in `toHtml()` and 3.2% in `toAst()`, and `links.md` 1.5% faster in `toHtml()`; small and medium inputs move by 1.7% or less.
+- In GFM tables, a run of pipes such as `||` now yields empty cells instead of being skipped, so later cells no longer shift left (mity/md4c#419).
+- With `spoilers`, only an exact `||` delimits a spoiler, so `||||` stays literal instead of rendering an empty spoiler (mity/md4c#419).
+- Footnote labels longer than 76 characters no longer define or reference a footnote (mity/md4c#421).
+- A `---` line directly after a link reference definition renders as `<hr />` instead of paragraph text (mity/md4c#414).
+- A list item that opens with an empty line and then a thematic break keeps its later paragraphs instead of ending at the next blank line (mity/md4c#413).
+- `<!` starts an HTML block only when an ASCII letter follows, per CommonMark 0.31, so `<!1` and lowercase `<![cdata[` now parse as paragraph text (mity/md4c#435).
+- With `autolink`, an email address written with a `mailto:` or `xmpp:` prefix is now autolinked, prefix included; before, it stayed plain text (mity/md4c#372).
+
+### Fixed
+
+- With `spoilers` and `wikiLinks` both on, a `||` inside a wiki-link target no longer closes a spoiler that never opened and emits a stray `</span>`; only a single `|` separates target and label (mity/md4c#419).
+
+### For contributors
+
+- Dropped the five out-of-memory error-path patches and the cached `memchr` end-of-line patch; upstream md4c now carries the same fixes (`b630227`, `fa0efb8`, `47f8f4c`) and its own linear `memchr` scan (mity/md4c#442).
+- Added a local md4c patch that restores the `||` length test for spoilers, which upstream `c933a91` dropped: with `spoilers` and `wikiLinks` both on, single pipes vanished and spoiler spans opened or closed unbalanced.
+
 ## [0.6.2] - 2026-09-28
 
 ### Changed

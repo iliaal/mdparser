@@ -193,7 +193,9 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
  * itself. That is safe only because every header md4c.c includes is already
  * fully included here (include guards suppress re-declaration), so the macro
  * expansion never rewrites a system declaration. md4c.c includes: limits.h,
- * stdbool.h, stdint.h, stdio.h, stdlib.h, stddef.h, string.h. If md4c gains a
+ * stdbool.h, stdint.h, stdio.h, stdlib.h, stddef.h, string.h, and wchar.h
+ * (the last only under MD4C_USE_UTF16, which this build never defines; it is
+ * included anyway so the invariant does not depend on that). If md4c gains a
  * new system include at a refresh, add it to this list. */
 #include <limits.h>
 #include <stdbool.h>
@@ -202,6 +204,7 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
+#include <wchar.h>
 
 #define MDPARSER_MD4C_BAILOUT_STATUS (-2)
 #define MD_PARSER_BAILOUT_GUARD(result, expression)                       \

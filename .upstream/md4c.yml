@@ -1,37 +1,32 @@
 # /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
 # detected from php_mdparser.h (MDPARSER_MD4C_VERSION)
 
-pinned: 61f5ce76647a93d60f652da8212e263ae2b4d8b7
+pinned: c7ba975c34d714966ea910c58a97524e5d674ff7
 vendored_at: vendor/md4c
 resolver: github-head
 repo: mity/md4c
 branch: master
-defer_until: 2026-10-15
 note: |
-  md4c (mity/md4c), vendored at master 61f5ce7 (MDPARSER_MD4C_VERSION =
-  0.5.3+git61f5ce7). The vendor directory mirrors a commit rather than a
-  release tag, so the gate resolves the branch head. mity/md4c publishes
-  tags but no GitHub Releases, so `resolver: github` hit releases/latest,
-  404'd on every run, and degraded to warn-and-proceed without ever
-  comparing anything.
+  md4c (mity/md4c), vendored at master c7ba975 (MDPARSER_MD4C_VERSION =
+  0.6.0+gitc7ba975, tag v0.6.0 plus 8 commits). The vendor directory mirrors
+  a commit rather than a release tag, so the gate resolves the branch head.
+  mity/md4c publishes tags but no GitHub Releases, so `resolver: github` hit
+  releases/latest, 404'd on every run, and degraded to warn-and-proceed
+  without ever comparing anything.
 
-  Carries seven local behavior patches plus the MD_PARSER_BAILOUT_GUARD
-  embedding hook in md_parse: NUL replacement in
-  md_text_with_null_replacement, five out-of-memory error-path fixes
-  (double free plus leak in md_free_attribute, double free and two
-  swallowed md_add_label_def errors in md_is_link_reference_definition,
-  and dropped md_end_current_block return values in md_process_doc and
-  md_enter_child_containers), and the table column-count guard in
-  md_is_table_underline. All five OOM fixes are proposed upstream.
-  0.6.2 adds two performance patches (cached memchr end-of-line scan in
-  md_analyze_line, two-comparison byte test in md_is_link_destination_B);
-  both keep parse events byte-identical to stock and must be re-applied
-  on refresh.
-  See vendor/VENDOR.md. The code-span trailing-whitespace patch was
+  Carries three local behavior patches, one performance patch, and the
+  MD_PARSER_BAILOUT_GUARD embedding hook in md_parse: NUL replacement in
+  md_text_with_null_replacement, the table column-count guard in
+  md_is_table_underline, the "||"-only spoiler length test in
+  md_analyze_marks (upstream c933a91 dropped it, so with spoilers and wiki
+  links both on a single '|' paired up, vanished, and unbalanced spoiler
+  spans), and the two-comparison byte test in md_is_link_destination_B
+  (proposed upstream as mity/md4c#443, open). See vendor/VENDOR.md.
+
+  The 2026-09-29 refresh from 61f5ce7 dropped six local patches that
+  upstream now carries: the five out-of-memory error-path fixes (b630227,
+  fa0efb8, 47f8f4c) and the cached memchr end-of-line scan, superseded by
+  upstream's bounded-lookahead memchr scan (a25ed43 + 11e0b30,
+  mity/md4c#442). Earlier, the code-span trailing-whitespace patch was
   accepted upstream as 10e96ad4 and dropped in the 2026-07-27 refresh.
-  2026-09-04 audit: master is one commit ahead (bed011f, "Remove #define
-  inline", src/md4c.c + src/md4c-html.c). The commit deletes only the
-  C89-compat inline shim (dead on C99+ toolchains); zero behavior change
-  and zero interaction with the seven local patches or the bailout hook.
-  Refresh deferred to the next cycle rather than churning the vendor tree
-  for a no-op; re-audit on expiry. md4c-html.c is not compiled in.
+  md4c-html.c is not compiled in.

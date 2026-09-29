@@ -182,7 +182,7 @@ actually exercises.
 
 | Change | Result |
 |---|---|
-| md4c end-of-line scan via `memchr`, with the `\n` hit cached so CR-only input stays linear (vendor patch) | `toHtml()` links −3.8%, large −2.4%, medium −2.6% |
+| md4c end-of-line scan via `memchr`, with the `\n` hit cached so CR-only input stays linear (vendor patch in 0.6.2; now provided by upstream mity/md4c#442, which scans with bounded-lookahead `\r`/`\n` horizons, and the local patch is dropped) | `toHtml()` links −3.8%, large −2.4%, medium −2.6% |
 | md4c link-destination byte test (vendor patch) | `toHtml()` links −1.5%; md4c runs 4.8% fewer instructions on links |
 | Both md4c patches together | `toHtml()` links −5.3%, large −2.7%, medium −1.4%, small flat |
 | Interned `toAst()` field keys | `toAst()` 5–9% faster; retained AST memory −5% (large, medium) to −9% (links) |
@@ -193,7 +193,7 @@ actually exercises.
 
 | Candidate | Why |
 |---|---|
-| An uncached `memchr` end-of-line scan | Quadratic on CR-only input (2 MB of `a\r` took 39.7 s instead of 0.07 s); replaced by the cached version above |
+| An uncached `memchr` end-of-line scan | Quadratic on CR-only input (2 MB of `a\r` took 39.7 s instead of 0.07 s); replaced by the cached version above, itself superseded by upstream's scan |
 | Inline `strchr` for md4c's `ISANYOF` character-class tests | −0.9% large, −1.3% links, flat on small/medium: inside the layout floor |
 | md4c NUL scan via `memchr` | −1.2% on large, not reproducible above noise |
 | Replacing the per-parse allocation registry with plain libc | +0.9% / −0.1% / −1.2%: the registry's O(1) list splice is free |
