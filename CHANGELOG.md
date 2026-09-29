@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-29
+
 ### Changed
 
 - Refreshed vendored md4c from `0.5.3+git61f5ce7` to `0.6.0+gitc7ba975` (32 commits). CommonMark conformance is unchanged at 652/652. On a release build, `large.md` parses 4.3% faster in `toHtml()` and 3.2% in `toAst()`, and `links.md` 1.5% faster in `toHtml()`; small and medium inputs move by 1.7% or less.
@@ -556,7 +558,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.6.2...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.7.0...HEAD
+[0.7.0]: https://github.com/iliaal/mdparser/releases/tag/0.7.0
 [0.6.2]: https://github.com/iliaal/mdparser/releases/tag/0.6.2
 [0.6.1]: https://github.com/iliaal/mdparser/releases/tag/0.6.1
 [0.6.0]: https://github.com/iliaal/mdparser/releases/tag/0.6.0
