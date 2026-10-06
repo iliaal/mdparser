@@ -394,6 +394,8 @@ static unsigned char mdm_trailing_quote_char(const char *p, size_t n)
 {
     if (n == 0) return 0;
     unsigned char last = (unsigned char)p[n - 1];
+    /* HTML escaping renders a trailing verbatim NUL as U+FFFD. */
+    if (last == 0) return 0x80;
     if (last < 0x80) return last;
     size_t i = n - 1;
     while (i > 0 && ((unsigned char)p[i] & 0xC0) == 0x80) i--;
@@ -889,12 +891,18 @@ static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *u
             smart_str_appendl(&r->heading_text, text, size);
         else if (type == MD_TEXT_ENTITY)
             mdparser_md4c_decode_entity(&r->heading_text, text, size);
+        else if (type == MD_TEXT_NULLCHAR)
+            mdparser_md4c_append_cp(&r->heading_text, 0xFFFD);
         else if (type == MD_TEXT_SOFTBR || type == MD_TEXT_BR)
             smart_str_appendc(&r->heading_text, ' ');
     }
 
     switch (type) {
-        case MD_TEXT_NULLCHAR: mdm_append_codepoint(r, 0x0000); break;
+        case MD_TEXT_NULLCHAR:
+            /* Match the quote context of a literal or entity-decoded U+FFFD. */
+            mdm_append_codepoint(r, 0xFFFD);
+            r->prev_char = mdm_codepoint_quote_char(0xFFFD);
+            break;
         case MD_TEXT_BR:
             if (r->image_nesting_level > 0) OUT_LIT(r, " ");
             else OUT_LIT(r, "<br />\n");

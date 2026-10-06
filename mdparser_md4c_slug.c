@@ -42,7 +42,11 @@ char *mdm_slugify(const char *text, size_t len)
     while (i < len) {
         unsigned char c = (unsigned char)text[i];
         if (c < 0x80) {
-            if (c >= 'A' && c <= 'Z') {
+            if (c == 0) {
+                /* Verbatim code/math runs can still contain raw NUL bytes. */
+                smart_str_appendl(&s, "\xef\xbf\xbd", 3);
+                prev_dash = false;
+            } else if (c >= 'A' && c <= 'Z') {
                 smart_str_appendc(&s, (char)(c + ('a' - 'A')));
                 prev_dash = false;
             } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
