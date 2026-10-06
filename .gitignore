@@ -75,3 +75,4 @@ CLAUDE.md
 
 # CodeSage local index and review state
 .codesage/
+.worktrees
