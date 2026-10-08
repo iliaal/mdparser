@@ -58,7 +58,7 @@ jobs:
         # TS-packaged zips are covered by the builder's in-build suite;
         # a TS php.exe is not obtainable from setup-php (no TS selector).
         if: matrix.arch == 'x64' && matrix.ts == 'nts'
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # master
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php-version }}
           coverage: none
