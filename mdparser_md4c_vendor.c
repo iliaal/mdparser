@@ -30,8 +30,8 @@ struct mdparser_md4c_alloc_tracker {
     mdparser_md4c_alloc_header *head;
     mdparser_md4c_alloc_tracker *previous;
     size_t live;        /* bytes requested from libc, headers included */
-    /* 0 = unlimited. With the limit off, 256MB of the worst-case byte
-     * (~72B per '[') can ask libc for ~18GB; keep a limit for untrusted
+    /* 0 = unlimited. With the limit off, 256 MiB of bracket-heavy input
+     * can ask libc for about 19-22 GiB; keep a limit for untrusted
      * input in long-lived workers. */
     size_t limit;
     bool exceeded;      /* refused by the parse_memory_limit budget */

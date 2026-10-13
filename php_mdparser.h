@@ -24,10 +24,10 @@ extern zend_module_entry mdparser_module_entry;
 ZEND_BEGIN_MODULE_GLOBALS(mdparser)
     /* Ceiling on the libc bytes one parse may hold at once. md4c's working
      * memory is invisible to memory_limit, so this is the only bound on it
-     * besides MDPARSER_MAX_INPUT_SIZE. 0 = unlimited. Worst-case input
-     * (~72 bytes of libc working set per `[` byte) can ask libc for ~18GB
-     * on a 256MB input, so keep a limit for untrusted Markdown in
-     * long-lived workers. */
+     * besides MDPARSER_MAX_INPUT_SIZE. 0 = unlimited. Bracket-heavy input
+     * has measured 76-87 bytes of libc working set per input byte, or about
+     * 19-22 GiB at the 256 MiB input cap. Keep a limit for untrusted
+     * Markdown in long-lived workers. */
     zend_long parse_memory_limit;
 ZEND_END_MODULE_GLOBALS(mdparser)
 
