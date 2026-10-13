@@ -15,11 +15,13 @@
 
 #include "php.h"
 
-/* Dedupe state for heading anchors: a set of taken slugs plus a
- * base -> next-suffix cache so repeated collisions stay near O(1). */
+struct mdm_slug_node;
+
+/* Dedupe state for heading anchors. The balanced tree stores every assigned
+ * slug and the next suffix for each base, so adversarial hash collisions do
+ * not affect lookup cost. */
 typedef struct {
-    HashTable taken;        /* slug string -> (dummy) */
-    HashTable next_suffix;  /* base slug -> zend_long next suffix */
+    struct mdm_slug_node *root;
     bool active;
 } mdm_slugs;
 

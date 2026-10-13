@@ -90,54 +90,164 @@ char *mdm_slugify(const char *text, size_t len)
     return out;
 }
 
+typedef struct mdm_slug_node {
+    struct mdm_slug_node *left;
+    struct mdm_slug_node *right;
+    struct mdm_slug_node *parent;
+    zend_long next_suffix;
+    bool red;
+    char slug[];
+} mdm_slug_node;
+
+static void mdm_slug_rotate_left(mdm_slug_node **root, mdm_slug_node *node)
+{
+    mdm_slug_node *child = node->right;
+    node->right = child->left;
+    if (child->left) child->left->parent = node;
+    child->parent = node->parent;
+    if (!node->parent) *root = child;
+    else if (node == node->parent->left) node->parent->left = child;
+    else node->parent->right = child;
+    child->left = node;
+    node->parent = child;
+}
+
+static void mdm_slug_rotate_right(mdm_slug_node **root, mdm_slug_node *node)
+{
+    mdm_slug_node *child = node->left;
+    node->left = child->right;
+    if (child->right) child->right->parent = node;
+    child->parent = node->parent;
+    if (!node->parent) *root = child;
+    else if (node == node->parent->left) node->parent->left = child;
+    else node->parent->right = child;
+    child->right = node;
+    node->parent = child;
+}
+
+static mdm_slug_node *mdm_slug_insert(mdm_slug_node **root, const char *slug,
+    bool *inserted)
+{
+    mdm_slug_node *parent = NULL;
+    mdm_slug_node *node = *root;
+    int cmp = 0;
+    while (node) {
+        parent = node;
+        cmp = strcmp(slug, node->slug);
+        if (cmp == 0) {
+            *inserted = false;
+            return node;
+        }
+        node = cmp < 0 ? node->left : node->right;
+    }
+
+    size_t len = strlen(slug);
+    node = emalloc(sizeof(*node) + len + 1);
+    node->left = node->right = NULL;
+    node->parent = parent;
+    node->next_suffix = 1;
+    node->red = true;
+    memcpy(node->slug, slug, len + 1);
+    if (!parent) *root = node;
+    else if (cmp < 0) parent->left = node;
+    else parent->right = node;
+
+    while (node->parent && node->parent->red) {
+        mdm_slug_node *grandparent = node->parent->parent;
+        if (node->parent == grandparent->left) {
+            mdm_slug_node *uncle = grandparent->right;
+            if (uncle && uncle->red) {
+                node->parent->red = false;
+                uncle->red = false;
+                grandparent->red = true;
+                node = grandparent;
+            } else {
+                if (node == node->parent->right) {
+                    node = node->parent;
+                    mdm_slug_rotate_left(root, node);
+                }
+                node->parent->red = false;
+                grandparent->red = true;
+                mdm_slug_rotate_right(root, grandparent);
+            }
+        } else {
+            mdm_slug_node *uncle = grandparent->left;
+            if (uncle && uncle->red) {
+                node->parent->red = false;
+                uncle->red = false;
+                grandparent->red = true;
+                node = grandparent;
+            } else {
+                if (node == node->parent->left) {
+                    node = node->parent;
+                    mdm_slug_rotate_right(root, node);
+                }
+                node->parent->red = false;
+                grandparent->red = true;
+                mdm_slug_rotate_left(root, grandparent);
+            }
+        }
+    }
+    (*root)->red = false;
+    *inserted = true;
+    return node;
+}
+
 void mdm_slugs_init(mdm_slugs *s)
 {
-    zend_hash_init(&s->taken, 8, NULL, NULL, 0);
-    zend_hash_init(&s->next_suffix, 8, NULL, NULL, 0);
+    s->root = NULL;
     s->active = true;
 }
 
 void mdm_slugs_destroy(mdm_slugs *s)
 {
     if (!s->active) return;
-    zend_hash_destroy(&s->taken);
-    zend_hash_destroy(&s->next_suffix);
+    mdm_slug_node *node = s->root;
+    while (node) {
+        if (node->left) {
+            node = node->left;
+        } else if (node->right) {
+            node = node->right;
+        } else {
+            mdm_slug_node *parent = node->parent;
+            if (parent) {
+                if (parent->left == node) parent->left = NULL;
+                else parent->right = NULL;
+            }
+            efree(node);
+            node = parent;
+        }
+    }
+    s->root = NULL;
     s->active = false;
 }
 
 char *mdm_slug_unique(mdm_slugs *s, char *base)
 {
     if (base[0] == '\0') return base;
-    size_t blen = strlen(base);
-    if (!zend_hash_str_exists(&s->taken, base, blen)) {
-        zval z; ZVAL_TRUE(&z);
-        zend_hash_str_add(&s->taken, base, blen, &z);
-        return base;
-    }
-    zval *nx = zend_hash_str_find(&s->next_suffix, base, blen);
-    zend_long start = nx ? Z_LVAL_P(nx) : 1;
+    bool inserted;
+    mdm_slug_node *base_node = mdm_slug_insert(&s->root, base, &inserted);
+    if (inserted) return base;
+    zend_long start = base_node->next_suffix;
     if (start < 1) {
         efree(base);
         char *empty = emalloc(1);
         empty[0] = '\0';
         return empty;
     }
+    size_t blen = strlen(base);
     char *cand = emalloc(blen + 24);
     for (zend_long n = start; n <= 100000; n++) {
         int w = snprintf(cand, blen + 24, "%s-" ZEND_LONG_FMT, base, n);
         if (w < 0 || (size_t)w >= blen + 24) continue;
-        if (!zend_hash_str_exists(&s->taken, cand, (size_t)w)) {
-            zval z; ZVAL_TRUE(&z);
-            zend_hash_str_add(&s->taken, cand, (size_t)w, &z);
-            zval suf; ZVAL_LONG(&suf, n + 1);
-            zend_hash_str_update(&s->next_suffix, base, blen, &suf);
+        mdm_slug_insert(&s->root, cand, &inserted);
+        if (inserted) {
+            base_node->next_suffix = n + 1;
             efree(base);
             return cand;
         }
     }
-    zval exhausted;
-    ZVAL_LONG(&exhausted, -1);
-    zend_hash_str_update(&s->next_suffix, base, blen, &exhausted);
+    base_node->next_suffix = -1;
     efree(cand);
     efree(base);
     char *empty = emalloc(1);
