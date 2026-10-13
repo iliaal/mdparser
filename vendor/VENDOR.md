@@ -34,7 +34,7 @@ not compiled; mdparser uses its own callback renderer for `toHtml()`
 
 | Component | Version | Notes |
 |---|---|---|
-| mity/md4c | `0.6.0+gitc7ba975` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
+| mity/md4c | `0.6.0+git58c55b69` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
 | CommonMark spec fixture | 0.31 `spec.txt` | Shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` pins md4c's conformance against it. |
 
 md4c targets CommonMark 0.31 natively, so the parser pin and the spec
@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Eight behavior patches, two performance patches, and two embedding hooks are
+Seven behavior patches, one performance patch, and two embedding hooks are
 carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -70,25 +70,9 @@ The NUL patch is in `md_text_with_null_replacement`. Stock md4c emits the
 input pointer and remaining size on the same NUL. The following callback then
 receives that byte a second time. The patch consumes one character from
 `str`/`size` after the replacement callback, so every embedded NUL produces
-exactly one replacement event. Still unfixed upstream as of `c7ba975`. Drop
+exactly one replacement event. Still unfixed upstream as of `58c55b69`. Drop
 this patch when a refreshed md4c contains the equivalent pointer/size
 advance.
-
-The spoiler patch is in `md_analyze_marks`, on the `'|'` case. Upstream
-`c933a91` folded `md_analyze_spoiler` into `md_analyze_generic` and dropped
-its "only a `||` run is a spoiler mark" length test. Since mity/md4c#419,
-`MD_FLAG_WIKILINKS` collects every single `|` as a potential opener and
-closer, so with `MD_FLAG_SPOILERS` also set, `md_analyze_generic` pairs a
-lone `|` with the next `|` or `||`. The pipes then vanish from the output
-(`a | b | c` renders as `a  b  c`) and a spoiler span is entered or left
-without its partner (`x | y ||` emits a bare `MD_SPAN_SPOILER` leave), which
-breaks `toXml()` and `toAst()` outright. Stock md2html at `c7ba975`
-reproduces it; the parent of `c933a91` does not. The patch restores the
-length test before the call. The `MD_MARK_RESOLVED` test that went with it
-is not needed, because `md_analyze_marks` already skips resolved marks. With
-the patch, md4c's own test suite (`test/*.txt`, 987 examples) still passes in
-full. Drop the patch once upstream restores the check.
-`tests/089_spoiler_wikilink_single_pipe.phpt` covers it.
 
 The full-reference label patch is in `md_resolve_bracket_link`. After md4c
 recognizes `[text][label]`, it extends the link closer over the label but stock
@@ -168,18 +152,21 @@ container indices, so reallocating the container array does not invalidate
 them. Re-apply the patch on refresh unless upstream provides an equivalent
 bounded lookup, and run `tests/091_deep_list_blank_scaling.phpt`.
 
-The link-destination scan in `md_is_link_destination_B` stopped on
-`ISWHITESPACE(off) || ISCNTRL(off)`, six comparisons per byte. The union of
-those two sets is exactly bytes 0..32 plus 127 (space is the only whitespace
-member above 31), so the patch tests
-`(unsigned) CH(off) <= 32 || CH(off) == 127`. An exhaustive check over all
-256 byte values, under both signed and unsigned `char`, agrees with the
-stock macros. It is proposed upstream as mity/md4c#443, still open. Measured
-alone in 0.6.2 on the gir bench host (aarch64, release PHP 8.4, `-O2`, median
-paired delta over 20 interleaved rounds, A/A control within 0.1%): -1.5%
-`toHtml()` on `links.md`, whose md4c instruction count drops 4.8%. The patch
-is optional on refresh: drop it if upstream rewrites the loop, and
-re-measure before re-applying it to changed code.
+### Dropped at the `58c55b69` refresh
+
+Upstream `89a9bf4` restored the `||` length check in `md_analyze_marks` for
+spoiler delimiters, so the local patch was removed. The single-pipe cases in
+`tests/089_spoiler_wikilink_single_pipe.phpt` protect the behavior.
+
+Upstream `45ec7ac` and `ec89a39` changed `md_is_link_destination_B` to the
+same two-comparison test for whitespace and control bytes, so the local
+performance patch was removed. The byte-set equivalence was checked for all
+256 byte values with signed and unsigned `char` when the local patch landed.
+
+This upstream source also changes the bracket-resolution queue (`c6008fb`),
+permissive autolinks (`3da1937`), and verbatim tab indentation (`2671f25`).
+`entity.c` has a trailing-whitespace-only upstream line normalized for the
+repository's `git diff --check` gate.
 
 ### Dropped at the `c7ba975` refresh
 
@@ -216,8 +203,8 @@ follows the removal of at least two `MD_LINE` records (8 bytes each) and adds
 one 8-byte `MD_BLOCK`, so `md_push_block_bytes` never has to grow the buffer
 there.
 
-No other vendored files are modified; md4c.c is otherwise self-contained C
-(no CMake, no re2c, no generated headers to maintain).
+All local parser changes are confined to `md4c.c` and `md4c.h`; md4c is
+otherwise self-contained C (no CMake, no re2c, no generated headers to maintain).
 
 ## Refresh
 
@@ -231,7 +218,7 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    in `mdparser_md4c_vendor.c`; its `malloc`/`realloc`/`free` macros are safe
    only while every one of them is included first.
 4. Rebuild and run `make test`.
-5. Re-apply or drop each behavior patch, both performance patches, and the
+5. Re-apply or drop each behavior patch, the performance patch, and the
    two embedding hooks (see Local modifications). If the new release already
    carries an upstream fix, the copy in step 1 removes that patch. Confirm
    005 still passes 652/652, run `tests/088_cr_only_line_endings.phpt` for
@@ -241,7 +228,8 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    length test, `tests/091_deep_list_blank_scaling.phpt` for bounded
    blank-line container lookup, `tests/096_reference_link_label_marks.phpt`
    for consumed reference-label marks, `tests/097_inline_attribute_sentinel.phpt`
-   for attribute source provenance, `tests/101_two_blank_line_list_item.phpt`
+   for attribute source provenance, `tests/100_html_block_tag_boundaries.phpt`
+   for HTML block starts, `tests/101_two_blank_line_list_item.phpt`
    for list-item blank-line boundaries, and `tests/oom/run.sh` for the
    out-of-memory error paths. Run
    `tests/099_footnote_definition_lookup_after_ordering.phpt` for footnote

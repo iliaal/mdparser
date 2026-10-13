@@ -1,30 +1,26 @@
 # /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
 # detected from php_mdparser.h (MDPARSER_MD4C_VERSION)
 
-pinned: c7ba975c34d714966ea910c58a97524e5d674ff7
+pinned: 58c55b69bfbebaf3fa24755f32dbff72bf59b227
 vendored_at: vendor/md4c
 resolver: github-head
 repo: mity/md4c
 branch: master
 note: |
-  md4c (mity/md4c), vendored at master c7ba975 (MDPARSER_MD4C_VERSION =
-  0.6.0+gitc7ba975, tag v0.6.0 plus 8 commits). The vendor directory mirrors
+  md4c (mity/md4c), vendored at master 58c55b69 (MDPARSER_MD4C_VERSION =
+  0.6.0+git58c55b69, tag v0.6.0 plus 27 commits). The vendor directory mirrors
   a commit rather than a release tag, so the gate resolves the branch head.
   mity/md4c publishes tags but no GitHub Releases, so `resolver: github` hit
   releases/latest, 404'd on every run, and degraded to warn-and-proceed
   without ever comparing anything.
 
-  Carries eight local behavior patches, two performance patches, and two
+  Carries seven local behavior patches, one performance patch, and two
   embedding hooks: MD_PARSER_BAILOUT_GUARD in md_parse and raw attribute
   source provenance in MD_ATTRIBUTE/md_build_attribute. NUL replacement in
   md_text_with_null_replacement, the table column-count guard in
-  md_is_table_underline, the "||"-only spoiler length test in
-  md_analyze_marks (upstream c933a91 dropped it, so with spoilers and wiki
-  links both on a single '|' paired up, vanished, and unbalanced spoiler
-  spans), suppression of inline marks in consumed full-reference link labels,
-  the linked block-quote lookup used by blank-line container analysis, and
-  the two-comparison byte test in md_is_link_destination_B (proposed upstream
-  as mity/md4c#443, open). See vendor/VENDOR.md.
+  md_is_table_underline, suppression of inline marks in consumed
+  full-reference link labels, and the linked block-quote lookup used by
+  blank-line container analysis. See vendor/VENDOR.md.
   The footnote definition patch emits definitions through a pointer queue,
   including nested-only references, so label hash buckets retain their original
   targets during footnote rendering.
@@ -36,6 +32,12 @@ note: |
   The list-item blank-line patch records each LI opener boundary and whether
   the item had source content, so a final MD_LINE or consumed reference
   definition cannot make a nonempty item appear empty.
+
+  This refresh drops the local "||"-only spoiler length test (upstream
+  89a9bf4) and the link-destination two-comparison byte test (upstream
+  45ec7ac and ec89a39). Other upstream changes include bracket pairing
+  (c6008fb), permissive autolinks with single-component hosts and ports
+  (3da1937), and verbatim tab indentation (2671f25).
 
   The 2026-09-29 refresh from 61f5ce7 dropped six local patches that
   upstream now carries: the five out-of-memory error-path fixes (b630227,
