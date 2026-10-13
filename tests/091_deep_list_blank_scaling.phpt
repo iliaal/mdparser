@@ -6,27 +6,31 @@ mdparser
 <?php
 
 $parser = new MdParser\Parser();
+$depth = 25000;
+$markdown = str_repeat("- ", $depth) . "x\n";
+$withBlanks = $markdown . str_repeat("\n", 50000);
 
-function measure(MdParser\Parser $parser, int $size): int
+function measure(MdParser\Parser $parser, string $markdown): array
 {
-    $depth = intdiv($size, 4);
-    $blanks = intdiv($size, 2);
-    $markdown = str_repeat("- ", $depth) . "x\n" . str_repeat("\n", $blanks);
-
     $start = hrtime(true);
-    $parser->toHtml($markdown);
-    return max(hrtime(true) - $start, 1000000);
+    $html = $parser->toHtml($markdown);
+    return [max(hrtime(true) - $start, 1000000), $html];
 }
 
-/* Doubling both dimensions used to multiply the work by about four. A
- * bounded container lookup keeps the growth close to the doubled input size. */
-measure($parser, 20000);
-$small = measure($parser, 100000);
-$large = measure($parser, 200000);
-$ratio = $large / $small;
+/* Hold list construction and output constant to isolate trailing blank-line cost. */
+measure($parser, "- x\n\n");
+[$baseTime, $baseHtml] = measure($parser, $markdown);
+[$blankTime, $blankHtml] = measure($parser, $withBlanks);
+$ratio = $blankTime / $baseTime;
 
-printf("bounded scaling: %s\n", $ratio < 3.0 ? 'yes' : sprintf('no (%.1fx)', $ratio));
+echo 'nested lists preserved: ',
+    $baseHtml === $blankHtml
+    && substr_count($baseHtml, '<ul>') === $depth
+    && substr_count($baseHtml, '<li>') === $depth
+    && str_contains($baseHtml, 'x') ? 'yes' : 'no', "\n";
+printf("blank-line overhead bounded: %s\n", $ratio < 8.0 ? 'yes' : sprintf('no (%.1fx)', $ratio));
 
 ?>
 --EXPECT--
-bounded scaling: yes
+nested lists preserved: yes
+blank-line overhead bounded: yes
