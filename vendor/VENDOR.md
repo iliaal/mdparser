@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Four behavior patches, two performance patches, and two embedding hooks are
+Five behavior patches, two performance patches, and two embedding hooks are
 carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -98,6 +98,17 @@ The patch disables every mark in the consumed label before inline span
 resolution. `tests/096_reference_link_label_marks.phpt` covers the default
 emphasis case and the highlight extension. Drop the patch once upstream
 contains the equivalent mark suppression.
+
+The footnote definition patch is in `md_process_footnote_defs` and
+`md_resolve_bracket_footnote`. md4c builds label hash buckets with pointers
+into the definition array, then sorts that array in place by first-reference
+order. After a move, a bucket can point to the wrong definition, so references
+in a footnote body remain literal. The patch leaves definitions in place and
+records pointers in first-reference order, including references first found
+while rendering a footnote body. This also emits definitions referenced only
+from another footnote. `tests/099_footnote_definition_lookup_after_ordering.phpt`
+covers both cases in HTML, XML, and AST. Drop the patch once upstream preserves
+the hash table's pointers and emits nested-only definitions.
 
 The embedding hook is in `md_parse`. When `MD_PARSER_BAILOUT_GUARD` is
 defined, the call to `md_process_doc` runs inside the wrapper-provided guard.
@@ -200,7 +211,9 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    blank-line container lookup, `tests/096_reference_link_label_marks.phpt`
    for consumed reference-label marks, `tests/097_inline_attribute_sentinel.phpt`
    for attribute source provenance, and `tests/oom/run.sh` for the
-   out-of-memory error paths.
+   out-of-memory error paths. Run
+   `tests/099_footnote_definition_lookup_after_ordering.phpt` for footnote
+   definition lookup after first-reference ordering.
    That sweep is the only gate on most of them;
    `mdparser.parse_memory_limit` reaches only the paths near its own
    boundary.

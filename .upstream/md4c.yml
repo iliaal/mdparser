@@ -14,7 +14,7 @@ note: |
   releases/latest, 404'd on every run, and degraded to warn-and-proceed
   without ever comparing anything.
 
-  Carries four local behavior patches, two performance patches, and two
+  Carries five local behavior patches, two performance patches, and two
   embedding hooks: MD_PARSER_BAILOUT_GUARD in md_parse and raw attribute
   source provenance in MD_ATTRIBUTE/md_build_attribute. NUL replacement in
   md_text_with_null_replacement, the table column-count guard in
@@ -25,6 +25,9 @@ note: |
   the linked block-quote lookup used by blank-line container analysis, and
   the two-comparison byte test in md_is_link_destination_B (proposed upstream
   as mity/md4c#443, open). See vendor/VENDOR.md.
+  The footnote definition patch emits definitions through a pointer queue,
+  including nested-only references, so label hash buckets retain their original
+  targets during footnote rendering.
 
   The 2026-09-29 refresh from 61f5ce7 dropped six local patches that
   upstream now carries: the five out-of-memory error-path fixes (b630227,
