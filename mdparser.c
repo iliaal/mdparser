@@ -30,7 +30,9 @@ ZEND_DECLARE_MODULE_GLOBALS(mdparser)
 static ZEND_INI_MH(mdparser_on_update_parse_memory_limit)
 {
     zend_string *errstr = NULL;
-    zend_long bytes = zend_ini_parse_quantity(new_value, &errstr);
+    zend_long bytes = ZSTR_LEN(new_value) == 0
+        ? 128 * 1024 * 1024
+        : zend_ini_parse_quantity(new_value, &errstr);
     zend_long *target;
 
     if (errstr) {
