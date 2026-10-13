@@ -14,7 +14,7 @@ note: |
   releases/latest, 404'd on every run, and degraded to warn-and-proceed
   without ever comparing anything.
 
-  Carries seven local behavior patches, two performance patches, and two
+  Carries eight local behavior patches, two performance patches, and two
   embedding hooks: MD_PARSER_BAILOUT_GUARD in md_parse and raw attribute
   source provenance in MD_ATTRIBUTE/md_build_attribute. NUL replacement in
   md_text_with_null_replacement, the table column-count guard in
@@ -33,6 +33,9 @@ note: |
   The HTML block start patch checks the terminator after type 1 tag names,
   excludes self-closing type 1 tags from type 7, and keeps scanning type 6
   names after a shorter prefix fails its terminator test.
+  The list-item blank-line patch records each LI opener boundary and whether
+  the item had source content, so a final MD_LINE or consumed reference
+  definition cannot make a nonempty item appear empty.
 
   The 2026-09-29 refresh from 61f5ce7 dropped six local patches that
   upstream now carries: the five out-of-memory error-path fixes (b630227,

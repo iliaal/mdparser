@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Seven behavior patches, two performance patches, and two embedding hooks are
+Eight behavior patches, two performance patches, and two embedding hooks are
 carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -128,6 +128,18 @@ must keep checking names after a shorter prefix lacks a valid terminator, so
 `<thead>` can still match after `th` does not. `tests/100_html_block_tag_boundaries.phpt`
 covers both conditions in HTML, XML, and AST. Drop the patch once upstream
 implements both boundary checks.
+
+The two-blank-line list patch is in `md_analyze_line` and the list container
+openers. Stock md4c decides whether a list item is still empty by treating the
+last bytes of `block_bytes` as an `MD_BLOCK`, even when they hold the final
+`MD_LINE` of a completed paragraph. If the line begins at an offset whose low
+byte equals `MD_BLOCK_LI`, the next indented paragraph leaves the list item.
+The patch records the byte position just after each item's actual opener and
+whether a nonblank source line belonged to it. The latter matters when a link
+reference definition consumes the only paragraph and removes its block bytes.
+`tests/101_two_blank_line_list_item.phpt` covers both cases in HTML, XML, and
+AST, and the required closure of a genuinely empty item. Drop the patch when
+upstream tracks the item opener and source content explicitly.
 
 The embedding hook is in `md_parse`. When `MD_PARSER_BAILOUT_GUARD` is
 defined, the call to `md_process_doc` runs inside the wrapper-provided guard.
@@ -229,7 +241,8 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    length test, `tests/091_deep_list_blank_scaling.phpt` for bounded
    blank-line container lookup, `tests/096_reference_link_label_marks.phpt`
    for consumed reference-label marks, `tests/097_inline_attribute_sentinel.phpt`
-   for attribute source provenance, and `tests/oom/run.sh` for the
+   for attribute source provenance, `tests/101_two_blank_line_list_item.phpt`
+   for list-item blank-line boundaries, and `tests/oom/run.sh` for the
    out-of-memory error paths. Run
    `tests/099_footnote_definition_lookup_after_ordering.phpt` for footnote
    definition lookup after first-reference ordering, and
