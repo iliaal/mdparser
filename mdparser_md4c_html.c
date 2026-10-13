@@ -555,15 +555,21 @@ static void render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
 {
     OUT_LIT(r, "<pre><code");
     if (d->lang.text != NULL) {
-        /* Prefix decision must use entity-decoded bytes: md4c hands lang out
-         * entity-undecoded, so `language&#45;php` would miss a raw "language-"
-         * probe and emit class="language-language-php". */
+        /* Prefix and token decisions must use entity-decoded bytes. HTML class
+         * tokens split on ASCII whitespace; decoded NBSP remains in the token. */
         mdparser_md4c_attr_view lang;
         mdparser_md4c_attr_view_init(&lang, &d->lang);
+        size_t token_size = 0;
+        while (token_size < lang.size) {
+            unsigned char ch = (unsigned char)lang.text[token_size];
+            if (ch == 0x09 || ch == 0x0a || ch == 0x0c || ch == 0x0d || ch == 0x20)
+                break;
+            token_size++;
+        }
         OUT_LIT(r, " class=\"");
-        if (lang.size < 9 || strncmp(lang.text, "language-", 9) != 0)
+        if (token_size < 9 || strncmp(lang.text, "language-", 9) != 0)
             OUT_LIT(r, "language-");
-        mdm_escape_html(r, lang.text, lang.size);
+        mdm_escape_html(r, lang.text, token_size);
         OUT_LIT(r, "\"");
         mdparser_md4c_attr_view_destroy(&lang);
     }
