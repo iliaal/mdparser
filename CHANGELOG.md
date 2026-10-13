@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve ordinary links and balanced spans after an unresolved footnote label.
 - Parse HTML block tags using their full names, so false prefixes no longer consume later Markdown.
 - Keep indented paragraphs inside nonempty list items after two blank lines, including reference-only items.
+- Preserve paragraphs inside nested blockquotes after an empty list item closes.
 
 ### For contributors
 
