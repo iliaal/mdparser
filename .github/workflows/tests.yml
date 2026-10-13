@@ -211,7 +211,7 @@ jobs:
 
   macos:
     name: PHP ${{ matrix.php }} - macOS
-    runs-on: macos-latest
+    runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
