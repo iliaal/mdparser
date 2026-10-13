@@ -35,6 +35,8 @@
 #define MDA_ERR_PARSE  1
 #define MDA_ERR_DEPTH  2
 #define MDA_ERR_MEMORY 3
+#define MDA_ERR_CELLS  4
+#define MDA_MAX_TABLE_CELLS 65536
 
 const char *mdparser_md4c_ast_status_message(int status)
 {
@@ -42,6 +44,7 @@ const char *mdparser_md4c_ast_status_message(int status)
         case MDA_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDA_ERR_DEPTH: return "mdparser: AST nesting exceeds maximum depth";
         case MDA_ERR_MEMORY: return "mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)";
+        case MDA_ERR_CELLS: return "mdparser: table cell limit exceeded";
         default: return "mdparser: unknown error";
     }
 }
@@ -51,6 +54,7 @@ typedef struct {
     int depth;                 /* index of current open node */
     int in_thead;              /* >0 while inside MD_BLOCK_THEAD */
     int th_col;                /* column index within the header row */
+    size_t table_cells;
     bool collecting;           /* accumulating a leaf literal */
     smart_str litbuf;
     smart_str textrun;         /* staged consecutive text fragments */
@@ -425,6 +429,11 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             mda_kbool(&n, mda_key_is_header, c->in_thead ? 1 : 0);
             break;
         case MD_BLOCK_TH: {
+            if (c->table_cells >= MDA_MAX_TABLE_CELLS) {
+                c->error = MDA_ERR_CELLS;
+                return 1;
+            }
+            c->table_cells++;
             /* Header cells define the per-column alignment for the table. */
             zval *aligns = mda_table_alignments(c);
             if (aligns) {
@@ -437,6 +446,11 @@ static int mda_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         }
         case MD_BLOCK_TD:
+            if (c->table_cells >= MDA_MAX_TABLE_CELLS) {
+                c->error = MDA_ERR_CELLS;
+                return 1;
+            }
+            c->table_cells++;
             mda_new_node(&n, MDA_T_table_cell);
             break;
         case MD_BLOCK_FOOTNOTE_DEF: {

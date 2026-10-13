@@ -35,6 +35,8 @@
 #define MDX_ERR_DEPTH 2
 #define MDX_ERR_MEMORY 3
 #define MDX_MAX_INDENT_DEPTH 32
+#define MDX_ERR_CELLS 4
+#define MDX_MAX_TABLE_CELLS 65536
 
 const char *mdparser_md4c_xml_status_message(int status)
 {
@@ -42,6 +44,7 @@ const char *mdparser_md4c_xml_status_message(int status)
         case MDX_ERR_PARSE: return "mdparser: md4c parser failed";
         case MDX_ERR_DEPTH: return "mdparser: XML nesting exceeds maximum depth";
         case MDX_ERR_MEMORY: return "mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)";
+        case MDX_ERR_CELLS: return "mdparser: table cell limit exceeded";
         default: return "mdparser: unknown error";
     }
 }
@@ -52,6 +55,7 @@ typedef struct {
     unsigned char esc_text[256];  /* attention maps for the shared scan */
     unsigned char esc_attr[256];
     int depth;
+    size_t table_cells;
     bool collecting;   /* code/code_block/html literal */
     int error;
 } mdx_ctx;
@@ -269,6 +273,11 @@ static int mdx_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_TR: mdx_open(c, "table_row"); break;
         case MD_BLOCK_TH:
         case MD_BLOCK_TD: {
+            if (c->table_cells >= MDX_MAX_TABLE_CELLS) {
+                c->error = MDX_ERR_CELLS;
+                return 1;
+            }
+            c->table_cells++;
             MD_ALIGN al = ((MD_BLOCK_TD_DETAIL *)detail)->align;
             const char *name = al == MD_ALIGN_LEFT ? "left"
                 : al == MD_ALIGN_CENTER ? "center"
