@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Six behavior patches, two performance patches, and two embedding hooks are
+Seven behavior patches, two performance patches, and two embedding hooks are
 carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -118,6 +118,16 @@ unbalanced. The patch leaves the opener unchanged until the footnote resolves.
 `tests/103_failed_footnote_probe.phpt` covers the original link destination,
 balanced nested spans, and a valid footnote reference. Drop the patch once
 upstream delays the opener change until successful lookup.
+
+The HTML block start patch is in `md_is_html_block_start_condition`. Type 1
+must check the byte after `pre`, `script`, `style`, or `textarea`; a bare prefix
+such as `<prefix>` may start a type 7 block but must stop at its blank-line
+boundary instead of consuming the rest of the document as type 1. A
+self-closing form such as `<pre/>` must also avoid the type 7 fallback. Type 6
+must keep checking names after a shorter prefix lacks a valid terminator, so
+`<thead>` can still match after `th` does not. `tests/100_html_block_tag_boundaries.phpt`
+covers both conditions in HTML, XML, and AST. Drop the patch once upstream
+implements both boundary checks.
 
 The embedding hook is in `md_parse`. When `MD_PARSER_BAILOUT_GUARD` is
 defined, the call to `md_process_doc` runs inside the wrapper-provided guard.
