@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove internal line markers from multiline link and image attributes in `toInlineHtml()`.
 - Treat an empty `mdparser.parse_memory_limit` value as the default `128M`; explicit `0` and negative values remain unlimited.
 - Ignore wikilink callbacks when `wikiLinks` is disabled.
+- Keep nested footnote references working when definitions are listed out of reference order.
+- Preserve ordinary links and balanced spans after an unresolved footnote label.
+- Parse HTML block tags using their full names, so false prefixes no longer consume later Markdown.
 
 ## [0.7.0] - 2026-09-29
 
