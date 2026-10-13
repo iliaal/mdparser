@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Generated heading IDs now start with `user-content-`; update links to existing heading fragments when enabling `headingAnchors`.
+
 ### Fixed
 
 - Harden list parsing against pathological nesting.
+- Use only the first decoded ASCII-whitespace-delimited token of a code fence's info string as its HTML class.
+- Bound sparse-table cell expansion in `toAst()` and `toXml()` with `MdParser\\Exception` instead of exhausting PHP memory.
+- Keep heading ID deduplication fast for collision-heavy documents.
+- Keep inline marks in a full-reference link label from pairing with text outside that label.
+- Remove internal line markers from multiline link and image attributes in `toInlineHtml()`.
+- Treat an empty `mdparser.parse_memory_limit` value as the default `128M`; explicit `0` and negative values remain unlimited.
+- Ignore wikilink callbacks when `wikiLinks` is disabled.
 
 ## [0.7.0] - 2026-09-29
 
