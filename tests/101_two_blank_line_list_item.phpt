@@ -92,6 +92,38 @@ echo 'preserve blanks: ', count($nodes) === 3
     && ($blocks[1]['type'] ?? null) === 'blank'
     && ($blocks[2]['literal'] ?? null) === 'b' ? 'inside' : 'outside', "\n";
 
+$nestedEmpty = "- -\n\n\n    b\n";
+$nestedHtml = "<ul>\n<li>\n<ul>\n<li></li>\n</ul>\n<p>b</p>\n</li>\n</ul>\n";
+$nestedXmlItem = "    <item>\n      <list type=\"bullet\" tight=\"true\">\n"
+    . "        <item>\n        </item>\n      </list>\n"
+    . "      <paragraph>\n        <text xml:space=\"preserve\">b</text>\n"
+    . "      </paragraph>\n    </item>\n";
+$nestedAst = $parser->toAst($nestedEmpty);
+$outerList = $nestedAst['children'][0] ?? [];
+$outerItem = $outerList['children'][0] ?? [];
+$nestedBlocks = $outerItem['children'] ?? [];
+$innerList = $nestedBlocks[0] ?? [];
+$innerItem = $innerList['children'][0] ?? [];
+$outerParagraph = $nestedBlocks[1] ?? [];
+echo 'nested empty html: ', $parser->toHtml($nestedEmpty) === $nestedHtml ? 'inside outer item' : 'changed', "\n";
+echo 'nested empty xml: ', str_contains($parser->toXml($nestedEmpty), $nestedXmlItem)
+    ? 'inside outer item' : 'changed', "\n";
+echo 'nested empty ast: ', count($nestedAst['children'] ?? []) === 1
+    && ($outerList['type'] ?? null) === 'list'
+    && ($outerList['list_tight'] ?? null) === false
+    && count($outerList['children'] ?? []) === 1
+    && ($outerItem['type'] ?? null) === 'item'
+    && count($nestedBlocks) === 2
+    && ($innerList['type'] ?? null) === 'list'
+    && ($innerList['list_tight'] ?? null) === true
+    && count($innerList['children'] ?? []) === 1
+    && ($innerItem['type'] ?? null) === 'item'
+    && count($innerItem['children'] ?? []) === 0
+    && ($outerParagraph['type'] ?? null) === 'paragraph'
+    && count($outerParagraph['children'] ?? []) === 1
+    && ($outerParagraph['children'][0]['literal'] ?? null) === 'b'
+    ? 'inside outer item' : 'changed', "\n";
+
 foreach ([
     'quote-list' => ["> - a\n>\n>\n>   b\n", "<blockquote>\n<ul>\n<li>\n<p>a</p>\n<p>b</p>\n</li>\n</ul>\n</blockquote>\n"],
     'nested-list' => ["- - a\n\n\n    b\n", "<ul>\n<li>\n<ul>\n<li>\n<p>a</p>\n<p>b</p>\n</li>\n</ul>\n</li>\n</ul>\n"],
@@ -127,6 +159,9 @@ reference-only html: inside
 reference-only xml: inside
 reference-only ast: inside
 preserve blanks: inside
+nested empty html: inside outer item
+nested empty xml: inside outer item
+nested empty ast: inside outer item
 quote-list: stable
 nested-list: stable
 list-quote: stable
