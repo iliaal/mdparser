@@ -23,7 +23,7 @@ foreach ($cases as $name => [$input, $expectedId, $expectedBody]) {
     $html = $parser->toHtml($input);
     $hasExpectedId = $expectedId === null
         ? !str_contains($html, ' id=')
-        : str_contains($html, ' id="' . $expectedId . '"');
+        : str_contains($html, ' id="user-content-' . $expectedId . '"');
     printf("%s: %s\n", $name,
         $hasExpectedId && str_contains($html, $expectedBody) ? 'ok' : 'fail');
 }

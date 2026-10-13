@@ -22,25 +22,25 @@ function check(string $label, bool $cond): void {
 $p = new MdParser\Parser(new MdParser\Options(headingAnchors: true, unsafe: true));
 
 $h = $p->toHtml("<div title=\"<!--\">d</div>\n\n# foo\n\n# bar\n");
-check("comment opener in attr: foo keeps id", str_contains($h, '<h1 id="foo">foo</h1>'));
-check("comment opener in attr: bar keeps id", str_contains($h, '<h1 id="bar">bar</h1>'));
+check("comment opener in attr: foo keeps id", str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
+check("comment opener in attr: bar keeps id", str_contains($h, '<h1 id="user-content-bar">bar</h1>'));
 
 // Control: same document without the embedded opener.
 $h = $p->toHtml("<div title=\"x\">d</div>\n\n# foo\n\n# bar\n");
-check("control: foo keeps id", str_contains($h, '<h1 id="foo">foo</h1>'));
-check("control: bar keeps id", str_contains($h, '<h1 id="bar">bar</h1>'));
+check("control: foo keeps id", str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
+check("control: bar keeps id", str_contains($h, '<h1 id="user-content-bar">bar</h1>'));
 
 /* Raw-text tag name in an attribute needs tagfilter off to survive. */
 $p = new MdParser\Parser(new MdParser\Options(headingAnchors: true, unsafe: true, tagfilter: false));
 
 $h = $p->toHtml("<div title=\"<script>\">d</div>\n\n# foo\n\n# bar\n");
-check("script opener in attr: foo keeps id", str_contains($h, '<h1 id="foo">foo</h1>'));
-check("script opener in attr: bar keeps id", str_contains($h, '<h1 id="bar">bar</h1>'));
+check("script opener in attr: foo keeps id", str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
+check("script opener in attr: bar keeps id", str_contains($h, '<h1 id="user-content-bar">bar</h1>'));
 
 /* A real skip region after the decoy must still be honored: the <h1>
  * inside the real <script> body must not hijack the heading's slug. */
 $h = $p->toHtml("<div title=\"<script>\">d</div>\n\n<script><h1>foo</h1></script>\n\n# foo\n");
-check("real region after decoy: heading keeps id", str_contains($h, '<h1 id="foo">foo</h1>'));
+check("real region after decoy: heading keeps id", str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
 check("real region after decoy: script body untouched", str_contains($h, '<script><h1>foo</h1></script>'));
 
 ?>

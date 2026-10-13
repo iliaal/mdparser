@@ -35,11 +35,11 @@ ok("toHtml renders deep nesting without throwing",
 // --- entity text contributes to heading slugs --------------------------
 $a = new MdParser\Parser(new MdParser\Options(headingAnchors: true));
 ok("named entity heading gets a slug",
-   str_contains($a->toHtml("# &copy;"), '<h1 id="©">'));
+   str_contains($a->toHtml("# &copy;"), '<h1 id="user-content-©">'));
 ok("mixed entity+text heading slugs both",
-   str_contains($a->toHtml("# Caf&eacute;"), '<h1 id="café">'));
+   str_contains($a->toHtml("# Caf&eacute;"), '<h1 id="user-content-café">'));
 ok("numeric entity heading slugs",
-   str_contains($a->toHtml("# &#65;&#66;"), '<h1 id="ab">'));
+   str_contains($a->toHtml("# &#65;&#66;"), '<h1 id="user-content-ab">'));
 // A heading whose only content slugifies to nothing still gets no id.
 ok("punctuation-only heading has no id",
    str_contains($a->toHtml("# ..."), '<h1>') && !str_contains($a->toHtml("# ..."), 'id='));

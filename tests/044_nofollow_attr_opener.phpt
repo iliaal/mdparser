@@ -44,7 +44,7 @@ check("script opener in href: later link keeps rel",
 $p = new MdParser\Parser(new MdParser\Options(unsafe: true, nofollowLinks: true, headingAnchors: true));
 $h = $p->toHtml("<a href=\"x<!--y\">l</a>\n\n# foo\n");
 check("comment opener in href: later heading keeps id",
-    str_contains($h, '<h1 id="foo">foo</h1>'));
+    str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
 
 /* A real region after the decoy anchor is still honored. */
 $h = $p->toHtml("<a href=\"x<!--y\">l</a>\n\n<!-- <a href=\"http://spam.example/\">s</a> -->\n\n[z](http://example.com/)\n");

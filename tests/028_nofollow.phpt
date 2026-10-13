@@ -72,7 +72,7 @@ $both = new MdParser\Options(headingAnchors: true, nofollowLinks: true);
 $pb = new MdParser\Parser($both);
 $h = $pb->toHtml("# Hello\n\n[x](https://e.com)\n");
 check("both: heading id present",
-    str_contains($h, '<h1 id="hello">Hello</h1>'));
+    str_contains($h, '<h1 id="user-content-hello">Hello</h1>'));
 check("both: link rel present",
     str_contains($h, "<a $REL href=\"https://e.com\">x</a>"));
 

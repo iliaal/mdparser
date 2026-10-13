@@ -28,18 +28,18 @@ $p = new MdParser\Parser($opts);
 // must still be slugged.
 $h = $p->toHtml("<div title=\"<h1>foo</h1>\n\">x</div>\n\n# foo\n\n# bar\n");
 check("later heading keeps its id after attr-embedded fingerprint",
-    str_contains($h, '<h1 id="bar">bar</h1>'));
+    str_contains($h, '<h1 id="user-content-bar">bar</h1>'));
 
 // Cascade: multiple headings after the collision all keep their ids.
 $h = $p->toHtml("<div title=\"<h1>a</h1>\n\">x</div>\n\n# a\n\n# b\n\n# c\n");
-check("cascade: b keeps id", str_contains($h, '<h1 id="b">b</h1>'));
-check("cascade: c keeps id", str_contains($h, '<h1 id="c">c</h1>'));
+check("cascade: b keeps id", str_contains($h, '<h1 id="user-content-b">b</h1>'));
+check("cascade: c keeps id", str_contains($h, '<h1 id="user-content-c">c</h1>'));
 
 // Control: identical structure minus the embedded fingerprint. Both real
 // headings get their ids.
 $h = $p->toHtml("<div title=\"plain\">x</div>\n\n# foo\n\n# bar\n");
-check("control: foo id", str_contains($h, '<h1 id="foo">foo</h1>'));
-check("control: bar id", str_contains($h, '<h1 id="bar">bar</h1>'));
+check("control: foo id", str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
+check("control: bar id", str_contains($h, '<h1 id="user-content-bar">bar</h1>'));
 
 ?>
 --EXPECT--

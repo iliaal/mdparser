@@ -25,7 +25,7 @@ $h = $p->toHtml("<div q=\">\n\n[click](https://e.example)\n\n# head\n");
 check("link after unterminated tag gets nofollow",
     str_contains($h, "$REL href=\"https://e.example\""));
 check("heading after unterminated tag gets id",
-    str_contains($h, '<h1 id="head">head</h1>'));
+    str_contains($h, '<h1 id="user-content-head">head</h1>'));
 
 // Control: a balanced tag, transforms apply as always.
 $h = $p->toHtml("<div q=\"x\">\n\n[click](https://e.example)\n");

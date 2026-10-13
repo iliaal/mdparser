@@ -47,7 +47,7 @@ check('real link still rewritten (attr)', strpos($out, 'rel="nofollow noopener n
 // NOT consume the slug intended for the real Markdown heading.
 $out = $p->toHtml("<!-- <h1>injected</h1> -->\n\n# injected\n");
 check('comment-internal heading not slugged', strpos($out, '<!-- <h1>injected</h1> -->') !== false);
-check('real markdown heading slugged',        strpos($out, '<h1 id="injected">injected</h1>') !== false);
+check('real markdown heading slugged',        strpos($out, '<h1 id="user-content-injected">injected</h1>') !== false);
 
 // AD-301: under the md4c in-stream renderer, raw-HTML anchors pass through
 // verbatim and are NOT rel-rewritten (nofollow applies only to Markdown
@@ -59,7 +59,7 @@ $out = $p->toHtml("<h1>look <a href=\"evil.com\">x</a></h1>\n\n# look <a href=\"
 check('raw-HTML anchors are not rel-rewritten',
     !str_contains($out, 'rel="nofollow'));
 check('markdown heading slugged, raw heading untouched',
-    str_contains($out, '<h1 id="look-x">') &&
+    str_contains($out, '<h1 id="user-content-look-x">') &&
     str_contains($out, '<h1>look <a href="evil.com">x</a></h1>'));
 
 // CDATA section -- treated as opaque skip region under unsafe.
@@ -69,7 +69,7 @@ check('CDATA body untouched',           strpos($out, '<![CDATA[ <a href="x">y</a
 // Close tag with trailing whitespace before `>` (HTML5 allows it).
 // scan_skip_region must not get stuck thinking the rest is body.
 $out = $p->toHtml("<title><h1>Real</h1></title >\n\n# Real\n[real](https://example.com)\n");
-check('whitespace before close `>` recognized', strpos($out, '<h1 id="real">Real</h1>') !== false);
+check('whitespace before close `>` recognized', strpos($out, '<h1 id="user-content-real">Real</h1>') !== false);
 check('rel injected after whitespace close',    strpos($out, 'rel="nofollow noopener noreferrer" href="https://example.com"') !== false);
 
 // `</tag>` substring inside the OPENING tag's quoted attribute must
@@ -86,7 +86,7 @@ check('real link still rewritten after attr-trick title',
 // boundary.
 $ff = "\x0C";
 $out = $p->toHtml("<title{$ff}><h1>Real</h1></title>\n\n# Real\n");
-check('FF as opening-tag delimiter recognized', strpos($out, '<h1 id="real">Real</h1>') !== false);
+check('FF as opening-tag delimiter recognized', strpos($out, '<h1 id="user-content-real">Real</h1>') !== false);
 
 $out = $p->toHtml("<title><h1>Real</h1></title{$ff}>\n\n[real](https://example.com)\n");
 check('FF before close `>` recognized',

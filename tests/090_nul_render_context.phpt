@@ -22,19 +22,19 @@ echo $p->toHtml("`a\0`\"q\"");
 echo $p->toHtml("\0 \"q\"");
 ?>
 --EXPECT--
-<h1 id="a�b">a�b</h1>
-<h1 id="a�b-1">a�b</h1>
+<h1 id="user-content-a�b">a�b</h1>
+<h1 id="user-content-a�b-1">a�b</h1>
 <p>�”q” and (�’q’</p>
 �”q”
-<h1 id="a�b">a�b</h1>
-<h1 id="a�b-1">a�b</h1>
+<h1 id="user-content-a�b">a�b</h1>
+<h1 id="user-content-a�b-1">a�b</h1>
 <p>�”q” and (�’q’</p>
 �”q”
-<h1 id="a�b">a�b</h1>
-<h1 id="a�b-1">a�b</h1>
+<h1 id="user-content-a�b">a�b</h1>
+<h1 id="user-content-a�b-1">a�b</h1>
 <p>�”q” and (�’q’</p>
 �”q”
-<h1 id="a�b"><code>a�b</code></h1>
-<h1 id="a�b-1">a�b</h1>
+<h1 id="user-content-a�b"><code>a�b</code></h1>
+<h1 id="user-content-a�b-1">a�b</h1>
 <p><code>a�</code>”q”</p>
 <p>� “q”</p>

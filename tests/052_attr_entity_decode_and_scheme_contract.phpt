@@ -48,7 +48,7 @@ ok("HTML heading slug decodes named and numeric entities",
    str_contains(
        (new MdParser\Parser(new MdParser\Options(headingAnchors: true)))
            ->toHtml("# A&amp;B &#x43;\n"),
-       'id="ab-c"'
+       'id="user-content-ab-c"'
    ));
 
 // Code-fence info string: same decode path.

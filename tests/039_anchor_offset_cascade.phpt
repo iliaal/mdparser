@@ -21,19 +21,19 @@ $opts = new MdParser\Options(headingAnchors: true, unsafe: true, tagfilter: fals
 $p = new MdParser\Parser($opts);
 
 $h = $p->toHtml("# h1 <script>z</script>\n\n# alpha\n\n# beta\n");
-check("alpha keeps id after unfindable heading", str_contains($h, '<h1 id="alpha">alpha</h1>'));
-check("beta keeps id after unfindable heading",  str_contains($h, '<h1 id="beta">beta</h1>'));
+check("alpha keeps id after unfindable heading", str_contains($h, '<h1 id="user-content-alpha">alpha</h1>'));
+check("beta keeps id after unfindable heading",  str_contains($h, '<h1 id="user-content-beta">beta</h1>'));
 
 // Several headings after the unfindable one all keep their ids.
 $h = $p->toHtml("# x <style>q</style>\n\n# a\n\n# b\n\n# c\n\n# d\n");
 check("cascade cleared: a,b,c,d all slugged",
-    str_contains($h, 'id="a"') && str_contains($h, 'id="b"') &&
-    str_contains($h, 'id="c"') && str_contains($h, 'id="d"'));
+    str_contains($h, 'id="user-content-a"') && str_contains($h, 'id="user-content-b"') &&
+    str_contains($h, 'id="user-content-c"') && str_contains($h, 'id="user-content-d"'));
 
 // Control: a plain leading heading, everything still slugs.
 $h = $p->toHtml("# h0\n\n# alpha\n\n# beta\n");
 check("control: all slugged",
-    str_contains($h, 'id="h0"') && str_contains($h, 'id="alpha"') && str_contains($h, 'id="beta"'));
+    str_contains($h, 'id="user-content-h0"') && str_contains($h, 'id="user-content-alpha"') && str_contains($h, 'id="user-content-beta"'));
 
 ?>
 --EXPECT--

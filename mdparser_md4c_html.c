@@ -748,6 +748,7 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                     char open[16];
                     snprintf(open, sizeof(open), "<h%d id=\"", r->heading_level);
                     out_buf(r, open);
+                    OUT_LIT(r, "user-content-");
                     mdm_escape_html(r, slug, strlen(slug));
                     OUT_LIT(r, "\">");
                 } else {

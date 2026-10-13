@@ -28,15 +28,15 @@ $h = $p->toHtml("<h1>same</h1>\n\n# same\n");
 check("raw <h1> stays plain (no id)",
     str_contains($h, "<h1>same</h1>\n"));
 check("Markdown heading gets the id",
-    str_contains($h, '<h1 id="same">same</h1>'));
+    str_contains($h, '<h1 id="user-content-same">same</h1>'));
 check("exactly one id is emitted",
-    substr_count($h, 'id="same"') === 1);
+    substr_count($h, 'id="user-content-same"') === 1);
 
 // Sanity: distinct text behaves the same way.
 $h = $p->toHtml("<h1>raw</h1>\n\n# real\n");
 check("distinct text -- raw stays plain, real gets slug",
     str_contains($h, "<h1>raw</h1>\n") &&
-    str_contains($h, '<h1 id="real">real</h1>'));
+    str_contains($h, '<h1 id="user-content-real">real</h1>'));
 
 ?>
 --EXPECT--

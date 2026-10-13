@@ -22,17 +22,17 @@ $p = new MdParser\Parser(new MdParser\Options(headingAnchors: true, unsafe: true
 
 $h = $p->toHtml("<div data=\"x\n\n<style>\n<h1>foo</h1>\n</style>\n\n# foo\n");
 check("unterminated tag + decoy region: heading keeps id",
-    str_contains($h, '<h1 id="foo">foo</h1>'));
+    str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
 
 // Control: terminated tag, same decoy region.
 $h = $p->toHtml("<div data=\"x\">\n\n<style>\n<h1>foo</h1>\n</style>\n\n# foo\n");
-check("control: heading keeps id", str_contains($h, '<h1 id="foo">foo</h1>'));
+check("control: heading keeps id", str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
 
 // Comment-region variant works with the default tagfilter.
 $p2 = new MdParser\Parser(new MdParser\Options(headingAnchors: true, unsafe: true));
 $h = $p2->toHtml("<div data=\"x\n\n<!-- <h1>foo</h1> -->\n\n# foo\n");
 check("unterminated tag + decoy comment: heading keeps id",
-    str_contains($h, '<h1 id="foo">foo</h1>'));
+    str_contains($h, '<h1 id="user-content-foo">foo</h1>'));
 
 ?>
 --EXPECT--

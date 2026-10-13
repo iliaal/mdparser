@@ -17,7 +17,7 @@ check("default: no id attribute", !str_contains($d, "id="));
 $opts = new MdParser\Options(headingAnchors: true);
 $p = new MdParser\Parser($opts);
 $h = $p->toHtml("# Hello World\n");
-check("simple: lowercase + hyphen", str_contains($h, '<h1 id="hello-world">Hello World</h1>'));
+check("simple: lowercase + hyphen", str_contains($h, '<h1 id="user-content-hello-world">Hello World</h1>'));
 
 // flag stored on Options
 check("flag readable on Options", $opts->headingAnchors === true);
@@ -25,19 +25,19 @@ check("default false on default Options", (new MdParser\Options())->headingAncho
 
 // dedup
 $h = $p->toHtml("# Foo\n## Foo\n### Foo\n");
-check("dedup -1", str_contains($h, '<h2 id="foo-1">Foo</h2>'));
-check("dedup -2", str_contains($h, '<h3 id="foo-2">Foo</h3>'));
+check("dedup -1", str_contains($h, '<h2 id="user-content-foo-1">Foo</h2>'));
+check("dedup -2", str_contains($h, '<h3 id="user-content-foo-2">Foo</h3>'));
 
 // dedup skips authored suffixes and handles many duplicates
 $h = $p->toHtml("# x\n# x-1\n# x\n");
-check("dedup skips already-used suffix", str_contains($h, '<h1 id="x-2">x</h1>'));
+check("dedup skips already-used suffix", str_contains($h, '<h1 id="user-content-x-2">x</h1>'));
 $h = $p->toHtml(str_repeat("# Repeat\n", 150));
-check("dedup many duplicates reaches final suffix", str_contains($h, 'id="repeat-149"'));
+check("dedup many duplicates reaches final suffix", str_contains($h, 'id="user-content-repeat-149"'));
 
 // formatting in headings: emph/strong/code stripped from slug, rendered in body
 $h = $p->toHtml("## Hello, **bold** `code` *italic*\n");
 check("formatting stripped from slug",
-    str_contains($h, 'id="hello-bold-code-italic"'));
+    str_contains($h, 'id="user-content-hello-bold-code-italic"'));
 check("formatting preserved in body",
     str_contains($h, '<strong>bold</strong>') &&
     str_contains($h, '<code>code</code>') &&
@@ -46,19 +46,19 @@ check("formatting preserved in body",
 // punctuation dropped, runs of spaces collapsed
 $h = $p->toHtml("# Foo, Bar -- Baz!\n");
 check("punctuation dropped, spaces collapsed",
-    str_contains($h, 'id="foo-bar-baz"'));
+    str_contains($h, 'id="user-content-foo-bar-baz"'));
 
 // Soft and hard line breaks in headings separate words in the slug.
 $h = $p->toHtml("Foo\nBar\n===\n");
 check("setext softbreak contributes slug separator",
-    str_contains($h, '<h1 id="foo-bar">Foo' . "\n" . 'Bar</h1>'));
+    str_contains($h, '<h1 id="user-content-foo-bar">Foo' . "\n" . 'Bar</h1>'));
 $h = $p->toHtml("Foo\\\nBar\n===\n");
 check("setext hardbreak contributes slug separator",
-    str_contains($h, '<h1 id="foo-bar">Foo<br />' . "\n" . 'Bar</h1>'));
+    str_contains($h, '<h1 id="user-content-foo-bar">Foo<br />' . "\n" . 'Bar</h1>'));
 
 // non-ASCII bytes pass through
 $h = $p->toHtml("# 日本語\n");
-check("UTF-8 multibyte preserved", str_contains($h, 'id="日本語"'));
+check("UTF-8 multibyte preserved", str_contains($h, 'id="user-content-日本語"'));
 
 // empty slug after slugify: id attr omitted, no id=""
 $h = $p->toHtml("# !!!\n");
@@ -66,12 +66,12 @@ check("all-punctuation: no id attr", !str_contains($h, 'id='));
 
 // empty + non-empty: empty stays empty, normal one still slugged
 $h = $p->toHtml("# !!!\n# Real\n");
-check("empty + real: real still gets slug", str_contains($h, 'id="real"'));
+check("empty + real: real still gets slug", str_contains($h, 'id="user-content-real"'));
 
 // code block <a> not affected
 $h = $p->toHtml("# Heading\n\n```\n<h1>raw</h1>\n```\n");
 check("code-fenced <h1> not slug-injected",
-    str_contains($h, '<h1 id="heading">Heading</h1>') &&
+    str_contains($h, '<h1 id="user-content-heading">Heading</h1>') &&
     str_contains($h, '&lt;h1&gt;raw&lt;/h1&gt;'));
 
 // sourcepos is inert on the md4c backend (no position info), but the
@@ -79,7 +79,7 @@ check("code-fenced <h1> not slug-injected",
 $opts2 = new MdParser\Options(headingAnchors: true, sourcepos: true);
 $h = (new MdParser\Parser($opts2))->toHtml("# X\n");
 check("anchor id emitted (sourcepos inert)",
-    str_contains($h, '<h1 id="x">'));
+    str_contains($h, '<h1 id="user-content-x">'));
 
 // static html() shortcut path: defaults off, so no anchors
 $h = MdParser\Parser::html("# Hi\n");
@@ -100,14 +100,14 @@ $h = $p3->toHtml("<h1>raw attacker</h1>\n\n# real heading\n");
 check("unsafe: raw <h1> stays without id",
     str_contains($h, '<h1>raw attacker</h1>'));
 check("unsafe: real heading still gets correct slug",
-    str_contains($h, '<h1 id="real-heading">real heading</h1>'));
+    str_contains($h, '<h1 id="user-content-real-heading">real heading</h1>'));
 
 // interleaved raw + real
 $h = $p3->toHtml("<h2>raw1</h2>\n\n# real1\n\n<h3>raw2</h3>\n\n# real2\n");
 check("interleaved: raw1 unchanged",   str_contains($h, '<h2>raw1</h2>'));
-check("interleaved: real1 slugged",    str_contains($h, '<h1 id="real1">real1</h1>'));
+check("interleaved: real1 slugged",    str_contains($h, '<h1 id="user-content-real1">real1</h1>'));
 check("interleaved: raw2 unchanged",   str_contains($h, '<h3>raw2</h3>'));
-check("interleaved: real2 slugged",    str_contains($h, '<h1 id="real2">real2</h1>'));
+check("interleaved: real2 slugged",    str_contains($h, '<h1 id="user-content-real2">real2</h1>'));
 
 ?>
 --EXPECT--
