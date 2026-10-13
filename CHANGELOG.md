@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep nested footnote references working when definitions are listed out of reference order.
 - Preserve ordinary links and balanced spans after an unresolved footnote label.
 - Parse HTML block tags using their full names, so false prefixes no longer consume later Markdown.
+- Keep indented paragraphs inside nonempty list items after two blank lines, including reference-only items.
 
 ## [0.7.0] - 2026-09-29
 
