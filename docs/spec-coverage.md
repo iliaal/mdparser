@@ -2,9 +2,9 @@
 
 mdparser targets CommonMark 0.31 through
 [md4c](https://github.com/mity/md4c), which implements 0.31 natively.
-mdparser's behavior-changing md4c patches (the NUL-replacement fix, the
-`md_is_table_underline` table-column guard, and the spoiler length test,
-listed in `vendor/VENDOR.md`) aren't exercised by the spec run.
+mdparser carries local md4c patches; `vendor/VENDOR.md` lists their current
+inventory and relevant regression tests. The spec run does not cover every
+extension-specific behavior.
 
 The conformance test lives at `tests/005_commonmark_spec.phpt` and reads
 every example from `tests/fixtures/commonmark-spec.txt` (the 0.31
