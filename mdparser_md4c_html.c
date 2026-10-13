@@ -56,6 +56,7 @@ typedef struct {
     smart_str *cur;         /* active output target */
     smart_str main;         /* document buffer */
     int render_opts;        /* MDPARSER_RF_* */
+    bool wikilinks_enabled;
     int image_nesting_level;
 
     /* heading-anchor streaming state */
@@ -887,6 +888,7 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 static int render_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
+    if (type == MD_SPAN_WIKILINK && !r->wikilinks_enabled) return 0;
     int inside_img = (r->image_nesting_level > 0);
     if (type == MD_SPAN_IMG) r->image_nesting_level++;
     if (inside_img) return 0;
@@ -923,6 +925,7 @@ static int render_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
 static int render_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
+    if (type == MD_SPAN_WIKILINK && !r->wikilinks_enabled) return 0;
     if (type == MD_SPAN_IMG) r->image_nesting_level--;
     if (r->image_nesting_level > 0) return 0;
     switch (type) {
@@ -1040,6 +1043,7 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     mdm_ctx r;
     memset(&r, 0, sizeof(r));
     r.render_opts = render_opts;
+    r.wikilinks_enabled = (parser_flags & MD_FLAG_WIKILINKS) != 0;
     r.cur = &r.main;
     r.prev_char = 0;
 

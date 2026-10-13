@@ -56,6 +56,7 @@ typedef struct {
     unsigned char esc_attr[256];
     int depth;
     size_t table_cells;
+    bool wikilinks_enabled;
     bool collecting;   /* code/code_block/html literal */
     int error;
 } mdx_ctx;
@@ -349,6 +350,7 @@ static int mdx_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 static int mdx_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
+    if (type == MD_SPAN_WIKILINK && !c->wikilinks_enabled) return 0;
     if (c->depth >= MDPARSER_MAX_AST_DEPTH) { c->error = MDX_ERR_DEPTH; return 1; }
     switch (type) {
         case MD_SPAN_EM: mdx_open(c, "emph"); break;
@@ -413,6 +415,7 @@ static int mdx_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mdx_ctx *c = userdata;
     (void)detail;
+    if (type == MD_SPAN_WIKILINK && !c->wikilinks_enabled) return 0;
     switch (type) {
         case MD_SPAN_EM: mdx_close(c, "emph"); break;
         case MD_SPAN_STRONG: mdx_close(c, "strong"); break;
@@ -479,6 +482,7 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
 {
     mdx_ctx c;
     memset(&c, 0, sizeof(c));
+    c.wikilinks_enabled = (parser_flags & MD_FLAG_WIKILINKS) != 0;
     mdx_escape_maps_init(&c);
     X_LIT(&c, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     X_LIT(&c, "<!DOCTYPE document SYSTEM \"CommonMark.dtd\">\n");

@@ -55,6 +55,7 @@ typedef struct {
     int in_thead;              /* >0 while inside MD_BLOCK_THEAD */
     int th_col;                /* column index within the header row */
     size_t table_cells;
+    bool wikilinks_enabled;
     bool collecting;           /* accumulating a leaf literal */
     smart_str litbuf;
     smart_str textrun;         /* staged consecutive text fragments */
@@ -497,6 +498,7 @@ static int mda_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 static int mda_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mda_ctx *c = userdata;
+    if (type == MD_SPAN_WIKILINK && !c->wikilinks_enabled) return 0;
     zval n;
     switch (type) {
         case MD_SPAN_EM: mda_new_node(&n, MDA_T_emph); break;
@@ -553,6 +555,7 @@ static int mda_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
 {
     mda_ctx *c = userdata;
     (void)detail;
+    if (type == MD_SPAN_WIKILINK && !c->wikilinks_enabled) return 0;
     if (type == MD_SPAN_CODE) {
         mda_kstr(mda_top(c), mda_key_literal, smart_str_extract(&c->litbuf));
         c->collecting = false;
@@ -618,6 +621,7 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     memset(&c, 0, sizeof(c));
     c.depth = 0;
     c.error = 0;
+    c.wikilinks_enabled = (parser_flags & MD_FLAG_WIKILINKS) != 0;
 
     /* stack[0] is the document root. */
     mda_new_node(&c.stack[0], MDA_T_document);
