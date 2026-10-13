@@ -85,7 +85,7 @@ static inline mdparser_parser_obj *mdparser_parser_from_obj(zend_object *obj) {
 
 #define Z_MDPARSER_PARSER_P(zv) mdparser_parser_from_obj(Z_OBJ_P(zv))
 
-/* Hard cap on input size. 256 MB is far above any realistic document. */
+/* Hard cap on input size. 256 MiB is far above any realistic document. */
 #define MDPARSER_MAX_INPUT_SIZE ((size_t)(256UL * 1024UL * 1024UL))
 
 /* Hard cap on AST builder nesting depth. md4c parses iteratively and can

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Harden list parsing against pathological nesting.
+
 ## [0.7.0] - 2026-09-29
 
 ### Changed
@@ -47,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `tests/084_review_followups.phpt` pins the empty-input contracts of all four entry points, the `githubPreLang` true/false identical-output invariant, and a dynamic stub-vs-runtime Options default agreement check with no hard-coded counts.
-- The input-size suite now renders an exactly-256MB input on all four entry points instead of trusting the cap comparison; each `029_regressions.phpt` section names its originating commit.
+- The input-size suite now renders an exactly-256-MiB input on all four entry points instead of trusting the cap comparison; each `029_regressions.phpt` section names its originating commit.
 - The OOM sweep fault-injects the callback layer too: a refused callback allocation discards partial state and aborts with a distinct sentinel, covered over the full corpus.
 
 ### Changed
@@ -74,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Options::$insert` maps md4c's `MD_FLAG_INSERT`: `++text++` renders as `<ins>`, the counterpart to strikethrough's `<del>`. Off by default.
 - `Options::$preserveBlankLines` maps md4c's `MD_FLAG_PRESERVEBLANKLINES`: blank-line runs between blocks are reported rather than discarded, as `<blank />` in `toXml()` and a `blank` node in `toAst()`. HTML output is unchanged. Off by default.
-- `mdparser.parse_memory_limit` (default `128M`, `PHP_INI_ALL`, `0` or negative for unlimited) caps the libc working set of a single parse. md4c's memory is invisible to `memory_limit`, and Markdown amplifies it (about 76-87 bytes per `[` byte and 45-52 per `>` byte in measured release builds), so a few megabytes of hostile input could ask for gigabytes. Crossing the limit throws `MdParser\Exception`.
+- `mdparser.parse_memory_limit` (default `128M`, `PHP_INI_ALL`, `0` or negative for unlimited) caps the libc working set of a single parse. md4c's memory is invisible to `memory_limit`, and Markdown amplifies it (about 76-87 bytes per `[` byte and 45-52 per `>` byte in measured release builds); without the budget, a 16 MiB `[`-dense input could request more than 1 GiB. Crossing the limit throws `MdParser\Exception`.
 
 ### Security
 
@@ -384,7 +388,7 @@ can collide. Pinned in `tests/030_anchor_unsafe_collision.phpt`.
   defaults plus `autolink: false`, so bare URLs stay plain text.
   `github()` adds `footnotes: true` to match github.com. `permissive()`
   sets `unsafe: true` and `tagfilter: false` for trusted input.
-- Hard cap on input size (`MDPARSER_MAX_INPUT_SIZE`, 256 MB). Inputs
+- Hard cap on input size (`MDPARSER_MAX_INPUT_SIZE`, 256 MiB). Inputs
   past the cap throw `MdParser\Exception` at the wrapper boundary
   instead of reaching cmark's `int32_t` `bufsize_t` limit.
 - Hard cap on `toAst()` recursion depth (`MDPARSER_MAX_AST_DEPTH`,

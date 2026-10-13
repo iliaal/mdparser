@@ -141,7 +141,7 @@ mdparser covers CommonMark core plus the GFM extensions. It doesn't implement th
 
 ## Bounding parse memory
 
-The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. In measured release builds, `[`-dense input used about 76-87 bytes of parser state per input byte, and `>`-dense input about 45-52 bytes. A few megabytes of hostile input can ask for gigabytes.
+The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. In measured release builds, `[`-dense input used about 76-87 bytes of parser state per input byte, and `>`-dense input about 45-52 bytes. Without a parse budget, a 16 MiB `[`-dense input can request more than 1 GiB.
 
 `mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception`. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats an empty value as the default `128M`; explicit `0` or any negative value is unlimited. With the limit off, a 256 MiB `[`-dense input could ask libc for roughly 19-22 GiB at the measured per-byte rate. Raise the limit if you render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit`.
 
