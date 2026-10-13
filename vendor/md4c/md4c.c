@@ -3921,6 +3921,11 @@ md_resolve_bracket_link(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
             /* Do not analyze the label as a standalone link in the next
              * iteration. */
             *p_next_index = ctx->marks[*p_next_index].prev;
+
+            /* mdparser local patch (see vendor/VENDOR.md): The consumed
+             * label cannot participate in inline span resolution. */
+            md_disable_marks(ctx, (int) (next_opener - ctx->marks),
+                             (int) (next_closer - ctx->marks) + 1);
         }
     } else {
         if(closer->end < ctx->size  &&  CH(closer->end) == _T('(')) {

@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Three behavior patches, two performance patches, and one embedding hook are
+Four behavior patches, two performance patches, and one embedding hook are
 carried in `md4c/md4c.c`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -89,6 +89,15 @@ is not needed, because `md_analyze_marks` already skips resolved marks. With
 the patch, md4c's own test suite (`test/*.txt`, 987 examples) still passes in
 full. Drop the patch once upstream restores the check.
 `tests/089_spoiler_wikilink_single_pipe.phpt` covers it.
+
+The full-reference label patch is in `md_resolve_bracket_link`. After md4c
+recognizes `[text][label]`, it extends the link closer over the label but stock
+md4c leaves the label's inline marks enabled. A delimiter inside the consumed
+label can then pair with one outside it, producing unmatched span callbacks.
+The patch disables every mark in the consumed label before inline span
+resolution. `tests/096_reference_link_label_marks.phpt` covers the default
+emphasis case and the highlight extension. Drop the patch once upstream
+contains the equivalent mark suppression.
 
 The embedding hook is in `md_parse`. When `MD_PARSER_BAILOUT_GUARD` is
 defined, the call to `md_process_doc` runs inside the wrapper-provided guard.
@@ -178,8 +187,9 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    for the NUL behavior, `tests/085_table_column_count.phpt` for the column
    guard, `tests/089_spoiler_wikilink_single_pipe.phpt` for the spoiler
    length test, `tests/091_deep_list_blank_scaling.phpt` for bounded
-   blank-line container lookup, and `tests/oom/run.sh` for the out-of-memory
-   error paths.
+   blank-line container lookup, `tests/096_reference_link_label_marks.phpt`
+   for consumed reference-label marks, and `tests/oom/run.sh` for the
+   out-of-memory error paths.
    That sweep is the only gate on most of them;
    `mdparser.parse_memory_limit` reaches only the paths near its own
    boundary.
