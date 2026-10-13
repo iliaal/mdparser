@@ -270,6 +270,7 @@ struct MD_CTX_tag {
     MD_CONTAINER* containers;
     int n_containers;
     int alloc_containers;
+    int first_quote_container;
 
     /* Minimal indentation to call the block "indented code block". */
     unsigned code_indent_offset;
@@ -5297,6 +5298,8 @@ struct MD_CONTAINER_tag {
     unsigned contents_indent;
     OFF block_byte_off;
     OFF task_mark_off;
+    int last_quote_container;
+    int next_quote_container;
 };
 
 
@@ -6371,7 +6374,25 @@ md_push_container(MD_CTX* ctx, const MD_CONTAINER* container)
         ctx->containers = new_containers;
     }
 
-    memcpy(&ctx->containers[ctx->n_containers++], container, sizeof(MD_CONTAINER));
+    /* mdparser local patch (see vendor/VENDOR.md): keep block quote links so
+     * blank lines can skip a run of list containers in constant time. */
+    {
+        int prior_quote = (ctx->n_containers > 0
+                ? ctx->containers[ctx->n_containers-1].last_quote_container : 0);
+        MD_CONTAINER* pushed = &ctx->containers[ctx->n_containers];
+
+        memcpy(pushed, container, sizeof(MD_CONTAINER));
+        pushed->last_quote_container = (pushed->ch == _T('>')
+                ? ctx->n_containers + 1 : prior_quote);
+        pushed->next_quote_container = 0;
+        if(pushed->ch == _T('>')) {
+            if(prior_quote != 0)
+                ctx->containers[prior_quote-1].next_quote_container = ctx->n_containers + 1;
+            else
+                ctx->first_quote_container = ctx->n_containers + 1;
+        }
+        ctx->n_containers++;
+    }
     return 0;
 }
 
@@ -6461,6 +6482,14 @@ md_leave_child_containers(MD_CTX* ctx, int n_keep)
                 break;
         }
 
+        if(c->ch == _T('>')) {
+            int prior_quote = (ctx->n_containers > 1
+                    ? ctx->containers[ctx->n_containers-2].last_quote_container : 0);
+            if(prior_quote != 0)
+                ctx->containers[prior_quote-1].next_quote_container = 0;
+            else
+                ctx->first_quote_container = 0;
+        }
         ctx->n_containers--;
     }
 
@@ -6601,8 +6630,16 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
         /* Blank line does not need any real indentation to be nested inside
          * a list. */
         if(n_brothers + n_children == 0) {
-            while(n_parents < ctx->n_containers  &&  ctx->containers[n_parents].ch != _T('>'))
-                n_parents++;
+            /* mdparser local patch (see vendor/VENDOR.md): the next quote
+             * after the matched parents is linked from the previous quote. */
+            if(n_parents < ctx->n_containers  &&  ctx->containers[n_parents].ch != _T('>')) {
+                int prior_quote = (n_parents > 0
+                        ? ctx->containers[n_parents-1].last_quote_container : 0);
+                int next_quote = (prior_quote != 0
+                        ? ctx->containers[prior_quote-1].next_quote_container
+                        : ctx->first_quote_container);
+                n_parents = (next_quote != 0 ? next_quote - 1 : ctx->n_containers);
+            }
         }
     }
 

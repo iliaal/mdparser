@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Three behavior patches, one performance patch, and one embedding hook are
+Three behavior patches, two performance patches, and one embedding hook are
 carried in `md4c/md4c.c`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -99,6 +99,13 @@ buffers, marks, block storage, and containers. Standalone md4c builds do not
 define the macro and compile the stock path.
 
 ### Performance
+
+The blank-line container lookup in `md_analyze_line` uses links maintained by
+`md_push_container` and `md_leave_child_containers` to locate the next block
+quote without scanning intervening list containers. The links store one-based
+container indices, so reallocating the container array does not invalidate
+them. Re-apply the patch on refresh unless upstream provides an equivalent
+bounded lookup, and run `tests/091_deep_list_blank_scaling.phpt`.
 
 The link-destination scan in `md_is_link_destination_B` stopped on
 `ISWHITESPACE(off) || ISCNTRL(off)`, six comparisons per byte. The union of
@@ -163,14 +170,16 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    in `mdparser_md4c_vendor.c`; its `malloc`/`realloc`/`free` macros are safe
    only while every one of them is included first.
 4. Rebuild and run `make test`.
-5. Re-apply or drop each behavior patch, the performance patch, and the
+5. Re-apply or drop each behavior patch, both performance patches, and the
    embedding hook (see Local modifications). If the new release already
    carries an upstream fix, the copy in step 1 removes that patch. Confirm
    005 still passes 652/652, run `tests/088_cr_only_line_endings.phpt` for
    the end-of-line scan's CR-only linearity, `tests/070_nul_replacement.phpt`
    for the NUL behavior, `tests/085_table_column_count.phpt` for the column
    guard, `tests/089_spoiler_wikilink_single_pipe.phpt` for the spoiler
-   length test, and `tests/oom/run.sh` for the out-of-memory error paths.
+   length test, `tests/091_deep_list_blank_scaling.phpt` for bounded
+   blank-line container lookup, and `tests/oom/run.sh` for the out-of-memory
+   error paths.
    That sweep is the only gate on most of them;
    `mdparser.parse_memory_limit` reaches only the paths near its own
    boundary.
