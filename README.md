@@ -141,15 +141,15 @@ mdparser covers CommonMark core plus the GFM extensions. It doesn't implement th
 
 ## Bounding parse memory
 
-The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. Markdown amplifies that memory: one `[` byte commits about 72 bytes of parser state and one `>` byte about 40 to 56, so a few megabytes of hostile input can ask for gigabytes.
+The parser's own working memory comes from libc rather than Zend MM, so `memory_limit` never sees it. In measured release builds, `[`-dense input used about 76-87 bytes of parser state per input byte, and `>`-dense input about 45-52 bytes. A few megabytes of hostile input can ask for gigabytes.
 
-`mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception`. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats `0` or any negative value as unlimited. With the limit off, 256MB of the worst-case byte (~72B per '[') can ask libc for ~18GB. Raise the limit if you render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit`.
+`mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception`. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats an empty value as the default `128M`; explicit `0` or any negative value is unlimited. With the limit off, a 256 MiB `[`-dense input could ask libc for roughly 19-22 GiB at the measured per-byte rate. Raise the limit if you render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit`.
 
 ## A note on `unsafe: true`
 
 `Options::unsafe = true` passes raw HTML through verbatim instead of escaping or stripping it. Use it only for input you own or a pipeline you trust. `headingAnchors` and `nofollowLinks` run in-stream as md4c parses the source, so they touch only Markdown-derived nodes. Raw HTML is emitted verbatim and never rewritten:
 
-- Heading anchors apply to Markdown headings only. A `# heading` gets an `id` slug. A raw `<h1>x</h1>` block (possible under `unsafe: true, tagfilter: false`) is emitted untouched and gets no id, so it never collides with a later Markdown heading that has the same text.
+- Heading anchors apply to Markdown headings only. A `# heading` gets an `id` such as `user-content-heading`; links to generated headings must use the prefixed fragment (`#user-content-heading`). A raw `<h1>x</h1>` block (possible under `unsafe: true, tagfilter: false`) is emitted untouched and gets no id, so it never collides with a later Markdown heading that has the same text.
 - `nofollowLinks` applies to Markdown links only. Inline links, reference links, and autolinks get `rel="nofollow noopener noreferrer"`; in-document fragment anchors (`href="#..."`, including footnote references and backrefs) are skipped. A raw `<a href="...">` passes through verbatim. Sanitize raw HTML yourself if you allow it.
 
 ### Structural outputs are unsanitized

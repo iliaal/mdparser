@@ -194,11 +194,13 @@ All render methods can throw `MdParser\Exception` (final, extends
 - Wrapper validation guards. Inputs over `MDPARSER_MAX_INPUT_SIZE`
   (256 MB) throw before md4c sees them. `toAst()` builds the node
   array on a fixed-depth stack and throws if nesting exceeds
-  `MDPARSER_MAX_AST_DEPTH` (1000), as with `> ` × 50000. `toXml()` applies the same structural depth cap and limits visual
+  `MDPARSER_MAX_AST_DEPTH` (1000), as with `> ` × 50000. `toXml()` applies
+  the same structural depth cap and limits visual
   indentation to 32 levels, preserving the complete tree without letting
-  whitespace grow quadratically near the cap. `toHtml()` streams md4c's
-  callbacks straight to output (no indentation, output linear in input) and
-  is not depth-capped.
+  whitespace grow quadratically near the cap. Both structural renderers
+  also throw after 65,536 table cells across a parse. `toHtml()` streams
+  md4c's callbacks straight to output and has no renderer depth or table-cell
+  cap; its output remains subject to `memory_limit`.
 - md4c or renderer failure. If `md_parse()` reports failure or the
   renderer returns `NULL`, the exception names the renderer failure.
 - Reflection-bypassed Options. Constructing a Parser with an
@@ -217,7 +219,7 @@ and resource limits.
 try {
     $html = $parser->toHtml($source);
 } catch (\MdParser\Exception $e) {
-    // input-size cap, AST depth cap, or rare md4c/render null path
+    // input-size or parse-memory cap; md4c/render failure
     error_log("mdparser failed: " . $e->getMessage());
 }
 ```
@@ -238,16 +240,17 @@ Each side has its own bound:
 | Input | `MDPARSER_MAX_INPUT_SIZE`, 256 MB, compiled in | `MdParser\Exception` |
 
 `mdparser.parse_memory_limit` caps the libc bytes a single parse may hold at
-once. Markdown amplifies memory: one `[` byte commits about 72 bytes
-of md4c mark records, and one `>` byte about 40 to 56 bytes of container and
-block records, so a few megabytes of hostile input can ask for gigabytes that
+once. In measured release builds, `[`-dense input used about 76-87 bytes of
+md4c state per input byte, and `>`-dense input about 45-52 bytes of container
+and block records. A few megabytes of hostile input can ask for gigabytes that
 `memory_limit` never sees. When a parse crosses the limit the allocation is
 refused, md4c unwinds, and you get `MdParser\Exception` with the message
 `mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)`.
 
 The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
-treats `0` or any negative value as unlimited. The count includes the registry
-header each md4c allocation carries, so it bounds what the parse asks libc for
+treats an empty value as the default `128M`; explicit `0` or any negative
+value is unlimited. The count includes the registry header each md4c
+allocation carries, so it bounds what the parse asks libc for
 rather than only the payload md4c sees. Raise it if you render very large
 documents; lower it if you render untrusted markdown in long-lived workers.
 

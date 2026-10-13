@@ -74,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Options::$insert` maps md4c's `MD_FLAG_INSERT`: `++text++` renders as `<ins>`, the counterpart to strikethrough's `<del>`. Off by default.
 - `Options::$preserveBlankLines` maps md4c's `MD_FLAG_PRESERVEBLANKLINES`: blank-line runs between blocks are reported rather than discarded, as `<blank />` in `toXml()` and a `blank` node in `toAst()`. HTML output is unchanged. Off by default.
-- `mdparser.parse_memory_limit` (default `128M`, `PHP_INI_ALL`, `0` or negative for unlimited) caps the libc working set of a single parse. md4c's memory is invisible to `memory_limit`, and markdown amplifies it (about 72 bytes per `[` byte, 40 to 56 per `>` byte), so a few megabytes of hostile input could ask for gigabytes. Crossing the limit throws `MdParser\Exception`.
+- `mdparser.parse_memory_limit` (default `128M`, `PHP_INI_ALL`, `0` or negative for unlimited) caps the libc working set of a single parse. md4c's memory is invisible to `memory_limit`, and Markdown amplifies it (about 76-87 bytes per `[` byte and 45-52 per `>` byte in measured release builds), so a few megabytes of hostile input could ask for gigabytes. Crossing the limit throws `MdParser\Exception`.
 
 ### Security
 
@@ -213,9 +213,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clean 652/652. Carried as a local md4c patch (`vendor/VENDOR.md`),
   submitted upstream as mity/md4c#378.
 - `toXml()` and `toAst()` cap nesting depth at `MDPARSER_MAX_AST_DEPTH`
-  (1000), so a tiny deeply-nested input can no longer amplify into
-  multi-megabyte output or exhaust memory; `toHtml()` is linear and
-  uncapped.
+  (1000), so deeply nested input cannot exhaust their structural stacks.
+  The depth cap does not bound output from broad structures, and `toHtml()`
+  has no renderer depth cap.
 - `toXml()` and `toAst()` entity-decode attribute bytes (link/image
   URLs, titles) instead of leaking `&amp;`-encoded text, and `toXml()`
   replaces XML-1.0-illegal control characters with U+FFFD so the output

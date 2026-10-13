@@ -233,6 +233,11 @@ are direct children of `table` (unlike `toXml()`, which emits
 
 Content of a single cell.
 
+`toAst()` and `toXml()` accept at most 65,536 table cells across a parse.
+The next cell throws `MdParser\Exception` with
+`mdparser: table cell limit exceeded`, including cells md4c adds to pad sparse
+GFM rows.
+
 ```php
 ['type' => 'table_cell', 'children' => [/* inline nodes */]]
 ```

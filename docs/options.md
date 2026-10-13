@@ -227,11 +227,12 @@ defaults and do not apply either transform.
 
 ### `headingAnchors: bool = false`
 
-When `true`, every Markdown heading gets an `id` attribute holding a
-GitHub-style slug derived from the heading's text. Slugs lowercase
-ASCII, replace whitespace runs with a single `-`, drop other ASCII
-punctuation, preserve UTF-8 multibyte bytes, and dedupe collisions
-with `-1`, `-2`, ... (up to 100,000 collisions for a single base slug;
+When `true`, Markdown headings get an `id` attribute when their slug is
+nonempty and the collision limit has not been reached. The id has a
+`user-content-` prefix followed by a GitHub-style slug derived from the
+heading's text. Slugs lowercase ASCII, replace whitespace runs with a single
+`-`, drop other ASCII punctuation, preserve UTF-8 multibyte bytes, and dedupe
+collisions with `-1`, `-2`, ... (up to 100,000 collisions for a single base slug;
 beyond that the heading falls back to no id). Headings whose text
 slugifies to nothing (pure punctuation), and entity-only headings that
 decode to nothing, emit `<hN>` with no id rather than `id=""`. A raw
@@ -241,17 +242,27 @@ node, so it is emitted untouched and gets no id.
 
 ```php
 echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Hello World\n");
-// <h1 id="hello-world">Hello World</h1>
+// <h1 id="user-content-hello-world">Hello World</h1>
 
 echo (new Parser(new Options(headingAnchors: true)))->toHtml("# Foo\n## Foo\n");
-// <h1 id="foo">Foo</h1>
-// <h2 id="foo-1">Foo</h2>
+// <h1 id="user-content-foo">Foo</h1>
+// <h2 id="user-content-foo-1">Foo</h2>
 ```
 
 Because ids are attached as md4c emits each heading node, a raw HTML
 heading and a later Markdown heading with the same text don't collide:
 the raw one (`<h1>same</h1>`) stays plain and the Markdown one (`# same`)
-gets `id="same"`. `tests/030_anchor_unsafe_collision.phpt` pins this.
+gets `id="user-content-same"`. `tests/030_anchor_unsafe_collision.phpt`
+pins this. The prefix keeps generated ids separate from footnote ids and
+common DOM named properties. Links to generated headings must use the
+prefixed fragment, such as `#user-content-foo`; existing `#foo` links need
+updating.
+
+`headingAnchors` is off by default. For untrusted Markdown, enable it only
+when generated heading links are needed: each heading adds slug and dedupe
+work, and its text determines the resulting id. Allowing raw HTML with
+`unsafe: true` still lets the source supply its own ids; sanitize that HTML
+separately.
 
 ### `nofollowLinks: bool = false`
 
