@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-13
+
 ### Changed
 
 - Generated heading IDs now start with `user-content-`; update links to existing heading fragments when enabling `headingAnchors`.
@@ -15,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Harden list parsing against pathological nesting.
 - Use only the first decoded ASCII-whitespace-delimited token of a code fence's info string as its HTML class.
-- Bound sparse-table cell expansion in `toAst()` and `toXml()` with `MdParser\\Exception` instead of exhausting PHP memory.
+- Bound sparse-table cell expansion in `toAst()` and `toXml()` with `MdParser\Exception` instead of exhausting PHP memory.
 - Keep heading ID deduplication fast for collision-heavy documents.
 - Keep inline marks in a full-reference link label from pairing with text outside that label.
 - Remove internal line markers from multiline link and image attributes in `toInlineHtml()`.
@@ -25,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve ordinary links and balanced spans after an unresolved footnote label.
 - Parse HTML block tags using their full names, so false prefixes no longer consume later Markdown.
 - Keep indented paragraphs inside nonempty list items after two blank lines, including reference-only items.
+
+### For contributors
+
+- Refreshed vendored md4c to `0.6.0+git58c55b69` and dropped two local patches now present upstream.
+- Test on macOS 15 in CI, matching the release binary build.
 
 ## [0.7.0] - 2026-09-29
 
@@ -577,7 +584,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.7.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.8.0...HEAD
+[0.8.0]: https://github.com/iliaal/mdparser/releases/tag/0.8.0
 [0.7.0]: https://github.com/iliaal/mdparser/releases/tag/0.7.0
 [0.6.2]: https://github.com/iliaal/mdparser/releases/tag/0.6.2
 [0.6.1]: https://github.com/iliaal/mdparser/releases/tag/0.6.1
