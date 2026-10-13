@@ -34,13 +34,14 @@ $html = $parser->toHtml($colliding);
 $collisionNs = hrtime(true) - $start;
 
 preg_match_all('/<h1 id="([^"]+)">/', $html, $matches);
-echo ($matches[1] === $expected ? 'OK' : 'FAIL'), ": colliding headings keep distinct IDs\n";
+echo ($matches[1] === array_map(static fn(string $slug): string => 'user-content-' . $slug, $expected) ? 'OK' : 'FAIL'),
+    ": colliding headings keep distinct IDs\n";
 echo ($collisionNs < $controlNs * 8 + 100_000_000 ? 'OK' : 'FAIL'),
     ": collision cost stays bounded\n";
 
 $html = $parser->toHtml("# x\n# x-1\n# x\n# x\n# 日本語\n# 日本語\n");
 preg_match_all('/<h1 id="([^"]+)">/', $html, $matches);
-echo ($matches[1] === ['x', 'x-1', 'x-2', 'x-3', '日本語', '日本語-1'] ? 'OK' : 'FAIL'),
+echo ($matches[1] === ['user-content-x', 'user-content-x-1', 'user-content-x-2', 'user-content-x-3', 'user-content-日本語', 'user-content-日本語-1'] ? 'OK' : 'FAIL'),
     ": authored suffixes and UTF-8 headings remain distinct\n";
 ?>
 --EXPECT--
