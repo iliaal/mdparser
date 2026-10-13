@@ -46,7 +46,7 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Five behavior patches, two performance patches, and two embedding hooks are
+Six behavior patches, two performance patches, and two embedding hooks are
 carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
@@ -109,6 +109,15 @@ while rendering a footnote body. This also emits definitions referenced only
 from another footnote. `tests/099_footnote_definition_lookup_after_ordering.phpt`
 covers both cases in HTML, XML, and AST. Drop the patch once upstream preserves
 the hash table's pointers and emits nested-only definitions.
+
+The failed footnote-probe patch is in `md_resolve_bracket_footnote`. Stock md4c
+widens a `[` opener over `^` before checking the label and looking up its
+definition. If lookup fails, an ordinary link can be emitted as a wiki link
+even with `MD_FLAG_WIKILINKS` off, and a superscript closer can become
+unbalanced. The patch leaves the opener unchanged until the footnote resolves.
+`tests/103_failed_footnote_probe.phpt` covers the original link destination,
+balanced nested spans, and a valid footnote reference. Drop the patch once
+upstream delays the opener change until successful lookup.
 
 The embedding hook is in `md_parse`. When `MD_PARSER_BAILOUT_GUARD` is
 defined, the call to `md_process_doc` runs inside the wrapper-provided guard.
@@ -213,7 +222,8 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    for attribute source provenance, and `tests/oom/run.sh` for the
    out-of-memory error paths. Run
    `tests/099_footnote_definition_lookup_after_ordering.phpt` for footnote
-   definition lookup after first-reference ordering.
+   definition lookup after first-reference ordering, and
+   `tests/103_failed_footnote_probe.phpt` for failed footnote probes.
    That sweep is the only gate on most of them;
    `mdparser.parse_memory_limit` reaches only the paths near its own
    boundary.
