@@ -14,8 +14,9 @@ note: |
   releases/latest, 404'd on every run, and degraded to warn-and-proceed
   without ever comparing anything.
 
-  Carries four local behavior patches, two performance patches, and the
-  MD_PARSER_BAILOUT_GUARD embedding hook in md_parse: NUL replacement in
+  Carries four local behavior patches, two performance patches, and two
+  embedding hooks: MD_PARSER_BAILOUT_GUARD in md_parse and raw attribute
+  source provenance in MD_ATTRIBUTE/md_build_attribute. NUL replacement in
   md_text_with_null_replacement, the table column-count guard in
   md_is_table_underline, the "||"-only spoiler length test in
   md_analyze_marks (upstream c933a91 dropped it, so with spoilers and wiki

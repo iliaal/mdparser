@@ -1595,6 +1595,8 @@ md_build_attribute(MD_CTX* ctx, const CHAR* raw_text, SZ raw_size,
     attr->size = off;
     attr->substr_offsets = build->substr_offsets;
     attr->substr_types = build->substr_types;
+    /* mdparser local integration hook: preserve provenance through a copy. */
+    attr->source_text = raw_text;
     return 0;
 
 abort:
@@ -5591,6 +5593,7 @@ md_process_all_blocks(MD_CTX* ctx)
                 det.adm.type.size = adm_substr_offsets[1];
                 det.adm.type.substr_types = adm_substr_types;
                 det.adm.type.substr_offsets = adm_substr_offsets;
+                det.adm.type.source_text = det.adm.type.text;
                 break;
 
             default:

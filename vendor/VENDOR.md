@@ -46,8 +46,8 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Four behavior patches, two performance patches, and one embedding hook are
-carried in `md4c/md4c.c`. Every change site is marked with an
+Four behavior patches, two performance patches, and two embedding hooks are
+carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
 `mdparser local patch` or `mdparser local integration hook` comment.
 
 ### Table column-count guard
@@ -106,6 +106,16 @@ its libc buffers. Catching at this exact frame keeps the stack-owned `MD_CTX`
 valid while the unchanged cleanup frees reference definitions, footnotes,
 buffers, marks, block storage, and containers. Standalone md4c builds do not
 define the macro and compile the stock path.
+
+The attribute provenance hook adds `MD_ATTRIBUTE::source_text` in `md4c.h`
+and sets it to the pre-copy `raw_text` in `md_build_attribute`. md4c copies
+attribute text when it contains an entity or backslash escape; the copied
+pointer no longer identifies a line-start sentinel inserted by mdparser's
+`toInlineHtml()` normalization. The HTML renderer checks `source_text` only
+when it points into the normalized input, so attributes built from separate
+scratch buffers are not mistaken for source bytes. The pointer is valid only
+during the callback, like the other `MD_ATTRIBUTE` fields. Re-apply the hook
+on refresh and run `tests/097_inline_attribute_sentinel.phpt`.
 
 ### Performance
 
@@ -180,7 +190,7 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    only while every one of them is included first.
 4. Rebuild and run `make test`.
 5. Re-apply or drop each behavior patch, both performance patches, and the
-   embedding hook (see Local modifications). If the new release already
+   two embedding hooks (see Local modifications). If the new release already
    carries an upstream fix, the copy in step 1 removes that patch. Confirm
    005 still passes 652/652, run `tests/088_cr_only_line_endings.phpt` for
    the end-of-line scan's CR-only linearity, `tests/070_nul_replacement.phpt`
@@ -188,7 +198,8 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    guard, `tests/089_spoiler_wikilink_single_pipe.phpt` for the spoiler
    length test, `tests/091_deep_list_blank_scaling.phpt` for bounded
    blank-line container lookup, `tests/096_reference_link_label_marks.phpt`
-   for consumed reference-label marks, and `tests/oom/run.sh` for the
+   for consumed reference-label marks, `tests/097_inline_attribute_sentinel.phpt`
+   for attribute source provenance, and `tests/oom/run.sh` for the
    out-of-memory error paths.
    That sweep is the only gate on most of them;
    `mdparser.parse_memory_limit` reaches only the paths near its own

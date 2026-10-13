@@ -289,6 +289,8 @@ typedef struct MD_ATTRIBUTE {
     MD_SIZE size;
     const MD_TEXTTYPE* substr_types;
     const MD_OFFSET* substr_offsets;
+    /* mdparser local integration hook: raw text before md4c copies/decodes it. */
+    const MD_CHAR* source_text;
 } MD_ATTRIBUTE;
 
 

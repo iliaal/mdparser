@@ -335,8 +335,8 @@ static void mdparser_inline_normalize(smart_str *norm, const char *src, size_t s
         smart_str_appendl(norm, src + i, run - i);
         i = run;
     }
-    /* If the input ended on a \n, norm already has no trailing newline
-     * (we deferred the sentinel for a non-existent next line). */
+    /* If the input ended on a \n, norm keeps that newline but has no
+     * sentinel for the non-existent next line. */
 }
 
 PHP_METHOD(MdParser_Parser, toInlineHtml)

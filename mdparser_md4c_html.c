@@ -18,6 +18,7 @@
 #include "zend_smart_str.h"
 
 #include <limits.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "md4c.h"
@@ -524,11 +525,78 @@ static void render_decoded_url(mdm_ctx *r, const char *p, size_t n, bool image_c
         mdm_escape_url(r, p, n);
 }
 
+static bool mdm_is_source_sentinel(const mdm_ctx *r, const char *p)
+{
+    if (p == NULL) return false;
+    uintptr_t address = (uintptr_t)p;
+    uintptr_t begin = (uintptr_t)r->src_begin;
+    uintptr_t end = (uintptr_t)r->src_end;
+    return address >= begin && address < end && *p == ';'
+        && (address == begin || p[-1] == '\n');
+}
+
+static bool mdm_is_inline_sentinel(const mdm_ctx *r, const MD_ATTRIBUTE *attr,
+    const char *p)
+{
+    if (*p != ';') return false;
+    if (p > attr->text) return p[-1] == '\n';
+    return mdm_is_source_sentinel(r, attr->source_text);
+}
+
+static bool mdm_attr_has_inline_sentinel(const mdm_ctx *r, const MD_ATTRIBUTE *attr)
+{
+    if (!(r->render_opts & MDPARSER_RF_INLINE_SENTINEL) || attr->text == NULL)
+        return false;
+
+    for (MD_SIZE i = 0; i < attr->size; i++) {
+        if (mdm_is_inline_sentinel(r, attr, attr->text + i)) return true;
+    }
+    return false;
+}
+
+static void mdm_attr_view_without_sentinel(mdparser_md4c_attr_view *view,
+    const mdm_ctx *r, const MD_ATTRIBUTE *attr)
+{
+    memset(view, 0, sizeof(*view));
+    for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
+        MD_TEXTTYPE type = attr->substr_types[i];
+        MD_OFFSET off = attr->substr_offsets[i];
+        MD_SIZE sz = attr->substr_offsets[i + 1] - off;
+        const char *text = attr->text + off;
+
+        if (type == MD_TEXT_ENTITY) {
+            mdparser_md4c_decode_entity(&view->storage, text, sz);
+        } else if (type == MD_TEXT_NULLCHAR) {
+            mdparser_md4c_append_cp(&view->storage, 0xFFFD);
+        } else {
+            MD_SIZE run = 0;
+            for (MD_SIZE j = 0; j < sz; j++) {
+                if (mdm_is_inline_sentinel(r, attr, text + j)) {
+                    smart_str_appendl(&view->storage, text + run, j - run);
+                    run = j + 1;
+                }
+            }
+            smart_str_appendl(&view->storage, text + run, sz - run);
+        }
+    }
+    view->text = view->storage.s ? ZSTR_VAL(view->storage.s) : "";
+    view->size = view->storage.s ? ZSTR_LEN(view->storage.s) : 0;
+}
+
+static void mdm_attr_view_init(mdm_ctx *r, mdparser_md4c_attr_view *view,
+    const MD_ATTRIBUTE *attr)
+{
+    if (mdm_attr_has_inline_sentinel(r, attr))
+        mdm_attr_view_without_sentinel(view, r, attr);
+    else
+        mdparser_md4c_attr_view_init(view, attr);
+}
+
 /* Decode an attribute URL to raw bytes, then emit it safely. */
 static void render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_context)
 {
     mdparser_md4c_attr_view value;
-    mdparser_md4c_attr_view_init(&value, attr);
+    mdm_attr_view_init(r, &value, attr);
     render_decoded_url(r, value.text, value.size, image_context);
     mdparser_md4c_attr_view_destroy(&value);
 }
@@ -538,6 +606,14 @@ static void render_url_value(mdm_ctx *r, const MD_ATTRIBUTE *attr, bool image_co
  * render_url_value instead, which runs the scheme filter. */
 static void render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
 {
+    if (mdm_attr_has_inline_sentinel(r, attr)) {
+        mdparser_md4c_attr_view value;
+        mdm_attr_view_without_sentinel(&value, r, attr);
+        mdm_escape_html(r, value.text, value.size);
+        mdparser_md4c_attr_view_destroy(&value);
+        return;
+    }
+
     for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
         MD_TEXTTYPE type = attr->substr_types[i];
         MD_OFFSET off = attr->substr_offsets[i];
@@ -598,7 +674,7 @@ static void render_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
     const char *class_attr)
 {
     mdparser_md4c_attr_view href;
-    mdparser_md4c_attr_view_init(&href, attr);
+    mdm_attr_view_init(r, &href, attr);
     /* Fragment-only anchors (href="#...") are in-document links: skip nofollow.
      * Trim the same leading C0/space bytes the scheme filter skips so
      * `[x]( #section)` still counts as a fragment. */
@@ -881,8 +957,7 @@ static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *u
      * literal chunks fall outside the source buffer where no sentinel can
      * live. Only normal text seeds the SmartyPants quote context. */
     if ((r->render_opts & MDPARSER_RF_INLINE_SENTINEL) && size > 0
-        && text >= r->src_begin && text < r->src_end
-        && (text == r->src_begin || text[-1] == '\n') && text[0] == ';') {
+        && mdm_is_source_sentinel(r, text)) {
         text++;
         size--;
         if (type == MD_TEXT_NORMAL) r->prev_char = ' ';
