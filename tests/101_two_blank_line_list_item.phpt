@@ -133,6 +133,37 @@ foreach ([
     echo "$name: ", $parser->toHtml($source) === $expected ? 'stable' : 'changed', "\n";
 }
 
+foreach ([4, 5] as $depth) {
+    $prefix = str_repeat('> ', $depth);
+    $source = $prefix . "-\n" . str_repeat(rtrim($prefix) . "\n", 2) . $prefix . "  b\n";
+    $expected = str_repeat("<blockquote>\n", $depth)
+        . "<ul>\n<li></li>\n</ul>\n<p>b</p>\n"
+        . str_repeat("</blockquote>\n", $depth);
+    echo "nested quote $depth html: ", $parser->toHtml($source) === $expected ? 'stable' : 'changed', "\n";
+
+    $xml = $parser->toXml($source);
+    echo "nested quote $depth xml: ", substr_count($xml, '<block_quote>') === $depth
+        && str_contains($xml, '<text xml:space="preserve">b</text>')
+        && !str_contains($xml, '<code_block') ? 'stable' : 'changed', "\n";
+
+    $node = $parser->toAst($source);
+    for ($i = 0; $i < $depth; $i++) {
+        $children = $node['children'] ?? [];
+        if (count($children) !== 1 || ($children[0]['type'] ?? null) !== 'block_quote') {
+            break;
+        }
+        $node = $children[0];
+    }
+    $children = $node['children'] ?? [];
+    echo "nested quote $depth ast: ", $i === $depth
+        && count($children) === 2
+        && ($children[0]['type'] ?? null) === 'list'
+        && ($children[0]['children'][0]['type'] ?? null) === 'item'
+        && ($children[1]['type'] ?? null) === 'paragraph'
+        && ($children[1]['children'][0]['literal'] ?? null) === 'b'
+        ? 'stable' : 'changed', "\n";
+}
+
 ?>
 --EXPECT--
 258 html: inside
@@ -166,3 +197,9 @@ quote-list: stable
 nested-list: stable
 list-quote: stable
 sibling-after-nested: stable
+nested quote 4 html: stable
+nested quote 4 xml: stable
+nested quote 4 ast: stable
+nested quote 5 html: stable
+nested quote 5 xml: stable
+nested quote 5 ast: stable

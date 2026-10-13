@@ -121,6 +121,11 @@ byte equals `MD_BLOCK_LI`, the next indented paragraph leaves the list item.
 The patch records the byte position just after each item's actual opener and
 whether a nonblank source line belonged to it. The latter matters when a link
 reference definition consumes the only paragraph and removes its block bytes.
+When closing an empty item, the patch restores indentation relative to the
+remaining parent by adding that item's content indent. The physical line
+indent includes blockquote markers and cannot serve as the remaining quote's
+relative indent. Nested blockquotes and empty items are covered in HTML, XML,
+and AST.
 `tests/101_two_blank_line_list_item.phpt` covers both cases in HTML, XML, and
 AST, and the required closure of a genuinely empty item. Drop the patch when
 upstream tracks the item opener and source content explicitly.

@@ -31,7 +31,9 @@ note: |
   names after a shorter prefix fails its terminator test.
   The list-item blank-line patch records each LI opener boundary and whether
   the item had source content, so a final MD_LINE or consumed reference
-  definition cannot make a nonempty item appear empty.
+  definition cannot make a nonempty item appear empty. Closing an empty item
+  restores its content indent relative to the remaining parent; physical
+  indent includes blockquote markers and cannot be used inside a nested quote.
 
   This refresh drops the local "||"-only spoiler length test (upstream
   89a9bf4) and the link-destination two-comparison byte test (upstream
