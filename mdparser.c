@@ -60,6 +60,20 @@ static PHP_GINIT_FUNCTION(mdparser)
     memset(mdparser_globals, 0, sizeof(*mdparser_globals));
 }
 
+/* Under ZTS, request threads other than the module-loading thread have a
+ * NULL TSRMLS cache unless the extension updates it: GINIT runs once on the
+ * loading thread, and the engine never updates the cache itself. Updating
+ * it in RINIT keeps EG()/MDPARSER_G() reads safe on every request thread
+ * (e.g. FrankenPHP embed, threaded php-fpm). Idempotent: on NTS the
+ * macro is a no-op and the guard keeps this compiled out anyway. */
+PHP_RINIT_FUNCTION(mdparser)
+{
+#if defined(COMPILE_DL_MDPARSER) && defined(ZTS)
+    ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+    return SUCCESS;
+}
+
 /* md4c is a stateless push parser with no global registry and no allocator
  * hook, so MINIT only registers the INI entry, precomputes the default option
  * masks, and registers the classes. */
@@ -113,7 +127,7 @@ zend_module_entry mdparser_module_entry = {
     mdparser_functions,
     PHP_MINIT(mdparser),
     PHP_MSHUTDOWN(mdparser),
-    NULL, /* RINIT */
+    PHP_RINIT(mdparser),
     NULL, /* RSHUTDOWN */
     PHP_MINFO(mdparser),
     PHP_MDPARSER_VERSION,

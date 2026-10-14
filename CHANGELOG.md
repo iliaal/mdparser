@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Update the TSRM cache in RINIT as well as GINIT, so ZTS request threads
+  other than the module-loading thread no longer crash on the first
+  `EG()`/`MDPARSER_G()` read (e.g. FrankenPHP embed, threaded php-fpm).
+
 ## [0.8.0] - 2026-10-13
 
 ### Changed
