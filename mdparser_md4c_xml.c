@@ -64,7 +64,7 @@ typedef struct {
 static void mdx_indent(mdx_ctx *c)
 {
     /* 32 levels × 2 spaces; MDX_MAX_INDENT_DEPTH is 32. */
-    static const char spaces[64] =
+    static const char spaces[] =
         "                                                                ";
     int indent_depth = c->depth < MDX_MAX_INDENT_DEPTH
         ? c->depth : MDX_MAX_INDENT_DEPTH;

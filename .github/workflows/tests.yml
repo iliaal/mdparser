@@ -78,7 +78,8 @@ jobs:
           set -o pipefail
           phpize
           ./configure --enable-mdparser --enable-mdparser-dev
-          WARNINGS=$(make -j$(nproc) 2>&1 | tee /dev/stderr | grep -c 'warning:' || true)
+          make -j$(nproc) 2>&1 | tee /tmp/mdparser-build.log
+          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
           if [ "$WARNINGS" -gt 0 ]; then
             echo "::error::Build produced $WARNINGS warning(s)"
             exit 1
@@ -136,7 +137,8 @@ jobs:
           export PATH="/tmp/php-branch/bin:$PATH"
           phpize
           ./configure --enable-mdparser --enable-mdparser-dev --with-php-config=/tmp/php-branch/bin/php-config
-          WARNINGS=$(make -j"$(nproc)" 2>&1 | tee /dev/stderr | grep -c 'warning:' || true)
+          make -j"$(nproc)" 2>&1 | tee /tmp/mdparser-build.log
+          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
           if [ "$WARNINGS" -gt 0 ]; then
             echo "::error::Build produced $WARNINGS warning(s)"
             exit 1
