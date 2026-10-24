@@ -260,12 +260,17 @@ allocation crosses it. On PHP builds that bail out of the failing allocation,
 the wrapper catches that bailout at md4c's parse frame, frees md4c's libc
 allocations, cleans up renderer state, then resumes the PHP bailout. On PHP
 builds that queue the memory-limit error and raise it after the internal call
-returns, the wrapper stops md4c at the next parser callback, frees the partial
-output, and returns without throwing, so PHP reports its usual memory-limit
-fatal error. Without that stop, the parse would keep allocating until PHP's
-hard limit terminated the process. That limit is set by
-`memory_hard_limit_percent`; by default it is twice `memory_limit`, or
-`memory_limit` plus 1 GiB when `memory_limit` exceeds 1 GiB.
+returns, the wrapper stops md4c at the next parser callback, and the escaping
+and copy loops inside a callback stop at their next step. It then frees the
+partial output and returns without throwing, so PHP reports its usual
+memory-limit fatal error. The `validateUtf8` copy, which can reach three times
+the input size, fails at `memory_limit` instead of crossing it. Without these
+stops, the parse would keep allocating until PHP's hard limit terminated the
+process. That limit is set by `memory_hard_limit_percent`; by default it is
+twice `memory_limit`, or `memory_limit` plus 1 GiB when `memory_limit` exceeds
+1 GiB. The stops do not bound the allocation in flight when the limit is
+crossed, such as the output buffer growth for one long text run, so peak memory
+can still exceed `memory_limit` by that amount.
 
 If you accept markdown from untrusted callers, cap the input length in your
 application as well. Bounding what reaches the parser is cheaper than bounding

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Stop parsing at `memory_limit` on PHP builds that defer memory-limit errors until an internal call returns, such as PHP 8.2.35 and 8.4.27. Previously the parse kept allocating past the limit, and a parse that reached PHP's hard limit (by default twice `memory_limit`, or `memory_limit` plus 1 GiB above 1 GiB) killed the process without running shutdown functions.
+- Stop parsing soon after `memory_limit` is crossed on PHP builds that defer memory-limit errors until an internal call returns, such as PHP 8.2.35 and 8.4.27. Previously the parse kept allocating past the limit, and a parse that reached PHP's hard limit (by default twice `memory_limit`, or `memory_limit` plus 1 GiB above 1 GiB) killed the process without running shutdown functions. The parse now stops at the next md4c callback, and the escaping and copy loops inside a callback stop at their next step, so PHP reports its usual memory-limit fatal error. The `validateUtf8` copy, which can reach three times the input size, now fails at `memory_limit` instead of crossing it. Peak memory can still exceed `memory_limit` by the allocation in flight when the limit is crossed, such as the output buffer growth for one long text run.
 - Build with `--enable-mdparser-dev` under GCC 15, which reports the XML indentation table under `-Wunterminated-string-initialization`.
 
 ## [0.8.0] - 2026-10-13
