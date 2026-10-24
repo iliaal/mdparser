@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop parsing at `memory_limit` on PHP builds that defer memory-limit errors until an internal call returns, such as PHP 8.2.35 and 8.4.27. Previously the parse kept allocating past the limit, and a parse that reached PHP's hard limit (by default twice `memory_limit`, or `memory_limit` plus 1 GiB above 1 GiB) killed the process without running shutdown functions.
+- Build with `--enable-mdparser-dev` under GCC 15, which reports the XML indentation table under `-Wunterminated-string-initialization`.
+
 ## [0.8.0] - 2026-10-13
 
 ### Changed

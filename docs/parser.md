@@ -256,9 +256,16 @@ rather than only the payload md4c sees. Raise it if you render very large
 documents; lower it if you render untrusted markdown in long-lived workers.
 
 `memory_limit` can still interrupt a parse when an output buffer or AST
-allocation crosses it. The wrapper catches that bailout at md4c's parse frame,
-frees md4c's libc allocations, cleans up renderer state, then resumes the PHP
-bailout.
+allocation crosses it. On PHP builds that bail out of the failing allocation,
+the wrapper catches that bailout at md4c's parse frame, frees md4c's libc
+allocations, cleans up renderer state, then resumes the PHP bailout. On PHP
+builds that queue the memory-limit error and raise it after the internal call
+returns, the wrapper stops md4c at the next parser callback, frees the partial
+output, and returns without throwing, so PHP reports its usual memory-limit
+fatal error. Without that stop, the parse would keep allocating until PHP's
+hard limit terminated the process. That limit is set by
+`memory_hard_limit_percent`; by default it is twice `memory_limit`, or
+`memory_limit` plus 1 GiB when `memory_limit` exceeds 1 GiB.
 
 If you accept markdown from untrusted callers, cap the input length in your
 application as well. Bounding what reaches the parser is cheaper than bounding

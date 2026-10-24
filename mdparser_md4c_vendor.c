@@ -232,6 +232,71 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
 #undef malloc
 #undef MD_PARSER_BAILOUT_GUARD
 
+#ifdef ZEND_HAS_OOM
+/* Without this relay a parse that crosses memory_limit keeps allocating until
+ * it reaches the engine's hard limit (memory_hard_limit_percent; by default
+ * twice memory_limit, or memory_limit + 1G above 1G), which terminates the
+ * process with _exit() and no shutdown. A non-zero callback result makes md4c
+ * abort and run its normal cleanup. */
+#define MDPARSER_MD4C_OOM_STATUS (-3)
+
+typedef struct {
+    const MD_PARSER *parser;
+    void *userdata;
+} mdparser_md4c_oom_relay;
+
+static zend_always_inline int mdparser_md4c_oom_relay_result(int result)
+{
+    return (result == 0 && ZEND_HAS_OOM()) ? MDPARSER_MD4C_OOM_STATUS : result;
+}
+
+static int mdparser_md4c_relay_enter_block(MD_BLOCKTYPE type, void *detail,
+    void *userdata)
+{
+    const mdparser_md4c_oom_relay *relay = userdata;
+    return mdparser_md4c_oom_relay_result(
+        relay->parser->enter_block(type, detail, relay->userdata));
+}
+
+static int mdparser_md4c_relay_leave_block(MD_BLOCKTYPE type, void *detail,
+    void *userdata)
+{
+    const mdparser_md4c_oom_relay *relay = userdata;
+    return mdparser_md4c_oom_relay_result(
+        relay->parser->leave_block(type, detail, relay->userdata));
+}
+
+static int mdparser_md4c_relay_enter_span(MD_SPANTYPE type, void *detail,
+    void *userdata)
+{
+    const mdparser_md4c_oom_relay *relay = userdata;
+    return mdparser_md4c_oom_relay_result(
+        relay->parser->enter_span(type, detail, relay->userdata));
+}
+
+static int mdparser_md4c_relay_leave_span(MD_SPANTYPE type, void *detail,
+    void *userdata)
+{
+    const mdparser_md4c_oom_relay *relay = userdata;
+    return mdparser_md4c_oom_relay_result(
+        relay->parser->leave_span(type, detail, relay->userdata));
+}
+
+static int mdparser_md4c_relay_text(MD_TEXTTYPE type, const MD_CHAR *text,
+    MD_SIZE size, void *userdata)
+{
+    const mdparser_md4c_oom_relay *relay = userdata;
+    return mdparser_md4c_oom_relay_result(
+        relay->parser->text(type, text, size, relay->userdata));
+}
+
+static void mdparser_md4c_relay_debug_log(const char *msg, void *userdata)
+{
+    const mdparser_md4c_oom_relay *relay = userdata;
+    relay->parser->debug_log(msg, relay->userdata);
+}
+#endif
+
 int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     const MD_PARSER *parser, void *userdata, bool *bailed_out,
     bool *limit_exceeded, bool *alloc_failed)
@@ -243,7 +308,26 @@ int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     tracker.limit = limit > 0 ? (size_t)limit : 0;
     tracker.previous = mdparser_md4c_active_tracker;
     mdparser_md4c_active_tracker = &tracker;
+#ifdef ZEND_HAS_OOM
+    if (ZEND_HAS_OOM()) {
+        result = MDPARSER_MD4C_OOM_STATUS;
+    } else {
+        mdparser_md4c_oom_relay relay = { parser, userdata };
+        MD_PARSER relayed = *parser;
+
+        relayed.enter_block = mdparser_md4c_relay_enter_block;
+        relayed.leave_block = mdparser_md4c_relay_leave_block;
+        relayed.enter_span = mdparser_md4c_relay_enter_span;
+        relayed.leave_span = mdparser_md4c_relay_leave_span;
+        relayed.text = mdparser_md4c_relay_text;
+        if (parser->debug_log) {
+            relayed.debug_log = mdparser_md4c_relay_debug_log;
+        }
+        result = md_parse(text, size, &relayed, &relay);
+    }
+#else
     result = md_parse(text, size, parser, userdata);
+#endif
     mdparser_md4c_active_tracker = tracker.previous;
 
     while (tracker.head) {

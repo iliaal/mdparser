@@ -258,6 +258,13 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.4', '8.6']
+        include:
+          # Branch heads raise memory-limit errors after the internal call
+          # returns instead of bailing out of the allocation. This release
+          # predates that change, so it still drives a real bailout through
+          # md4c's callbacks and keeps 077's bailout-cleanup path covered.
+          - php: '8.4.26'
+            ref: php-8.4.26
 
     env:
       # detect_leaks=1 is LSan's Linux default; pinning it keeps a later
@@ -269,7 +276,7 @@ jobs:
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:exitcode=1
       USE_ZEND_ALLOC: 0
       USE_TRACKED_ALLOC: 1
-      PHP_VERSION: ${{ matrix.php }}
+      PHP_REF: ${{ matrix.ref || format('PHP-{0}', matrix.php) }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -281,7 +288,7 @@ jobs:
 
       - name: Build PHP with ASAN
         run: |
-          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
+          git clone --depth=1 --branch="${PHP_REF}" https://github.com/php/php-src.git /tmp/php-src
           cd /tmp/php-src
           ./buildconf --force
           CC=clang CXX=clang++ \

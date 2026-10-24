@@ -25,6 +25,7 @@
 #include "mdparser_md4c_ast.h"
 #include "mdparser_md4c_xml.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_vendor.h"
 
 zend_class_entry *mdparser_parser_ce;
 
@@ -172,6 +173,9 @@ static void mdparser_md4c_html_emit(INTERNAL_FUNCTION_PARAMETERS,
     zend_string *out = mdparser_md4c_render_html(
         ZSTR_VAL(source), ZSTR_LEN(source), parser_flags, render_opts, &status);
     if (!out) {
+        if (mdparser_md4c_oom_pending()) {
+            return;
+        }
         zend_throw_exception(mdparser_exception_ce,
             mdparser_md4c_status_message(status), 0);
         RETURN_THROWS();
@@ -203,6 +207,9 @@ static void mdparser_md4c_xml_emit(INTERNAL_FUNCTION_PARAMETERS,
     zend_string *out = mdparser_md4c_render_xml(
         ZSTR_VAL(source), ZSTR_LEN(source), parser_flags, validate_utf8, &status);
     if (!out) {
+        if (mdparser_md4c_oom_pending()) {
+            return;
+        }
         zend_throw_exception(mdparser_exception_ce,
             mdparser_md4c_xml_status_message(status), 0);
         RETURN_THROWS();
@@ -234,6 +241,9 @@ static void mdparser_md4c_ast_emit(INTERNAL_FUNCTION_PARAMETERS,
     mdparser_md4c_render_ast(ZSTR_VAL(source), ZSTR_LEN(source),
         parser_flags, validate_utf8, return_value, &status);
     if (status != 0) {
+        if (mdparser_md4c_oom_pending()) {
+            return;
+        }
         zend_throw_exception(mdparser_exception_ce,
             mdparser_md4c_ast_status_message(status), 0);
         RETURN_THROWS();
@@ -371,6 +381,9 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         obj->md4c_pflags, inline_ropts, &inline_status);
     smart_str_free(&norm);
     if (!rendered_zs) {
+        if (mdparser_md4c_oom_pending()) {
+            return;
+        }
         zend_throw_exception(mdparser_exception_ce,
             mdparser_md4c_status_message(inline_status), 0);
         RETURN_THROWS();

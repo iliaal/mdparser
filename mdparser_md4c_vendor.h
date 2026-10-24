@@ -27,4 +27,20 @@ int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     const MD_PARSER *parser, void *userdata, bool *bailed_out,
     bool *limit_exceeded, bool *alloc_failed);
 
+/* Engines that define ZEND_HAS_OOM() no longer bail out of an allocation that
+ * crosses memory_limit: the allocation succeeds, the error is queued, and the
+ * engine raises it once control returns to the VM. mdparser_md4c_parse()
+ * aborts md4c at the next callback when one is queued; render entries must
+ * then return without throwing so the engine reports the memory-limit error.
+ * Older engines bail out of the allocation instead, so nothing is ever
+ * queued there. */
+static zend_always_inline bool mdparser_md4c_oom_pending(void)
+{
+#ifdef ZEND_HAS_OOM
+    return ZEND_HAS_OOM();
+#else
+    return false;
+#endif
+}
+
 #endif
