@@ -47,7 +47,9 @@ int mdparser_md4c_decode_entity_cps(const char *text, MD_SIZE size, unsigned cps
  * invalid sequences. If `src` is already clean, returns `src` and sets
  * *owned=false. Otherwise returns an emalloc'd sanitized copy (invalid bytes
  * -> U+FFFD), sets *owned=true, and writes the new length to *out_len. The
- * caller must efree the result iff *owned is true. */
+ * caller must efree the result iff *owned is true. Returns NULL with
+ * *owned=false when the copy would cross memory_limit on engines that queue
+ * the memory-limit error (ZEND_HAS_OOM); the error is then pending. */
 const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     size_t *out_len, bool *owned);
 

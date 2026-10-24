@@ -302,7 +302,8 @@ static void mdparser_inline_normalize(smart_str *norm, const char *src, size_t s
     size_t pending_indent_start = 0;
     size_t pending_indent_len = 0;
 
-    for (size_t i = 0; !single_line && i < src_len; ) {
+    for (size_t i = 0; !single_line && i < src_len
+        && !mdparser_md4c_oom_pending(); ) {
         char c = src[i];
         if (c == '\r') {
             if (i + 1 < src_len && src[i + 1] == '\n') {

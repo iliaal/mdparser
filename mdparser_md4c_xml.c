@@ -103,7 +103,7 @@ static void mdx_escape(mdx_ctx *c, smart_str *b, const char *s, size_t n, bool a
      * U+FFFE/U+FFFF sequences needs the bounds check that follows. */
     const unsigned char *u = (const unsigned char *)s;
     size_t beg = 0;
-    while (beg < n) {
+    while (beg < n && !mdparser_md4c_oom_pending()) {
         size_t run = mdparser_md4c_scan_plain(map, 0xFF, s + beg, n - beg);
         if (run > 0) {
             smart_str_appendl(b, s + beg, run);
@@ -502,8 +502,14 @@ zend_string *mdparser_md4c_render_xml(const char *src, size_t len,
     size_t use_len = len;
     const char *use_src = src;
     mdparser_md4c_skip_bom(&use_src, &use_len);
-    if (validate_utf8)
+    if (validate_utf8) {
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
+        if (!use_src) {
+            smart_str_free(&c.out);
+            *status = MDX_ERR_MEMORY;
+            return NULL;
+        }
+    }
 
     /* Reserve about twice the input size up to 1 MiB. This covers ordinary
      * markup-heavy output without amplifying sparse large inputs. */

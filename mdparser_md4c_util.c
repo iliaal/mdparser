@@ -21,6 +21,7 @@
 
 #include "entity.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_vendor.h"
 
 static unsigned mdu_hex_val(char ch)
 {
@@ -104,7 +105,8 @@ void mdparser_md4c_decode_entity(smart_str *out, const char *text, MD_SIZE size)
 static void mdu_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
 {
     if (attr == NULL || attr->text == NULL) return;
-    for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
+    for (int i = 0; attr->substr_offsets[i] < attr->size
+        && !mdparser_md4c_oom_pending(); i++) {
         MD_TEXTTYPE type = attr->substr_types[i];
         MD_OFFSET off = attr->substr_offsets[i];
         MD_SIZE sz = attr->substr_offsets[i + 1] - off;
@@ -254,7 +256,19 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
         if (n == 0) { i += mdu_invalid_subpart_len(p + i, len - i); out_size += 3; }
         else { out_size += n; i += n; }
     }
+#ifdef ZEND_HAS_OOM
+    /* Invalid bytes can triple the copy. An infallible allocation that large
+     * can cross the engine's hard memory limit, which terminates the process;
+     * the fallible one queues the memory-limit error and returns NULL. */
+    char *dst = femalloc(out_size + 1, true);
+    if (!dst) {
+        *owned = false;
+        *out_len = 0;
+        return NULL;
+    }
+#else
     char *dst = emalloc(out_size + 1);
+#endif
     size_t o = 0;
     i = 0;
     while (i < len) {

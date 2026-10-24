@@ -269,7 +269,7 @@ static void mda_append_text(mda_ctx *c, const char *text, size_t size)
     const char *cursor = text;
     size_t remaining = size;
 
-    while (remaining > 0) {
+    while (remaining > 0 && !mdparser_md4c_oom_pending()) {
         const char *nul = memchr(cursor, '\0', remaining);
         if (!nul) {
             mda_append_text_raw(c, cursor, remaining);
@@ -287,7 +287,7 @@ static void mda_collect_literal(mda_ctx *c, const char *text, size_t size)
     const char *cursor = text;
     size_t remaining = size;
 
-    while (remaining > 0) {
+    while (remaining > 0 && !mdparser_md4c_oom_pending()) {
         const char *nul = memchr(cursor, '\0', remaining);
         if (!nul) {
             smart_str_appendl(&c->litbuf, cursor, remaining);
@@ -639,8 +639,14 @@ void mdparser_md4c_render_ast(const char *src, size_t len, unsigned parser_flags
     size_t use_len = len;
     const char *use_src = src;
     mdparser_md4c_skip_bom(&use_src, &use_len);
-    if (validate_utf8)
+    if (validate_utf8) {
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
+        if (!use_src) {
+            zval_ptr_dtor(&c.stack[0]);
+            *status = MDA_ERR_MEMORY;
+            return;
+        }
+    }
 
     bool bailed_out;
     bool limit_exceeded;
