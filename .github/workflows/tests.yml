@@ -249,7 +249,8 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           set -e
           # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+          # 104 needs /proc to find the loaded module, so it skips here.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 2
 
   asan:
     name: PHP ${{ matrix.php }} - ASAN
@@ -277,6 +278,7 @@ jobs:
       USE_ZEND_ALLOC: 0
       USE_TRACKED_ALLOC: 1
       PHP_REF: ${{ matrix.ref || format('PHP-{0}', matrix.php) }}
+      PHPT_EXPECTED_SKIPS: ${{ matrix.ref && '2' || '1' }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -325,7 +327,8 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           set -e
           # 069 needs ext-dom, missing from the --disable-all build; expect that one skip.
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+          # 104 skips on a pinned release that predates deferred memory-limit errors.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" "$PHPT_EXPECTED_SKIPS"
 
   oom-sweep:
     name: OOM sweep (vendored md4c)
