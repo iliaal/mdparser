@@ -128,7 +128,7 @@ static void mdm_escape_html(mdm_ctx *r, const char *data, size_t size)
     /* Plain runs use the shared unrolled scan over the MINIT-built map;
      * only the per-byte replacement policy stays local. */
     size_t beg = 0;
-    while (beg < size) {
+    while (beg < size && !mdparser_md4c_oom_pending()) {
         size_t run = mdparser_md4c_scan_plain(
             (const unsigned char *)mdm_escape_map_template,
             NEED_HTML_ESC_FLAG, data + beg, size - beg);
@@ -154,7 +154,7 @@ static void mdm_escape_url(mdm_ctx *r, const char *data, size_t size)
     static const char hex_chars[] = "0123456789ABCDEF";
     size_t beg = 0, off = 0;
     #define NEED_URL_ESC(ch) (mdm_escape_map_template[(unsigned char)(ch)] & NEED_URL_ESC_FLAG)
-    while (1) {
+    while (!mdparser_md4c_oom_pending()) {
         while (off < size && !NEED_URL_ESC(data[off])) off++;
         if (off > beg) out_append(r, data + beg, off - beg);
         if (off < size) {
@@ -330,7 +330,7 @@ static void render_raw_html_unsafe(mdm_ctx *r, const char *text, size_t size)
         return;
     }
     size_t beg = 0, i = 0;
-    while (i < size) {
+    while (i < size && !mdparser_md4c_oom_pending()) {
         if (text[i] == '<') {
             const char *name = text + i + 1;
             size_t avail = size - i - 1;
@@ -436,7 +436,7 @@ static unsigned char mdm_codepoint_quote_char(unsigned cp)
 static void render_smart(mdm_ctx *r, const char *data, size_t size)
 {
     size_t i = 0;
-    while (i < size) {
+    while (i < size && !mdparser_md4c_oom_pending()) {
         char c = data[i];
         if (c == '-' && i + 1 < size && data[i + 1] == '-') {
             size_t n = 0;
@@ -559,7 +559,8 @@ static void mdm_attr_view_without_sentinel(mdparser_md4c_attr_view *view,
     const mdm_ctx *r, const MD_ATTRIBUTE *attr)
 {
     memset(view, 0, sizeof(*view));
-    for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
+    for (int i = 0; attr->substr_offsets[i] < attr->size
+        && !mdparser_md4c_oom_pending(); i++) {
         MD_TEXTTYPE type = attr->substr_types[i];
         MD_OFFSET off = attr->substr_offsets[i];
         MD_SIZE sz = attr->substr_offsets[i + 1] - off;
@@ -615,7 +616,8 @@ static void render_attribute(mdm_ctx *r, const MD_ATTRIBUTE *attr)
         return;
     }
 
-    for (int i = 0; attr->substr_offsets[i] < attr->size; i++) {
+    for (int i = 0; attr->substr_offsets[i] < attr->size
+        && !mdparser_md4c_oom_pending(); i++) {
         MD_TEXTTYPE type = attr->substr_types[i];
         MD_OFFSET off = attr->substr_offsets[i];
         MD_SIZE sz = attr->substr_offsets[i + 1] - off;
@@ -869,7 +871,8 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_FOOTNOTE_DEF: {
             const MD_BLOCK_FOOTNOTE_DEF_DETAIL *d = detail;
             char buf[128];
-            for (unsigned ref = 1; ref <= d->ref_count; ref++) {
+            for (unsigned ref = 1; ref <= d->ref_count
+                && !mdparser_md4c_oom_pending(); ref++) {
                 if (ref > 1) OUT_LIT(r, " ");
                 snprintf(buf, sizeof(buf),
                     "<a href=\"#fnref-%u-%u\" class=\"footnote-backref\">&#8617;</a>",
@@ -1054,8 +1057,14 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     size_t use_len = len;
     const char *use_src = src;
     mdparser_md4c_skip_bom(&use_src, &use_len);
-    if (render_opts & MDPARSER_RF_VALIDATE_UTF8)
+    if (render_opts & MDPARSER_RF_VALIDATE_UTF8) {
         use_src = mdparser_md4c_validate_utf8(use_src, use_len, &use_len, &owned);
+        if (!use_src) {
+            mdm_slugs_destroy(&r.slugs);
+            *status = MDM_ERR_MEMORY;
+            return NULL;
+        }
+    }
 
     /* Reserve up to 1 MiB. HTML markup typically expands past raw input, so
      * seed ~1.25× (still capped) to cut early reallocs on ordinary docs

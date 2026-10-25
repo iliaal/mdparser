@@ -78,7 +78,8 @@ jobs:
           set -o pipefail
           phpize
           ./configure --enable-mdparser --enable-mdparser-dev
-          WARNINGS=$(make -j$(nproc) 2>&1 | tee /dev/stderr | grep -c 'warning:' || true)
+          make -j$(nproc) 2>&1 | tee /tmp/mdparser-build.log
+          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
           if [ "$WARNINGS" -gt 0 ]; then
             echo "::error::Build produced $WARNINGS warning(s)"
             exit 1
@@ -136,7 +137,8 @@ jobs:
           export PATH="/tmp/php-branch/bin:$PATH"
           phpize
           ./configure --enable-mdparser --enable-mdparser-dev --with-php-config=/tmp/php-branch/bin/php-config
-          WARNINGS=$(make -j"$(nproc)" 2>&1 | tee /dev/stderr | grep -c 'warning:' || true)
+          make -j"$(nproc)" 2>&1 | tee /tmp/mdparser-build.log
+          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
           if [ "$WARNINGS" -gt 0 ]; then
             echo "::error::Build produced $WARNINGS warning(s)"
             exit 1
@@ -247,7 +249,8 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           set -e
           # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+          # 104 needs /proc to find the loaded module, so it skips here.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 2
 
   asan:
     name: PHP ${{ matrix.php }} - ASAN
@@ -256,6 +259,13 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.4', '8.6']
+        include:
+          # Branch heads raise memory-limit errors after the internal call
+          # returns instead of bailing out of the allocation. This release
+          # predates that change, so it still drives a real bailout through
+          # md4c's callbacks and keeps 077's bailout-cleanup path covered.
+          - php: '8.4.26'
+            ref: php-8.4.26
 
     env:
       # detect_leaks=1 is LSan's Linux default; pinning it keeps a later
@@ -267,7 +277,8 @@ jobs:
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:exitcode=1
       USE_ZEND_ALLOC: 0
       USE_TRACKED_ALLOC: 1
-      PHP_VERSION: ${{ matrix.php }}
+      PHP_REF: ${{ matrix.ref || format('PHP-{0}', matrix.php) }}
+      PHPT_EXPECTED_SKIPS: ${{ matrix.ref && '2' || '1' }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -279,7 +290,7 @@ jobs:
 
       - name: Build PHP with ASAN
         run: |
-          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
+          git clone --depth=1 --branch="${PHP_REF}" https://github.com/php/php-src.git /tmp/php-src
           cd /tmp/php-src
           ./buildconf --force
           CC=clang CXX=clang++ \
@@ -316,7 +327,8 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           set -e
           # 069 needs ext-dom, missing from the --disable-all build; expect that one skip.
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+          # 104 skips on a pinned release that predates deferred memory-limit errors.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" "$PHPT_EXPECTED_SKIPS"
 
   oom-sweep:
     name: OOM sweep (vendored md4c)

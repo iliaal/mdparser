@@ -63,6 +63,10 @@ jobs:
           php-version: ${{ matrix.php-version }}
           coverage: none
           tools: none
+        env:
+          # The DLL is built against the newest patch's dev pack; a runner's
+          # older preinstalled PHP can lack symbols it imports.
+          update: true
 
       - name: Smoke-test built DLL
         if: matrix.arch == 'x64' && matrix.ts == 'nts'

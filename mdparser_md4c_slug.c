@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "mdparser_md4c_util.h"
+#include "mdparser_md4c_vendor.h"
 #include "mdparser_md4c_slug.h"
 
 /* ===================================================================
@@ -39,7 +40,7 @@ char *mdm_slugify(const char *text, size_t len)
     }
     bool prev_dash = true;
     size_t i = 0;
-    while (i < len) {
+    while (i < len && !mdparser_md4c_oom_pending()) {
         unsigned char c = (unsigned char)text[i];
         if (c < 0x80) {
             if (c == 0) {
