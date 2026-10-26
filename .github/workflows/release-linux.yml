@@ -79,9 +79,10 @@ jobs:
           - ubuntu-24.04-arm
           - macos-15
         php: ['8.4', '8.5']
-        # The image digests are multi-arch indexes; the ECR copy of the
-        # Docker official image serves the same digests as Docker Hub, so
-        # the pull step falls back to Docker Hub when ECR rate-limits.
+        # The image digests are multi-arch indexes; ghcr.io/iliaal/php and
+        # the ECR copy of the Docker official image serve the same digests
+        # as Docker Hub, so the pull step tries GHCR first and falls back to
+        # ECR and Docker Hub when a registry rate-limits.
         include:
           - php: '8.4'
             oldest-version: '8.4.1'
@@ -132,9 +133,15 @@ jobs:
         run: |
           pull_pinned() {
             local ecr_ref="${1}" attempt candidate
-            local hub_ref="docker.io/library/${ecr_ref#public.ecr.aws/docker/library/}"
+            local path="${ecr_ref#public.ecr.aws/docker/library/}"
+            local ghcr_ref="ghcr.io/iliaal/${path}"
+            local hub_ref="docker.io/library/${path}"
+            if [[ "${ecr_ref}" != *@sha256:* ]]; then
+              printf 'ERROR: %s is not pinned by digest\n' "${ecr_ref}" >&2
+              return 1
+            fi
             for attempt in 1 2 3; do
-              for candidate in "${ecr_ref}" "${hub_ref}"; do
+              for candidate in "${ghcr_ref}" "${ecr_ref}" "${hub_ref}"; do
                 if docker pull -q "${candidate}" >&2; then
                   printf '%s\n' "${candidate}"
                   return 0
@@ -142,7 +149,7 @@ jobs:
               done
               sleep $((attempt * 60))
             done
-            printf 'ERROR: could not pull %s from ECR or Docker Hub\n' "${ecr_ref}" >&2
+            printf 'ERROR: could not pull %s from GHCR, ECR, or Docker Hub\n' "${ecr_ref}" >&2
             return 1
           }
           oldest=$(pull_pinned "${OLDEST_IMAGE}")
