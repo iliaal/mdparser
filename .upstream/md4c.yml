@@ -1,50 +1,42 @@
 # /release-ext library-freshness gate. Schema: ~/.claude/commands/release-ext.md
 # detected from php_mdparser.h (MDPARSER_MD4C_VERSION)
 
-pinned: 58c55b69bfbebaf3fa24755f32dbff72bf59b227
+pinned: f9e5eb232b95b737373ae706648cb75bd259ed1a
 vendored_at: vendor/md4c
 resolver: github-head
 repo: mity/md4c
 branch: master
 note: |
-  md4c (mity/md4c), vendored at master 58c55b69 (MDPARSER_MD4C_VERSION =
-  0.6.0+git58c55b69, tag v0.6.0 plus 27 commits). The vendor directory mirrors
+  md4c (mity/md4c), vendored at master f9e5eb23 (MDPARSER_MD4C_VERSION =
+  0.6.0+gitf9e5eb23, tag v0.6.0 plus 46 commits). The vendor directory mirrors
   a commit rather than a release tag, so the gate resolves the branch head.
   mity/md4c publishes tags but no GitHub Releases, so `resolver: github` hit
   releases/latest, 404'd on every run, and degraded to warn-and-proceed
   without ever comparing anything.
 
-  Carries seven local behavior patches, one performance patch, and two
-  embedding hooks: MD_PARSER_BAILOUT_GUARD in md_parse and raw attribute
-  source provenance in MD_ATTRIBUTE/md_build_attribute. NUL replacement in
-  md_text_with_null_replacement, the table column-count guard in
-  md_is_table_underline, suppression of inline marks in consumed
-  full-reference link labels, and the linked block-quote lookup used by
-  blank-line container analysis. See vendor/VENDOR.md.
-  The footnote definition patch emits definitions through a pointer queue,
-  including nested-only references, so label hash buckets retain their original
-  targets during footnote rendering.
-  The failed footnote-probe patch delays widening a '[' opener over '^' until
-  a footnote definition is found, preserving ordinary links on lookup failure.
-  The HTML block start patch checks the terminator after type 1 tag names,
-  excludes self-closing type 1 tags from type 7, and keeps scanning type 6
-  names after a shorter prefix fails its terminator test.
-  The list-item blank-line patch records each LI opener boundary and whether
-  the item had source content, so a final MD_LINE or consumed reference
-  definition cannot make a nonempty item appear empty. Closing an empty item
-  restores its content indent relative to the remaining parent; physical
-  indent includes blockquote markers and cannot be used inside a nested quote.
+  Carries two local behavior patches and two embedding hooks: NUL
+  replacement in md_text_with_null_replacement, the table column-count guard
+  in md_is_table_underline, MD_PARSER_BAILOUT_GUARD in md_parse, and raw
+  attribute source provenance in MD_ATTRIBUTE/md_build_attribute. See
+  vendor/VENDOR.md.
 
-  This refresh drops the local "||"-only spoiler length test (upstream
-  89a9bf4) and the link-destination two-comparison byte test (upstream
-  45ec7ac and ec89a39). Other upstream changes include bracket pairing
-  (c6008fb), permissive autolinks with single-component hosts and ports
-  (3da1937), and verbatim tab indentation (2671f25).
+  The 2026-10-26 refresh from 58c55b69 dropped six local patches that
+  upstream now carries. Upstream e2c6766 (full-reference label marks),
+  f353ad6 (footnote definition order), ae821cb (failed footnote probes),
+  e313f46 (HTML block start tag boundaries), and 205b7f7 + 157e9fc + 60e8065
+  (list-item closure after two blank lines) match the local patches line for
+  line apart from comments. Upstream ff1cd9f + be8a0fe (GHSA-582f-rcwc-x4mp)
+  replace the linked block-quote lookup in blank-line container analysis
+  with a cached range of implicit list parents; tests/091 passes on it.
+  Other upstream changes rework the permissive autolink URL tail (f895c2b,
+  1645761, 6240bca, 775e87e) and bound its rescans (f9e5eb2, mity/md4c#464).
 
-  The 2026-09-29 refresh from 61f5ce7 dropped six local patches that
-  upstream now carries: the five out-of-memory error-path fixes (b630227,
-  fa0efb8, 47f8f4c) and the cached memchr end-of-line scan, superseded by
-  upstream's bounded-lookahead memchr scan (a25ed43 + 11e0b30,
-  mity/md4c#442). Earlier, the code-span trailing-whitespace patch was
-  accepted upstream as 10e96ad4 and dropped in the 2026-07-27 refresh.
-  md4c-html.c is not compiled in.
+  The 2026-10-13 refresh dropped the local "||"-only spoiler length test
+  (upstream 89a9bf4) and the link-destination two-comparison byte test
+  (upstream 45ec7ac and ec89a39). The 2026-09-29 refresh from 61f5ce7 dropped
+  six local patches that upstream now carries: the five out-of-memory
+  error-path fixes (b630227, fa0efb8, 47f8f4c) and the cached memchr
+  end-of-line scan, superseded by upstream's bounded-lookahead memchr scan
+  (a25ed43 + 11e0b30, mity/md4c#442). Earlier, the code-span
+  trailing-whitespace patch was accepted upstream as 10e96ad4 and dropped in
+  the 2026-07-27 refresh. md4c-html.c is not compiled in.

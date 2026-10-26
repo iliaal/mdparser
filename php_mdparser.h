@@ -15,9 +15,9 @@
 
 #define PHP_MDPARSER_VERSION "0.8.0"
 
-/* Bundled md4c version: tag v0.6.0 plus master commit 58c55b69
- * (vendored 2026-10-13). Keep in sync with vendor/VENDOR.md. */
-#define MDPARSER_MD4C_VERSION "0.6.0+git58c55b69"
+/* Bundled md4c version: tag v0.6.0 plus master commit f9e5eb23
+ * (vendored 2026-10-26). Keep in sync with vendor/VENDOR.md. */
+#define MDPARSER_MD4C_VERSION "0.6.0+gitf9e5eb23"
 
 extern zend_module_entry mdparser_module_entry;
 
