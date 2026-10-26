@@ -28,24 +28,36 @@ name: Release Linux & macOS binaries
 #
 # Third-party actions are pinned to commit SHAs because this job has
 # contents:write, and a moved tag would inherit the release-write token.
+#
+# Each binary is compiled against the oldest patch release of its PHP minor
+# (8.4.1, as 8.4.0 was never released, and 8.5.0): Linux inside the
+# digest-pinned php image, macOS against php-src built from the
+# checksum-pinned php.net tarball. Headers from a newer patch can select
+# engine APIs added mid-series, such as the fallible allocators behind
+# ZEND_HAS_OOM, and the binary then fails on earlier patches with an
+# undefined symbol. Before upload, every binary must load and grow a
+# 64 KiB+ output on both the oldest and the newest patch, and each Linux
+# import must be exported by the oldest patch's php binary or its libraries.
+# Bump the newest-image digests when a new patch ships.
 
 on:
   release:
     types: [published]
   # Manual trigger to (re)build and upload prebuilt binaries for an
-  # existing release: recovery when a lane flaked, or pre-tag build
-  # validation on a throwaway branch (the build still runs; the upload
-  # targets whatever release-tag is given).
+  # existing release: recovery when a lane flaked. With release-tag left
+  # empty, it builds the dispatched ref and runs every gate without
+  # uploading, for pre-tag validation on a branch.
   workflow_dispatch:
     inputs:
       release-tag:
-        description: "Existing release tag to build and upload binaries for"
-        required: true
+        description: "Existing release tag to build and upload binaries for (empty: build and test the dispatched ref without uploading)"
+        required: false
+        default: ""
 
 permissions: {}
 
 concurrency:
-  group: release-linux-${{ github.event.release.tag_name || inputs.release-tag }}
+  group: release-linux-${{ github.event.release.tag_name || inputs.release-tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -67,41 +79,133 @@ jobs:
           - ubuntu-24.04-arm
           - macos-15
         php: ['8.4', '8.5']
+        # The image digests are multi-arch indexes; the ECR copy of the
+        # Docker official image serves the same digests as Docker Hub.
+        include:
+          - php: '8.4'
+            oldest-version: '8.4.1'
+            oldest-source-sha256: 94c8a4fd419d45748951fa6d73bd55f6bdf0adaefb8814880a67baa66027311f
+            oldest-image: public.ecr.aws/docker/library/php:8.4.1-cli-bookworm@sha256:246d2ca7e9cf21c4e7c354ce87e87bf1ad6d41b2061c77668845e04a8f8889d4
+            newest-image: public.ecr.aws/docker/library/php:8.4.27-cli-bookworm@sha256:496b5e02fe9fe44fcfb715023b931048111dc4e0bc719789d83c906be9f04b05
+          - php: '8.5'
+            oldest-version: '8.5.0'
+            oldest-source-sha256: 39cb6e4acd679b574d3d3276f148213e935fc25f90403eb84fb1b836a806ef1e
+            oldest-image: public.ecr.aws/docker/library/php:8.5.0-cli-bookworm@sha256:4ff93cd1b053c4d5ff468ced40962092a350a8c86798fee96e807bc9b383ec75
+            newest-image: public.ecr.aws/docker/library/php:8.5.12-cli-bookworm@sha256:d4f6e10eb393de7e3a7a88e8b88e139072dd3ae297f6a5dada8257e6fe32c585
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
+      PHP_MINOR: ${{ matrix.php }}
+      OLDEST_VERSION: ${{ matrix.oldest-version }}
+      OLDEST_SOURCE_SHA256: ${{ matrix.oldest-source-sha256 }}
+      OLDEST_IMAGE: ${{ matrix.oldest-image }}
+      NEWEST_IMAGE: ${{ matrix.newest-image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ github.event.release.tag_name || inputs.release-tag }}
+          ref: ${{ github.event.release.tag_name || inputs.release-tag || github.sha }}
 
       - name: Verify release source
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
+        if: env.RELEASE_TAG != ''
         run: |
           TAG_COMMIT=$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")
           test -n "${TAG_COMMIT}"
           test "$(git rev-parse HEAD)" = "${TAG_COMMIT}"
           scripts/check_version.sh
 
-      - name: Setup PHP
+      - name: Resolve build version
+        id: version
+        run: |
+          if [[ -n "${RELEASE_TAG}" ]]; then
+            version="${RELEASE_TAG}"
+          else
+            version=$(sed -n 's/^#define PHP_MDPARSER_VERSION "\([^"]*\)"/\1/p' php_mdparser.h)
+          fi
+          test -n "${version}"
+          printf 'version=%s\n' "${version}" >>"${GITHUB_OUTPUT}"
+
+      - name: Build, package, and test prebuilt binary on the oldest patch (Linux)
+        id: package-linux
+        if: runner.os == 'Linux'
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker run --rm \
+            -v "${PWD}:/src" -w /src \
+            -v "${GITHUB_OUTPUT}:/github-output" -e GITHUB_OUTPUT=/github-output \
+            -e BUILD_VERSION -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            "${OLDEST_IMAGE}" \
+            bash -euo pipefail -c '
+              trap '\''chown -R "${HOST_UID}:${HOST_GID}" /src /github-output'\'' EXIT
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends ${PHPIZE_DEPS} zip unzip >/dev/null
+              scripts/build-release-binary.sh "${BUILD_VERSION}"
+              scripts/check-release-abi.sh modules/mdparser.so /usr/local/bin/php
+            '
+
+      - name: Build oldest-patch PHP from source (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          prefix="${RUNNER_TEMP}/php-${OLDEST_VERSION}"
+          tarball="${RUNNER_TEMP}/php-${OLDEST_VERSION}.tar.xz"
+          curl -fsSL --retry 3 -o "${tarball}" \
+            "https://www.php.net/distributions/php-${OLDEST_VERSION}.tar.xz"
+          printf '%s  %s\n' "${OLDEST_SOURCE_SHA256}" "${tarball}" | shasum -a 256 -c -
+          tar -xJf "${tarball}" -C "${RUNNER_TEMP}"
+          cd "${RUNNER_TEMP}/php-${OLDEST_VERSION}"
+          ./configure --prefix="${prefix}" \
+            --disable-all --enable-cli --disable-cgi --disable-phpdbg
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+          test "$("${prefix}/bin/php" -n -r 'echo PHP_VERSION;')" = "${OLDEST_VERSION}"
+          printf 'OLDEST_PREFIX=%s\n' "${prefix}" >>"${GITHUB_ENV}"
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+      - name: Setup newest-patch PHP (macOS)
+        if: runner.os == 'macOS'
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           coverage: none
 
-      - name: Build, package, and test prebuilt binary
-        id: package
+      - name: Build, package, and test prebuilt binary on the oldest patch (macOS)
+        id: package-macos
+        if: runner.os == 'macOS'
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
           # Builds on macos-15 because setup-php's Homebrew install hangs on
           # macos-14 runners; the macOS asset still targets macOS 14 as its
-          # minimum. Linux compilers ignore the variable.
+          # minimum.
           MACOSX_DEPLOYMENT_TARGET: "14.0"
-        run: scripts/build-release-binary.sh "${RELEASE_TAG}"
+        run: |
+          PHPIZE="${OLDEST_PREFIX}/bin/phpize" \
+            PHP_CONFIG="${OLDEST_PREFIX}/bin/php-config" \
+            PHP_BIN="${OLDEST_PREFIX}/bin/php" \
+            scripts/build-release-binary.sh "${BUILD_VERSION}"
+
+      - name: Smoke test on the oldest and newest patch
+        id: package
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          PACKAGE_PATH: ${{ steps.package-linux.outputs.package-path || steps.package-macos.outputs.package-path }}
+        run: |
+          test -n "${PACKAGE_PATH}"
+          if [[ "${RUNNER_OS}" == Linux ]]; then
+            targets=("image=${OLDEST_IMAGE}" "image=${NEWEST_IMAGE}")
+          else
+            newest_php=$(command -v php)
+            test "${newest_php}" != "${OLDEST_PREFIX}/bin/php"
+            targets=("php=${OLDEST_PREFIX}/bin/php" "php=${newest_php}")
+          fi
+          scripts/smoke-release-binary.sh "${PACKAGE_PATH}" "${BUILD_VERSION}" \
+            "${PHP_MINOR}" "${targets[@]}"
+          printf 'package-path=%s\n' "${PACKAGE_PATH}" >>"${GITHUB_OUTPUT}"
 
       - name: Upload tested prebuilt binary
+        if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
           PACKAGE_PATH: ${{ steps.package.outputs.package-path }}
         run: gh release upload "${RELEASE_TAG}" "${PACKAGE_PATH}" --clobber

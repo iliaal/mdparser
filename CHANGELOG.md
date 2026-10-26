@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The 0.8.1 prebuilt Linux and macOS binaries failed on PHP 8.4.1 through 8.4.26 and 8.5.0 through 8.5.11 with an `undefined symbol: smart_str_ferealloc` (or `_femalloc`) error, because they were compiled against the newest PHP patch release. Prebuilt binaries are now compiled against the oldest patch release of each PHP minor (8.4.1 and 8.5.0) and tested on the oldest and newest patch before upload. Builds from source were unaffected. Because prebuilt binaries now use the older engine API, the 0.8.1 early stop at deferred memory-limit errors applies only to builds from source.
+
 ## [0.8.1] - 2026-10-26
 
 ### Fixed
