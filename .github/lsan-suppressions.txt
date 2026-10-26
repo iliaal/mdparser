@@ -6,8 +6,7 @@
 # Empty: the ASan CI job has found no process-lifetime allocations so
 # far. Add narrow entries for known-good leaks (e.g. vendored-library
 # MINIT singletons) instead of setting detect_leaks=0 in
-# .github/workflows/tests.yml. See
-# ~/ai/wiki/debugging/asan-php-extension.md.
+# .github/workflows/tests.yml.
 #
 # To audit a new leak locally:
 #   ASAN_OPTIONS=detect_leaks=1 LSAN_OPTIONS=fast_unwind_on_malloc=0 \
