@@ -80,7 +80,8 @@ jobs:
           - macos-15
         php: ['8.4', '8.5']
         # The image digests are multi-arch indexes; the ECR copy of the
-        # Docker official image serves the same digests as Docker Hub.
+        # Docker official image serves the same digests as Docker Hub, so
+        # the pull step falls back to Docker Hub when ECR rate-limits.
         include:
           - php: '8.4'
             oldest-version: '8.4.1'
@@ -125,17 +126,41 @@ jobs:
           test -n "${version}"
           printf 'version=%s\n' "${version}" >>"${GITHUB_OUTPUT}"
 
+      - name: Pull pinned PHP images (Linux)
+        id: images
+        if: runner.os == 'Linux'
+        run: |
+          pull_pinned() {
+            local ecr_ref="${1}" attempt candidate
+            local hub_ref="docker.io/library/${ecr_ref#public.ecr.aws/docker/library/}"
+            for attempt in 1 2 3; do
+              for candidate in "${ecr_ref}" "${hub_ref}"; do
+                if docker pull -q "${candidate}" >&2; then
+                  printf '%s\n' "${candidate}"
+                  return 0
+                fi
+              done
+              sleep $((attempt * 60))
+            done
+            printf 'ERROR: could not pull %s from ECR or Docker Hub\n' "${ecr_ref}" >&2
+            return 1
+          }
+          oldest=$(pull_pinned "${OLDEST_IMAGE}")
+          newest=$(pull_pinned "${NEWEST_IMAGE}")
+          printf 'oldest=%s\nnewest=%s\n' "${oldest}" "${newest}" >>"${GITHUB_OUTPUT}"
+
       - name: Build, package, and test prebuilt binary on the oldest patch (Linux)
         id: package-linux
         if: runner.os == 'Linux'
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
+          PULLED_OLDEST_IMAGE: ${{ steps.images.outputs.oldest }}
         run: |
           docker run --rm \
             -v "${PWD}:/src" -w /src \
             -v "${GITHUB_OUTPUT}:/github-output" -e GITHUB_OUTPUT=/github-output \
             -e BUILD_VERSION -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
-            "${OLDEST_IMAGE}" \
+            "${PULLED_OLDEST_IMAGE}" \
             bash -euo pipefail -c '
               trap '\''chown -R "${HOST_UID}:${HOST_GID}" /src /github-output'\'' EXIT
               apt-get update -qq
@@ -190,10 +215,12 @@ jobs:
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
           PACKAGE_PATH: ${{ steps.package-linux.outputs.package-path || steps.package-macos.outputs.package-path }}
+          PULLED_OLDEST_IMAGE: ${{ steps.images.outputs.oldest }}
+          PULLED_NEWEST_IMAGE: ${{ steps.images.outputs.newest }}
         run: |
           test -n "${PACKAGE_PATH}"
           if [[ "${RUNNER_OS}" == Linux ]]; then
-            targets=("image=${OLDEST_IMAGE}" "image=${NEWEST_IMAGE}")
+            targets=("image=${PULLED_OLDEST_IMAGE}" "image=${PULLED_NEWEST_IMAGE}")
           else
             newest_php=$(command -v php)
             test "${newest_php}" != "${OLDEST_PREFIX}/bin/php"
