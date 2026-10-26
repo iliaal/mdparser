@@ -270,8 +270,7 @@ jobs:
     env:
       # detect_leaks=1 is LSan's Linux default; pinning it keeps a later
       # ASAN_OPTIONS edit from turning it off. Put narrow known-good leaks
-      # in .github/lsan-suppressions.txt instead of detect_leaks=0. See
-      # ~/ai/wiki/debugging/asan-php-extension.md.
+      # in .github/lsan-suppressions.txt instead of detect_leaks=0.
       ASAN_OPTIONS: exitcode=139:verify_asan_link_order=0:detect_odr_violation=0:detect_leaks=1
       LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt:print_suppressions=0
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:exitcode=1

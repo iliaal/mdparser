@@ -23,7 +23,7 @@ apt-get update -qq >/dev/null
 # which lays out the file at a path PIE's prePackagedBinary check
 # doesn't look at, and install fails with ExtensionBinaryNotFound even
 # though the zip downloaded fine. `php:8.x-cli` Debian images do not
-# ship unzip. See ~/ai/wiki/debugging/php-ext-release-traps.md.
+# ship unzip.
 apt-get install -y -qq git ca-certificates bison libtool-bin unzip >/dev/null
 git --version
 bison --version | head -1

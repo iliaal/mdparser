@@ -184,8 +184,7 @@ For maintainers cutting a new version:
    minute or two. If Packagist hasn't indexed the tag yet, users can
    fall back to `pie install iliaal/mdparser:@dev`, or you can force a
    re-crawl through the `api/update-package` endpoint with your
-   Packagist API token. See `~/ai/wiki/tools/packagist-quirks.md` for
-   other Packagist indexing issues.
+   Packagist API token.
 8. Before the first tag of a new release cycle, confirm that
    `composer.json` exists at HEAD (`git ls-tree HEAD | grep
    composer.json`). Packagist silently skips tags whose commit lacks a

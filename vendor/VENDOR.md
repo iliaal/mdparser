@@ -231,5 +231,5 @@ live in `MD_FLAG_*` (`md4c.h`).
 
 ## History
 
-mdparser embedded cmark-gfm before 0.4.0. The rebase postmortem that
-motivated the switch to md4c is at `~/ai/wiki/debugging/cmark-gfm-rebase.md`.
+mdparser embedded cmark-gfm before 0.4.0; a cmark-gfm rebase prompted the
+switch to md4c.
