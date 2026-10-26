@@ -34,7 +34,7 @@ not compiled; mdparser uses its own callback renderer for `toHtml()`
 
 | Component | Version | Notes |
 |---|---|---|
-| mity/md4c | `0.6.0+git58c55b69` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
+| mity/md4c | `0.6.0+gitf9e5eb23` | The C source compiled into `mdparser.so`. Tracked in `MDPARSER_MD4C_VERSION` (`php_mdparser.h`); reported by `php --ri mdparser`. |
 | CommonMark spec fixture | 0.31 `spec.txt` | Shipped at `tests/fixtures/commonmark-spec.txt`; `tests/005_commonmark_spec.phpt` pins md4c's conformance against it. |
 
 md4c targets CommonMark 0.31 natively, so the parser pin and the spec
@@ -46,9 +46,9 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Seven behavior patches, one performance patch, and two embedding hooks are
-carried in `md4c/md4c.c` and `md4c/md4c.h`. Every change site is marked with an
-`mdparser local patch` or `mdparser local integration hook` comment.
+Two behavior patches and two embedding hooks are carried in `md4c/md4c.c`
+and `md4c/md4c.h`. Every change site is marked with an `mdparser local patch`
+or `mdparser local integration hook` comment.
 
 ### Table column-count guard
 
@@ -70,65 +70,9 @@ The NUL patch is in `md_text_with_null_replacement`. Stock md4c emits the
 input pointer and remaining size on the same NUL. The following callback then
 receives that byte a second time. The patch consumes one character from
 `str`/`size` after the replacement callback, so every embedded NUL produces
-exactly one replacement event. Still unfixed upstream as of `58c55b69`. Drop
+exactly one replacement event. Still unfixed upstream as of `f9e5eb23`. Drop
 this patch when a refreshed md4c contains the equivalent pointer/size
 advance.
-
-The full-reference label patch is in `md_resolve_bracket_link`. After md4c
-recognizes `[text][label]`, it extends the link closer over the label but stock
-md4c leaves the label's inline marks enabled. A delimiter inside the consumed
-label can then pair with one outside it, producing unmatched span callbacks.
-The patch disables every mark in the consumed label before inline span
-resolution. `tests/096_reference_link_label_marks.phpt` covers the default
-emphasis case and the highlight extension. Drop the patch once upstream
-contains the equivalent mark suppression.
-
-The footnote definition patch is in `md_process_footnote_defs` and
-`md_resolve_bracket_footnote`. md4c builds label hash buckets with pointers
-into the definition array, then sorts that array in place by first-reference
-order. After a move, a bucket can point to the wrong definition, so references
-in a footnote body remain literal. The patch leaves definitions in place and
-records pointers in first-reference order, including references first found
-while rendering a footnote body. This also emits definitions referenced only
-from another footnote. `tests/099_footnote_definition_lookup_after_ordering.phpt`
-covers both cases in HTML, XML, and AST. Drop the patch once upstream preserves
-the hash table's pointers and emits nested-only definitions.
-
-The failed footnote-probe patch is in `md_resolve_bracket_footnote`. Stock md4c
-widens a `[` opener over `^` before checking the label and looking up its
-definition. If lookup fails, an ordinary link can be emitted as a wiki link
-even with `MD_FLAG_WIKILINKS` off, and a superscript closer can become
-unbalanced. The patch leaves the opener unchanged until the footnote resolves.
-`tests/103_failed_footnote_probe.phpt` covers the original link destination,
-balanced nested spans, and a valid footnote reference. Drop the patch once
-upstream delays the opener change until successful lookup.
-
-The HTML block start patch is in `md_is_html_block_start_condition`. Type 1
-must check the byte after `pre`, `script`, `style`, or `textarea`; a bare prefix
-such as `<prefix>` may start a type 7 block but must stop at its blank-line
-boundary instead of consuming the rest of the document as type 1. A
-self-closing form such as `<pre/>` must also avoid the type 7 fallback. Type 6
-must keep checking names after a shorter prefix lacks a valid terminator, so
-`<thead>` can still match after `th` does not. `tests/100_html_block_tag_boundaries.phpt`
-covers both conditions in HTML, XML, and AST. Drop the patch once upstream
-implements both boundary checks.
-
-The two-blank-line list patch is in `md_analyze_line` and the list container
-openers. Stock md4c decides whether a list item is still empty by treating the
-last bytes of `block_bytes` as an `MD_BLOCK`, even when they hold the final
-`MD_LINE` of a completed paragraph. If the line begins at an offset whose low
-byte equals `MD_BLOCK_LI`, the next indented paragraph leaves the list item.
-The patch records the byte position just after each item's actual opener and
-whether a nonblank source line belonged to it. The latter matters when a link
-reference definition consumes the only paragraph and removes its block bytes.
-When closing an empty item, the patch restores indentation relative to the
-remaining parent by adding that item's content indent. The physical line
-indent includes blockquote markers and cannot serve as the remaining quote's
-relative indent. Nested blockquotes and empty items are covered in HTML, XML,
-and AST.
-`tests/101_two_blank_line_list_item.phpt` covers both cases in HTML, XML, and
-AST, and the required closure of a genuinely empty item. Drop the patch when
-upstream tracks the item opener and source content explicitly.
 
 The embedding hook is in `md_parse`. When `MD_PARSER_BAILOUT_GUARD` is
 defined, the call to `md_process_doc` runs inside the wrapper-provided guard.
@@ -148,14 +92,46 @@ scratch buffers are not mistaken for source bytes. The pointer is valid only
 during the callback, like the other `MD_ATTRIBUTE` fields. Re-apply the hook
 on refresh and run `tests/097_inline_attribute_sentinel.phpt`.
 
-### Performance
+### Dropped at the `f9e5eb23` refresh
 
-The blank-line container lookup in `md_analyze_line` uses links maintained by
-`md_push_container` and `md_leave_child_containers` to locate the next block
-quote without scanning intervening list containers. The links store one-based
-container indices, so reallocating the container array does not invalidate
-them. Re-apply the patch on refresh unless upstream provides an equivalent
-bounded lookup, and run `tests/091_deep_list_blank_scaling.phpt`.
+Five behavior patches are gone because upstream merged them. With comments
+stripped, the upstream code matches the local patch line for line:
+
+- `e2c6766`: `md_resolve_bracket_link` disables every mark in a consumed
+  full-reference label. `tests/096_reference_link_label_marks.phpt` covers it.
+- `f353ad6`: `md_process_footnote_defs` emits definitions through the
+  `footnote_order` pointer array, so the label hash table keeps its targets,
+  and `md_resolve_bracket_footnote` appends references first found inside a
+  footnote body. `tests/099_footnote_definition_lookup_after_ordering.phpt`
+  covers it.
+- `ae821cb`: `md_resolve_bracket_footnote` widens the opener over `^` only
+  after the definition lookup succeeds. `tests/103_failed_footnote_probe.phpt`
+  covers it.
+- `e313f46`: `md_is_html_block_start_condition` checks the terminator after a
+  type 1 name, excludes self-closing type 1 names from type 7, and keeps
+  scanning type 6 names after a shorter prefix fails.
+  `tests/100_html_block_tag_boundaries.phpt` covers it.
+- `205b7f7`, `157e9fc`, and `60e8065`: `MD_CONTAINER` records
+  `li_block_byte_end` and `li_has_content`, and closing an empty item after
+  two blank lines adds the item's content indent back to the line.
+  `tests/101_two_blank_line_list_item.phpt` covers it.
+
+The linked block-quote lookup (`first_quote_container`,
+`last_quote_container`, `next_quote_container`) is gone too. Upstream
+`ff1cd9f` and `be8a0fe` (GHSA-582f-rcwc-x4mp) fix the same blank-line
+container scan differently: `md_analyze_line` caches the range of implicit
+list parents from the previous line and jumps to its end when the next blank
+line starts inside that range. Both mechanisms yield the index of the next
+block quote, or `n_containers`, for the same input. Only blank lines keep the
+cache, and a blank line closes only containers past its own result, so the
+cached range still names open list containers. A blank line that starts
+outside the range pays for the scan with bytes of its own or of the previous
+line, so the total stays linear. `tests/091_deep_list_blank_scaling.phpt`
+passes on the upstream code.
+
+This upstream source also reworks the permissive autolink URL tail
+(`f895c2b`, `1645761`, `6240bca`, `775e87e`) and stops rescanning a failed
+tail (`f9e5eb2`, mity/md4c#464).
 
 ### Dropped at the `58c55b69` refresh
 
@@ -223,8 +199,8 @@ md4c is a small, self-contained library, so a refresh is a drop-in:
    in `mdparser_md4c_vendor.c`; its `malloc`/`realloc`/`free` macros are safe
    only while every one of them is included first.
 4. Rebuild and run `make test`.
-5. Re-apply or drop each behavior patch, the performance patch, and the
-   two embedding hooks (see Local modifications). If the new release already
+5. Re-apply or drop each behavior patch and the two embedding hooks (see
+   Local modifications). If the new release already
    carries an upstream fix, the copy in step 1 removes that patch. Confirm
    005 still passes 652/652, run `tests/088_cr_only_line_endings.phpt` for
    the end-of-line scan's CR-only linearity, `tests/070_nul_replacement.phpt`

@@ -192,7 +192,7 @@ struct MD_CTX_tag {
     /* Footnote definitions. */
     MD_LABEL_HASH_TABLE footnote_hashtable;
     unsigned next_footnote_index;   /* 1-based counter for sequential numbering */
-    MD_FOOTNOTE_DEF** footnote_order;  /* mdparser local patch: stable definition addresses */
+    MD_FOOTNOTE_DEF** footnote_order;
 
     /* Stack of inline/span markers.
      * This is only used for parsing a single block contents but by storing it
@@ -251,6 +251,9 @@ struct MD_CTX_tag {
     OFF html_decl_horizon;
     OFF html_cdata_horizon;
 
+    /* For resolving permissive autolinks. */
+    OFF permissive_autolink_tail_horizon;
+
     /* For block analysis.
      * Notes:
      *   -- It holds MD_BLOCK as well as MD_LINE structures. After each
@@ -271,7 +274,6 @@ struct MD_CTX_tag {
     MD_CONTAINER* containers;
     int n_containers;
     int alloc_containers;
-    int first_quote_container;
 
     /* Minimal indentation to call the block "indented code block". */
     unsigned code_indent_offset;
@@ -281,6 +283,8 @@ struct MD_CTX_tag {
     int html_block_type;    /* For checking closing raw HTML condition. */
     int last_line_has_list_loosening_effect;
     int consecutive_blank_lines;
+    int last_n_implicit_parents_beg;
+    int last_n_implicit_parents_end;
 };
 
 enum MD_LINETYPE_tag {
@@ -3871,8 +3875,6 @@ md_resolve_bracket_footnote(MD_CTX* ctx, MD_MARK* opener, MD_MARK* closer,
     closer = &ctx->marks[opener->next];
 
     /* Verify the label satisfies the label rules. */
-    /* mdparser local patch (see vendor/VENDOR.md): leave a failed probe's
-     * opener unchanged so it can still resolve as an ordinary link. */
     label_beg = opener->end + 1;
     if(!md_is_footnote_label(ctx, label_beg, &label_end)  ||  label_end != closer->beg)
         return false;
@@ -3890,7 +3892,6 @@ md_resolve_bracket_footnote(MD_CTX* ctx, MD_MARK* opener, MD_MARK* closer,
     /* Assign index on first reference. */
     if(def->index == 0) {
         def->index = ++ctx->next_footnote_index;
-        /* mdparser local patch: append references discovered in footnote bodies. */
         if(ctx->footnote_order != NULL)
             ctx->footnote_order[def->index - 1] = def;
     }
@@ -3948,8 +3949,8 @@ md_resolve_bracket_link(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
              * iteration. */
             *p_next_index = ctx->marks[*p_next_index].next;
 
-            /* mdparser local patch (see vendor/VENDOR.md): The consumed
-             * label cannot participate in inline span resolution. */
+            /* The consumed label cannot participate in inline span
+             * resolution. */
             md_disable_marks(ctx, (int) (next_opener - ctx->marks),
                              (int) (next_closer - ctx->marks) + 1);
         }
@@ -4036,22 +4037,21 @@ md_resolve_bracket_link(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
          * See https://github.com/mity/md4c/issues/152 for more info. */
         if(ctx->parser.flags & MD_FLAG_PERMISSIVEAUTOLINKS) {
             MD_MARK* first_nested;
-            MD_MARK* last_nested;
 
             first_nested = opener + 1;
             while(first_nested->ch == _T('D')  &&  first_nested < closer)
                 first_nested++;
 
-            last_nested = closer - 1;
-            while(first_nested->ch == _T('D')  &&  last_nested > opener)
-                last_nested--;
-
+            /* Note the autolink closer is not necessarily the last mark
+             * before the closer bracket: Resolved entity or escape marks
+             * may live inside the autolink. */
             if((first_nested->flags & MD_MARK_RESOLVED)  &&
                first_nested->beg == opener->end  &&
                ISANYOF_(first_nested->ch, _T("@:."))  &&
-               first_nested->next == (last_nested - ctx->marks)  &&
-               last_nested->end == closer->beg)
+               ctx->marks[first_nested->next].end == closer->beg)
             {
+                MD_MARK* last_nested = &ctx->marks[first_nested->next];
+
                 first_nested->ch = _T('D');
                 first_nested->flags &= ~MD_MARK_RESOLVED;
                 last_nested->ch = _T('D');
@@ -4386,8 +4386,8 @@ md_analyze_permissive_autolink_segment(MD_CTX* ctx, OFF off, OFF end, OFF* p_end
 {
     int n_components = 0;
     int n_open_brackets = 0;
-    int seen_word_delim = true;
-    int seen_component_delim = true;
+    bool seen_word_delim = true;
+    bool seen_component_delim = true;
     OFF component_beg = off;
 
     if(word_extra == NULL)
@@ -4449,7 +4449,7 @@ md_analyze_permissive_autolink_segment(MD_CTX* ctx, OFF off, OFF end, OFF* p_end
     }
 
     /* Rollback falsely consumed delimiter. */
-    if(seen_word_delim || seen_component_delim)
+    if(off != component_beg  &&  (seen_word_delim || seen_component_delim))
         off = (scan_backwards ? off+1 : off-1);
 
     if(off != component_beg)
@@ -4473,6 +4473,7 @@ md_analyze_permissive_autolink(MD_CTX* ctx, int mark_index)
     OFF end = opener->end;
     MD_MARK* left_cursor = opener;
     MD_MARK* right_cursor = opener;
+    bool tail_trimmed = false;
 
     MD_ASSERT(closer->ch == 'D');
 
@@ -4516,41 +4517,118 @@ md_analyze_permissive_autolink(MD_CTX* ctx, int mark_index)
             while(end < line_end  &&  ISDIGIT(end))
                 end++;
         }
+    }
 
-        /* Scan for path segment. */
-        if(end < line_end  &&  CH(end) == _T('/')) {
-            if(md_analyze_permissive_autolink_segment(ctx, end+1, line_end, &end, false,
-                        _T('/'), _T(".+-_~%"), NULL, &right_cursor) < 0)
-                return;
+    /* Abort the scan early if possible
+     * (https://github.com/mity/md4c/issues/464) */
+    if(end < ctx->permissive_autolink_tail_horizon)
+        return;
 
-            /* Path can also end with additional '/' if its a directory. */
-            if(end < line_end  &&  CH(end) == _T('/'))
-                end++;
+    if(opener->ch != '@' && end < line_end && ISANYOF(end, _T("/?#"))) {
+        OFF tail_beg = end;
+        OFF off = end;
+        OFF scan_end;
+        int n_open_parens = 0;
+        int n_close_parens = 0;
+        int n_open_brackets = 0;
+        int n_close_brackets = 0;
+        int n_open_braces = 0;
+        int n_close_braces = 0;
+        MD_MARK* cursor;
+
+        /* Scan a continuous URL tail, stopping at whitespace or '<'.
+         * Keep the mark check so URLs cannot cross resolved Markdown syntax. */
+        while(off < line_end) {
+            SZ char_size;
+            int codepoint = md_decode_unicode(ctx->text, off, ctx->size, &char_size);
+
+            if(ISUNICODEWHITESPACE_(codepoint) || codepoint == '<' ||
+                    codepoint < 0x20 || codepoint == 0x7f)
+                break;
+            if(codepoint >= 128) {
+                off += char_size;
+                continue;
+            }
+
+            if(!ISALNUM(off)) {
+                MD_MARK* mark = md_scan_right_for_resolved_mark(ctx, right_cursor, off, &right_cursor);
+
+                if(mark != NULL) {
+                    /* An entity reference or a backslash escape is not a span
+                     * but just a few characters of the URL, the same way as
+                     * in a standard autolink. Any other resolved mark ends
+                     * the URL. */
+                    if(mark->ch == _T('&')  ||  (mark->ch == _T('\\')  &&  !ISNEWLINE(mark->beg+1))) {
+                        off = mark->end;
+                        continue;
+                    }
+                    break;
+                }
+            }
+
+            switch(CH(off)) {
+                case _T('('):   n_open_parens++; break;
+                case _T(')'):   n_close_parens++; break;
+                case _T('['):   n_open_brackets++; break;
+                case _T(']'):   n_close_brackets++; break;
+                case _T('{'):   n_open_braces++; break;
+                case _T('}'):   n_close_braces++; break;
+            }
+            off++;
         }
+        scan_end = off;
 
-        /* Scan for query segment. */
-        if(end < line_end  &&  CH(end) == _T('?')) {
-            if(md_analyze_permissive_autolink_segment(ctx, end+1, line_end, &end, false,
-                        _T('&'), _T("._=()"), _T("+-"), &right_cursor) < 0)
-                return;
-        }
+        /* Exclude terminal punctuation and excess closing brackets from the
+         * URL as they more likely belong to the surrounding text. (Unmatched
+         * opening brackets within the URL are valid.)
+         *
+         * A trailing entity reference is excluded as a whole and so is
+         * a backslash escape of the terminal punctuation; we never split
+         * such marks. */
+        cursor = right_cursor;
+        while(off > tail_beg) {
+            MD_MARK* mark = md_scan_left_for_resolved_mark(ctx, cursor, off-1, &cursor);
+            bool is_terminal_punct = ISANYOF(off-1, _T("?!.,:;*_~'\""));
 
-        /* Scan for fragment segment. */
-        if(end < line_end  &&  CH(end) == _T('#')) {
-            if(md_analyze_permissive_autolink_segment(ctx, end+1, line_end, &end, false,
-                        _T('\0'), NULL, _T(".-+_"), &right_cursor) < 0)
-                return;
+            if(mark != NULL) {
+                if(mark->ch == _T(';'))
+                    mark = &ctx->marks[mark->prev];     /* The '&' covers the whole entity. */
+                if(mark->ch == _T('&')  ||  is_terminal_punct)
+                    off = mark->beg;
+                else
+                    break;
+            } else if(CH(off-1) == _T(')')  &&  n_close_parens > n_open_parens) {
+                n_close_parens--;
+                off--;
+            } else if(CH(off-1) == _T(']')  &&  n_close_brackets > n_open_brackets) {
+                n_close_brackets--;
+                off--;
+            } else if(CH(off-1) == _T('}')  &&  n_close_braces > n_open_braces) {
+                n_close_braces--;
+                off--;
+            } else if(is_terminal_punct) {
+                off--;
+            } else {
+                break;
+            }
         }
+        end = off;
+        tail_trimmed = (end < scan_end);
     }
 
     /* Verify there's line boundary, whitespace, allowed punctuation or
-     * resolved closer mark just after the suspected autolink. */
-    if(end < line_end  &&  !ISUNICODEWHITESPACE(end)  &&  !ISANYOF(end, _T(")}].!?,;"))) {
+     * resolved closer mark just after the suspected autolink. (Anything we
+     * have excluded from the URL tail above is a fine follower too.) */
+    if(!tail_trimmed && end < line_end && !ISUNICODEWHITESPACE(end) &&
+            !ISANYOF(end, _T(")}].!?,;")) &&
+            !(opener->ch != '@' && ISANYOF(end, _T(":*_~'\"<")))) {
         MD_MARK* mark;
 
         mark = md_scan_right_for_resolved_mark(ctx, right_cursor, end, &right_cursor);
-        if(mark == NULL  ||  !(mark->flags & MD_MARK_CLOSER))
+        if(mark == NULL  ||  !(mark->flags & MD_MARK_CLOSER)) {
+            ctx->permissive_autolink_tail_horizon = end;
             return;
+        }
     }
 
     /* Success, we are an autolink. */
@@ -4610,8 +4688,6 @@ md_analyze_marks(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
             case '&':   md_analyze_entity(ctx, i); break;
             case '_':   MD_FALLTHROUGH();
             case '*':   md_analyze_emph(ctx, i); break;
-            case '~':   md_analyze_generic(ctx, i); break;
-            case '^':   md_analyze_generic(ctx, i); break;
             case '$':   md_analyze_dollar(ctx, i); break;
             case '.':   MD_FALLTHROUGH();
             case ':':   MD_FALLTHROUGH();
@@ -4622,7 +4698,9 @@ md_analyze_marks(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
                 if(mark->end - mark->beg == 2)
                     md_analyze_generic(ctx, i);
                 break;
-            case '=':   md_analyze_generic(ctx, i); break;
+            case '~':   MD_FALLTHROUGH();
+            case '^':   MD_FALLTHROUGH();
+            case '=':   MD_FALLTHROUGH();
             case '+':   md_analyze_generic(ctx, i); break;
         }
 
@@ -5340,11 +5418,9 @@ struct MD_CONTAINER_tag {
     unsigned mark_indent;
     unsigned contents_indent;
     OFF block_byte_off;
-    int li_block_byte_end;     /* mdparser local patch (see vendor/VENDOR.md) */
+    int li_block_byte_end;     /* Byte after the current MD_BLOCK_LI opener. */
     unsigned li_has_content    : 1;
     OFF task_mark_off;
-    int last_quote_container;
-    int next_quote_container;
 };
 
 
@@ -6249,7 +6325,6 @@ md_is_html_block_start_condition(MD_CTX* ctx, OFF beg)
         if(off + t1[i].len <= ctx->size) {
             if(md_ascii_case_eq(STR(off), t1[i].name, t1[i].len)) {
                 OFF tmp = off + t1[i].len;
-                /* mdparser local patch: a type 1 name needs its own terminator. */
                 if(tmp >= ctx->size || ISBLANK(tmp) || ISNEWLINE(tmp) || CH(tmp) == _T('>'))
                     return 1;
                 /* A self-closing type 1 name is excluded from type 7 as well. */
@@ -6301,7 +6376,6 @@ md_is_html_block_start_condition(MD_CTX* ctx, OFF beg)
                         return 6;
                     if(tmp+1 < ctx->size && CH(tmp) == _T('/') && CH(tmp+1) == _T('>'))
                         return 6;
-                    /* mdparser local patch: a longer type 6 name may follow this prefix. */
                     continue;
                 }
             }
@@ -6437,25 +6511,7 @@ md_push_container(MD_CTX* ctx, const MD_CONTAINER* container)
         ctx->containers = new_containers;
     }
 
-    /* mdparser local patch (see vendor/VENDOR.md): keep block quote links so
-     * blank lines can skip a run of list containers in constant time. */
-    {
-        int prior_quote = (ctx->n_containers > 0
-                ? ctx->containers[ctx->n_containers-1].last_quote_container : 0);
-        MD_CONTAINER* pushed = &ctx->containers[ctx->n_containers];
-
-        memcpy(pushed, container, sizeof(MD_CONTAINER));
-        pushed->last_quote_container = (pushed->ch == _T('>')
-                ? ctx->n_containers + 1 : prior_quote);
-        pushed->next_quote_container = 0;
-        if(pushed->ch == _T('>')) {
-            if(prior_quote != 0)
-                ctx->containers[prior_quote-1].next_quote_container = ctx->n_containers + 1;
-            else
-                ctx->first_quote_container = ctx->n_containers + 1;
-        }
-        ctx->n_containers++;
-    }
+    memcpy(&ctx->containers[ctx->n_containers++], container, sizeof(MD_CONTAINER));
     return 0;
 }
 
@@ -6490,7 +6546,6 @@ md_enter_child_containers(MD_CTX* ctx, int n_children)
                                 c->task_mark_off,
                                 (c->is_task ? CH(c->task_mark_off) : 0),
                                 MD_BLOCK_CONTAINER_OPENER));
-                /* mdparser local patch (see vendor/VENDOR.md): track this item. */
                 c->li_block_byte_end = ctx->n_block_bytes;
                 break;
 
@@ -6547,14 +6602,6 @@ md_leave_child_containers(MD_CTX* ctx, int n_keep)
                 break;
         }
 
-        if(c->ch == _T('>')) {
-            int prior_quote = (ctx->n_containers > 1
-                    ? ctx->containers[ctx->n_containers-2].last_quote_container : 0);
-            if(prior_quote != 0)
-                ctx->containers[prior_quote-1].next_quote_container = 0;
-            else
-                ctx->first_quote_container = 0;
-        }
         ctx->n_containers--;
     }
 
@@ -6654,6 +6701,8 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
     int prev_line_has_list_loosening_effect = ctx->last_line_has_list_loosening_effect;
     OFF off = beg;
     OFF hr_killer = 0;
+    int n_implicit_parents_beg = 0;
+    int n_implicit_parents_end = 0;
     int ret = 0;
 
     line->indent = md_line_indentation(ctx, total_indent, off, &off);
@@ -6695,16 +6744,23 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
         /* Blank line does not need any real indentation to be nested inside
          * a list. */
         if(n_brothers + n_children == 0) {
-            /* mdparser local patch (see vendor/VENDOR.md): the next quote
-             * after the matched parents is linked from the previous quote. */
-            if(n_parents < ctx->n_containers  &&  ctx->containers[n_parents].ch != _T('>')) {
-                int prior_quote = (n_parents > 0
-                        ? ctx->containers[n_parents-1].last_quote_container : 0);
-                int next_quote = (prior_quote != 0
-                        ? ctx->containers[prior_quote-1].next_quote_container
-                        : ctx->first_quote_container);
-                n_parents = (next_quote != 0 ? next_quote - 1 : ctx->n_containers);
+            n_implicit_parents_beg = n_parents;
+
+            while(n_parents < ctx->n_containers  &&  ctx->containers[n_parents].ch != _T('>')) {
+                if(ctx->last_n_implicit_parents_beg <= n_parents  &&
+                   n_parents <= ctx->last_n_implicit_parents_end  &&
+                   ctx->last_n_implicit_parents_end - ctx->last_n_implicit_parents_beg > 0)
+                {
+                    /* All containers in [beg, end) are lists, so any blank line
+                     * starting within that range ends at the same place. */
+                    n_parents = ctx->last_n_implicit_parents_end;
+                    break;
+                }
+
+                n_parents++;
             }
+
+            n_implicit_parents_end = n_parents;
         }
     }
 
@@ -6786,8 +6842,6 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
             /* CommonMark requires a list item cannot begin with two (or more)
              * blank lines so we may need to forcefully end the list.
              * (See https://github.com/mity/md4c/issues/6) */
-            /* mdparser local patch (see vendor/VENDOR.md): use the recorded
-             * LI opener boundary, not the final MD_LINE's byte pattern. */
             if(ctx->consecutive_blank_lines >= 2) {
                 if(n_parents > 0  &&  n_parents == ctx->n_containers  &&
                    ctx->containers[n_parents-1].ch != _T('>')  &&
@@ -7118,7 +7172,6 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
                     container.task_mark_off,
                     (container.is_task ? CH(container.task_mark_off) : 0),
                     MD_BLOCK_CONTAINER_OPENER));
-        /* mdparser local patch (see vendor/VENDOR.md): track the next item. */
         ctx->containers[n_parents].li_block_byte_end = ctx->n_block_bytes;
         ctx->containers[n_parents].li_has_content = false;
         ctx->containers[n_parents].is_task = container.is_task;
@@ -7154,6 +7207,9 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
     if(line->type != MD_LINE_BLANK  &&  line->beg < line->end  &&
        ctx->n_containers > 0  &&  ctx->containers[ctx->n_containers-1].ch != _T('>'))
         ctx->containers[ctx->n_containers-1].li_has_content = true;
+
+    ctx->last_n_implicit_parents_beg = n_implicit_parents_beg;
+    ctx->last_n_implicit_parents_end = n_implicit_parents_end;
 
 abort:
     return ret;
@@ -7278,8 +7334,8 @@ md_process_footnote_defs(MD_CTX* ctx)
     if(ctx->footnote_hashtable.n_defs == 0  ||  ctx->next_footnote_index == 0)
         return 0;
 
-    /* mdparser local patch: order pointers, leaving the hashtable's targets
-     * fixed; nested references append to this array as they are discovered. */
+    /* Keep definitions in place because the label hash table points into them.
+     * A definition may first be referenced while rendering another one. */
     ctx->footnote_order = malloc(ctx->footnote_hashtable.n_defs * sizeof(*ctx->footnote_order));
     if(ctx->footnote_order == NULL) {
         MD_LOG("malloc() failed.");
