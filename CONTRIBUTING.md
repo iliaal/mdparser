@@ -172,10 +172,13 @@ For maintainers cutting a new version:
 6. Confirm both release workflows finish successfully. `windows.yml` runs
    PHP 8.2-8.5 across TS/NTS and x86/x64 and uploads the tested DLL archives.
    `release-linux.yml` builds Linux x86_64/arm64 and macOS arm64 for PHP 8.4
-   and 8.5, unpacks and loads each exact `.so`, then uploads it. If a Unix
-   lane needs recovery, dispatch `release-linux.yml` manually with the same
-   tag; the workflow verifies that it checked out the tag commit before it
-   builds.
+   and 8.5 against the oldest patch release of each minor (8.4.1, 8.5.0),
+   checks that every Linux import is exported by that patch, loads each exact
+   `.so` on the oldest and newest patch, then uploads it. If a Unix lane needs
+   recovery, dispatch `release-linux.yml` manually with the same tag; the
+   workflow verifies that it checked out the tag commit before it builds.
+   Dispatch it with an empty tag to build and test a branch without
+   uploading.
 7. Packagist's GitHub webhook fires on the tag push, and
    `pie install iliaal/mdparser` resolves to the new tag within a
    minute or two. If Packagist hasn't indexed the tag yet, users can
