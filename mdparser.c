@@ -15,6 +15,7 @@
 #endif
 
 #include "php.h"
+#include "php_main.h"
 #include "ext/standard/info.h"
 
 #include "php_mdparser.h"
@@ -65,6 +66,19 @@ static PHP_GINIT_FUNCTION(mdparser)
  * masks, and registers the classes. */
 PHP_MINIT_FUNCTION(mdparser)
 {
+#if PHP_VERSION_ID >= 80300
+    /* A binary built against newer patch headers can import engine symbols
+     * the running patch does not export; lazy ELF binding would load it and
+     * then kill the process on the first such call. */
+    if (php_version_id() < PHP_VERSION_ID) {
+        zend_error(E_CORE_WARNING,
+            "mdparser was built for PHP %s and cannot run on PHP %s; "
+            "install a build for this PHP version or build from source",
+            PHP_VERSION, php_version());
+        return FAILURE;
+    }
+#endif
+
     REGISTER_INI_ENTRIES();
 
     mdparser_options_init_defaults();
