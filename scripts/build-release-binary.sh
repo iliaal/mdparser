@@ -17,7 +17,7 @@ main() {
 	local php_config="${PHP_CONFIG:-php-config}"
 	local php_bin="${PHP_BIN:-}"
 	local jobs="${JOBS:-}"
-	local version php_version architecture operating_system libc suffix package
+	local version php_version architecture operating_system libc ldd_version suffix package
 	local machine operating_system_name
 	local temporary_directory
 
@@ -65,11 +65,13 @@ main() {
 	case "${operating_system_name}" in
 	Linux)
 		operating_system=linux
-		if ldd --version 2>&1 | grep -qi musl; then
-			libc=musl
-		else
-			libc=glibc
-		fi
+		# musl's ldd exits 1 on --version, so capture first: under pipefail a
+		# direct pipe into grep reports that status and misdetects glibc.
+		ldd_version=$(ldd --version 2>&1 || true)
+		case "${ldd_version}" in
+		*[Mm][Uu][Ss][Ll]*) libc=musl ;;
+		*) libc=glibc ;;
+		esac
 		;;
 	Darwin)
 		operating_system=darwin

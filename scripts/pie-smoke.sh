@@ -6,9 +6,9 @@ echo " PIE install smoke test for iliaal/mdparser"
 echo "======================================================================"
 echo
 echo "PHP:"
-php --version | head -1
+php --version | sed -n 1p
 echo "phpize:"
-phpize --version 2>&1 | head -2
+phpize --version 2>&1 | sed -n '1,2p'
 echo
 
 echo "---- 1. System build tools ----"
@@ -26,8 +26,8 @@ apt-get update -qq >/dev/null
 # ship unzip.
 apt-get install -y -qq git ca-certificates bison libtool-bin unzip >/dev/null
 git --version
-bison --version | head -1
-libtoolize --version | head -1 || echo "libtoolize not found"
+bison --version | sed -n 1p
+libtoolize --version | sed -n 1p || echo "libtoolize not found"
 echo
 
 echo "---- 2. Fresh clone from mounted source (avoids host build artifacts) ----"
@@ -48,14 +48,14 @@ echo
 echo "---- 3. Install Composer ----"
 curl -sS https://getcomposer.org/installer | php -- --quiet
 mv composer.phar /usr/local/bin/composer
-composer --version | head -1
+composer --version | sed -n 1p
 echo
 
 echo "---- 4. Download PIE ----"
 curl -sSL https://github.com/php/pie/releases/latest/download/pie.phar -o /usr/local/bin/pie
 chmod +x /usr/local/bin/pie
 ls -la /usr/local/bin/pie
-pie --version 2>&1 | head -3
+pie --version 2>&1 | sed -n '1,3p'
 echo
 
 echo "---- 5. pie install (against Packagist, real-user path) ----"
@@ -78,7 +78,7 @@ if ((PIE_STATUS != 0)); then
 	echo "   PIE install failed with status ${PIE_STATUS}" >&2
 	exit "${PIE_STATUS}"
 fi
-if ! php -m | grep -qi mdparser; then
+if ! php -m | grep -i mdparser >/dev/null; then
 	echo "   PIE exited successfully but mdparser is not loaded" >&2
 	exit 1
 fi
