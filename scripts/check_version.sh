@@ -3,6 +3,9 @@
 set -euo pipefail
 
 main() {
+    # SemVer identifiers are ASCII, regardless of the caller's locale.
+    local LC_ALL=C
+
     if [[ $# -ne 0 ]]; then
         printf 'Usage: %s\n' "${0##*/}" >&2
         return 2
