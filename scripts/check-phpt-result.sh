@@ -8,6 +8,9 @@ usage() {
 }
 
 main() {
+	# Bash numeric ranges must accept only ASCII digits before arithmetic.
+	local LC_ALL=C
+
 	if [[ $# -lt 2 || $# -gt 3 ]]; then
 		usage
 		return 2

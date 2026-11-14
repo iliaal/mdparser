@@ -26,6 +26,8 @@ jobs:
           php-version: '8.4'
           tools: composer
           coverage: none
+      - name: Test PHPT result validation
+        run: bash scripts/tests/check-phpt-result.sh
       - name: Test release version validation
         run: bash scripts/tests/check-version.sh
       - run: composer validate --strict
