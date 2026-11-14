@@ -26,7 +26,13 @@ main() {
         printf 'ERROR: could not parse PHP_MDPARSER_VERSION from %s\n' "${version_file}" >&2
         return 1
     fi
-    if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+    # Numeric core and prerelease identifiers cannot have leading zeroes.
+    # Build identifiers may, but every dot-separated identifier must be nonempty.
+    local number='(0|[1-9][0-9]*)'
+    local prerelease='(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+    local build='[0-9A-Za-z-]+'
+    local semver="^${number}\.${number}\.${number}(-${prerelease}(\.${prerelease})*)?(\+${build}(\.${build})*)?$"
+    if [[ ! "${version}" =~ ${semver} ]]; then
         printf 'ERROR: PHP_MDPARSER_VERSION %s is not SemVer 2.0.0\n' "${version}" >&2
         return 1
     fi
