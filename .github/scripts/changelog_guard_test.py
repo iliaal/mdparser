@@ -96,7 +96,10 @@ class Fixture:
     def commit(self, branch, text, msg, new=False, start="main", path="CHANGELOG.md"):
         if not new:
             sh(self.work, "git", "checkout", "-q", "-B", branch, f"origin/{start}")
-        (self.work / path).write_text(textwrap.dedent(text))
+        if text is None:
+            (self.work / path).unlink()
+        else:
+            (self.work / path).write_text(textwrap.dedent(text))
         sh(self.work, "git", "add", "-A")
         sh(self.work, "git", "commit", "-q", "-m", msg)
         sh(self.work, "git", "push", "-q", "origin", f"+HEAD:refs/heads/{branch}")
@@ -239,6 +242,22 @@ class GuardTest(unittest.TestCase):
         self.f.pr(1, add_unreleased("- Existing fix", base=BASE_CL.replace("- First release", "- First")),
                   labels=["changelog-override"])
         self.assertFail(self.f.run("pr", 1), "appears twice under [Unreleased]")
+
+    def test_deleted_changelog_with_releases_fails(self):
+        self.f.pr(1, None)
+        self.assertFail(self.f.run("pr", 1), "changes released section [1.0.0]")
+
+    def test_deleted_changelog_override_warns(self):
+        self.f.pr(1, None, labels=["changelog-override"])
+        p = self.f.run("pr", 1)
+        self.assertPass(p)
+        self.assertIn("::warning", p.stdout)
+        self.assertIn("changes released section [1.0.0]", p.stdout)
+
+    def test_deleted_unreleased_only_changelog_passes(self):
+        self.f.commit("main", "# Changelog\n\n## [Unreleased]\n- New fix\n", "no releases yet")
+        self.f.pr(1, None)
+        self.assertPass(self.f.run("pr", 1))
 
     def test_line_removed_from_released_section_fails(self):
         self.f.pr(1, BASE_CL.replace("- First release\n", ""))
