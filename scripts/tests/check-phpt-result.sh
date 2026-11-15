@@ -102,3 +102,25 @@ if [[ -n "${non_c_locale}" ]]; then
 else
 	printf 'SKIP: non-C locale coverage (de_DE/en_US UTF-8 not installed)\n'
 fi
+
+
+write_summary "${summary}" 2 0 0 0 2
+expect_invalid_count 'zero-padded runner status rejected as nonzero' 1 'ERROR: PHPT runner exited with status 8' \
+	"${gate}" "${summary}" 08
+expect_invalid_count 'zero-padded skip mismatch rejected' 1 'ERROR: expected 8 skipped PHPT test(s), observed 0' \
+	"${gate}" "${summary}" 0 08
+write_summary "${summary}" 010 08 00 00 02
+expect_success 'zero-padded decimal summary and arguments accepted' "${gate}" "${summary}" 00 08
+write_summary "${summary}" 010 00 00 00 08
+expect_invalid_count 'zero-padded total mismatch rejected' 1 'ERROR: PHPT summary accounts for 8 of 10 tests' \
+	"${gate}" "${summary}" 0
+for field in failed warned; do
+	failed=0 warned=0
+	printf -v "${field}" '%s' 08
+	write_summary "${summary}" 10 0 "${warned}" "${failed}" 2
+	expect_invalid_count "zero-padded ${field} rejected" 1 "PHPT test(s) ${field}" \
+		"${gate}" "${summary}" 0
+done
+write_summary "${summary}" 08 08 00 00 00
+expect_invalid_count 'zero-padded no-passing run rejected' 1 'ERROR: PHPT run executed no passing tests' \
+	"${gate}" "${summary}" 0 08
