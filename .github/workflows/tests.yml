@@ -26,6 +26,10 @@ jobs:
           php-version: '8.4'
           tools: composer
           coverage: none
+      - name: Prepare non-C locale coverage
+        run: |
+          sudo locale-gen de_DE.UTF-8
+          LC_ALL=de_DE.UTF-8 locale charmap | grep -Fx UTF-8
       - name: Test PHPT result validation
         run: bash scripts/tests/check-phpt-result.sh
       - name: Test release version validation

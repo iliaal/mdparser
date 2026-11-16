@@ -39,7 +39,7 @@ done
 check_version 1.2.3 1 1.2.4
 
 # Exercise a locale whose collation expands [A-Za-z] beyond ASCII, if installed.
-# Minimal systems may have only C locales; report that coverage limitation.
+# Minimal local systems may skip this coverage; CI must provide a supported locale.
 non_c_locale=$(locale -a | awk '!found && tolower($0) ~ /^(de_de|en_us)\.utf-?8$/ { print; found=1 }')
 if [[ -n "${non_c_locale}" ]]; then
     for version in 1.2.3-é 1.2.3+é 1.2.3-ß 1.2.3+İ; do
@@ -47,6 +47,9 @@ if [[ -n "${non_c_locale}" ]]; then
         LC_ALL="${non_c_locale}" check_version "${version}" 1 "${version}"
     done
     LC_ALL="${non_c_locale}" check_version 1.2.3-rc.1+build.001 0
+elif [[ "${CI:-}" == "true" ]]; then
+    printf 'FAIL: non-C locale coverage required in CI (de_DE/en_US UTF-8 not installed)\n' >&2
+    exit 1
 else
     printf 'SKIP: non-C locale coverage (de_DE/en_US UTF-8 not installed)\n'
 fi
