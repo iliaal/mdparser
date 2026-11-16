@@ -17,6 +17,7 @@ M = [
     ("override label", "    if allow_released:\n", "    if False:\n"),
     ("override label only covers released edits", "        return errs, [f\"{label}: {h} (allowed", "        return [], [f\"{label}: {h} (allowed"),
     ("override label makes them warnings", "(allowed by the {OVERRIDE} label)\" for h in hits]", "(allowed by the {OVERRIDE} label)\" for h in []]"),
+    ('override retains changed-entry details', 'f"{label}: {h} (allowed by the {OVERRIDE} label)"', 'f"{label}: {h.split(\':\')[0]} (allowed by the {OVERRIDE} label)"'),
     ("link references never count, old side", "and not LINKREF.match(old[i])]", "]"),
     ("link references never count, new side", "and not LINKREF.match(new[j])]", "]"),
     ("duplicate ## heading", 'k, h3 = ("section", m.group(1)), None', "continue"),
