@@ -21,6 +21,7 @@
 
 #include "entity.h"
 #include "mdparser_md4c_util.h"
+#include "mdparser_utf8.h"
 #include "mdparser_md4c_vendor.h"
 
 static unsigned mdu_hex_val(char ch)
@@ -224,29 +225,28 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     size_t *out_len, bool *owned)
 {
     const unsigned char *p = (const unsigned char *)src;
-    size_t i = 0;
-    bool clean = true;
+    /* The SIMD pass covers whole 64-byte chunks; the scalar loop finishes
+     * the tail and pins the exact offset of the first bad byte. */
+    size_t i = mdparser_utf8_valid_prefix(p, len);
     while (i < len) {
-        /* ASCII fast path: skip runs of <0x80 bytes 8 at a time, then 1 at a
-         * time, before falling back to the per-sequence validator. Markdown
-         * is overwhelmingly ASCII, so this avoids a call per byte. */
         i = mdu_skip_ascii(p, i, len);
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
-        if (n == 0) { clean = false; break; }
+        if (n == 0) break;
         i += n;
     }
-    if (clean) {
+    if (i >= len) {
         *owned = false;
         *out_len = len;
         return src;
     }
+    /* Everything before the first bad byte is copied through unchanged. */
+    const size_t valid_prefix = i;
     /* Size the rebuild buffer exactly: valid bytes pass through, each invalid
      * byte expands to a 3-byte U+FFFD. This counting pass mirrors the rebuild
      * loop below, so it avoids the len*3 worst case (768 MB at the 256 MB
      * input cap) when only a handful of bytes are invalid. */
-    size_t out_size = 0;
-    i = 0;
+    size_t out_size = valid_prefix;
     while (i < len) {
         size_t beg = i;
         i = mdu_skip_ascii(p, i, len);
@@ -269,8 +269,9 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
 #else
     char *dst = emalloc(out_size + 1);
 #endif
-    size_t o = 0;
-    i = 0;
+    memcpy(dst, p, valid_prefix);
+    size_t o = valid_prefix;
+    i = valid_prefix;
     while (i < len) {
         /* Bulk-copy ASCII runs (same fast path as the clean scan). */
         size_t beg = i;

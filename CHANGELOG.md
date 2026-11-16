@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `validateUtf8` now checks input 64 bytes at a time with SSSE3 on x86-64 or NEON on ARM64, so `toHtml()` runs about twice as fast on mostly non-ASCII text such as Chinese or Russian; ASCII-heavy input parses at the same speed.
 - PHP now refuses to start with a clear warning when mdparser was compiled against a newer patch release of the same PHP minor than the one running, such as a build for 8.4.27 loaded on 8.4.26. Previously such a build loaded and then killed the process with an `undefined symbol` error on the first call that needed a newer engine function. Requires PHP 8.3 or later headers; older builds are unchanged.
 
 ## [0.8.2] - 2026-10-26
