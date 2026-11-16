@@ -7,7 +7,18 @@ usage() {
 		"${0##*/}" >&2
 }
 
+# Counts are decimal, including zero-padded fields. Strip leading zeroes before
+# Bash arithmetic and printf, both of which otherwise interpret them as octal.
+decimal_count() {
+	local value="${1}"
+	value=${value#"${value%%[!0]*}"}
+	printf '%s' "${value:-0}"
+}
+
 main() {
+	# Bash numeric ranges must accept only ASCII digits before arithmetic.
+	local LC_ALL=C
+
 	if [[ $# -lt 2 || $# -gt 3 ]]; then
 		usage
 		return 2
@@ -29,6 +40,8 @@ main() {
 		printf 'ERROR: invalid expected skip count: %s\n' "${expected_skips}" >&2
 		return 2
 	fi
+	runner_status=$(decimal_count "${runner_status}")
+	expected_skips=$(decimal_count "${expected_skips}")
 	if ((runner_status != 0)); then
 		printf 'ERROR: PHPT runner exited with status %d\n' "${runner_status}" >&2
 		return 1
@@ -52,6 +65,10 @@ main() {
 		printf 'ERROR: PHPT summary contains invalid counts\n' >&2
 		return 1
 	fi
+	local field
+	for field in total failed passed skipped warned; do
+		printf -v "${field}" '%s' "$(decimal_count "${!field}")"
+	done
 	if ((failed != 0)); then
 		printf 'ERROR: %d PHPT test(s) failed\n' "${failed}" >&2
 		return 1
