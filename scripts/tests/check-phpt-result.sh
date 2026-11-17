@@ -99,6 +99,9 @@ if [[ -n "${non_c_locale}" ]]; then
 	LC_ALL="${non_c_locale}" check_non_ascii_counts
 	write_summary "${summary}" 2 0 0 0 2
 	expect_success 'clean non-C run accepted' env LC_ALL="${non_c_locale}" "${gate}" "${summary}" 0
+elif [[ "${CI:-}" == "true" ]]; then
+	printf 'FAIL: non-C locale coverage required in CI (de_DE/en_US UTF-8 not installed)\n' >&2
+	exit 1
 else
 	printf 'SKIP: non-C locale coverage (de_DE/en_US UTF-8 not installed)\n'
 fi
