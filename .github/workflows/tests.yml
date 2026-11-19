@@ -105,46 +105,53 @@ jobs:
           # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
           scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
 
-  linux-branch:
-    name: PHP ${{ matrix.php }} - Linux (PHP-${{ matrix.php }} branch)
+  linux-source:
+    name: PHP ${{ matrix.version }} - Linux (php.net release tarball)
     runs-on: ubuntu-latest
-    # setup-php's '8.6' resolves to a master snapshot, not the PHP-8.6
-    # branch, so build the branch from source in release mode. dom is the
+    # setup-php's '8.6' still resolves to a nightly snapshot, so build the
+    # checksum-pinned php.net release tarball in release mode. dom is the
     # only non-default extension the suite needs (069).
     env:
-      PHP_VERSION: ${{ matrix.php }}
+      PHP_VERSION: ${{ matrix.version }}
+      PHP_SOURCE_SHA256: ${{ matrix.source-sha256 }}
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.6']
+        include:
+          - version: '8.6.0'
+            source-sha256: 5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Build PHP from branch
+      - name: Build PHP from release tarball
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends autoconf bison re2c libxml2-dev
-          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
-          cd /tmp/php-src
-          ./buildconf --force
+          sudo apt-get install -y --no-install-recommends autoconf libxml2-dev
+          tarball="/tmp/php-${PHP_VERSION}.tar.xz"
+          curl -fsSL --retry 3 -o "${tarball}" \
+            "https://www.php.net/distributions/php-${PHP_VERSION}.tar.xz"
+          printf '%s  %s\n' "${PHP_SOURCE_SHA256}" "${tarball}" | sha256sum -c -
+          tar -xJf "${tarball}" -C /tmp
+          cd "/tmp/php-${PHP_VERSION}"
           ./configure \
             --disable-all \
             --enable-cli \
             --with-libxml \
             --enable-dom \
-            --prefix=/tmp/php-branch
+            --prefix=/tmp/php-release
           make -j"$(nproc)"
           make install
+          test "$(/tmp/php-release/bin/php -n -r 'echo PHP_VERSION;')" = "${PHP_VERSION}"
 
       - name: Build extension
         run: |
           set -o pipefail
-          export PATH="/tmp/php-branch/bin:$PATH"
+          export PATH="/tmp/php-release/bin:$PATH"
           phpize
-          ./configure --enable-mdparser --enable-mdparser-dev --with-php-config=/tmp/php-branch/bin/php-config
+          ./configure --enable-mdparser --enable-mdparser-dev --with-php-config=/tmp/php-release/bin/php-config
           make -j"$(nproc)" 2>&1 | tee /tmp/mdparser-build.log
           WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
           if [ "$WARNINGS" -gt 0 ]; then
@@ -154,12 +161,12 @@ jobs:
 
       - name: Run tests
         run: |
-          export TEST_PHP_EXECUTABLE=/tmp/php-branch/bin/php
+          export TEST_PHP_EXECUTABLE=/tmp/php-release/bin/php
           TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
           export TEST_PHP_ARGS
           export NO_INTERACTION=1
           set +e
-          /tmp/php-branch/bin/php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          /tmp/php-release/bin/php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
           # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
@@ -227,7 +234,8 @@ jobs:
       matrix:
         # Mirrors the PHP set release-linux.yml ships prebuilt macOS binaries
         # for (8.4, 8.5); a version built at release time but never built here
-        # would first fail on the release runner, after the tag is live.
+        # would first fail on the release runner, after the tag is live. 8.6
+        # joins both once setup-php serves it from its stable channel.
         php: ['8.2', '8.3', '8.4', '8.5']
 
     steps:

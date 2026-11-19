@@ -170,7 +170,7 @@ For maintainers cutting a new version:
    ```
 
 6. Confirm both release workflows finish successfully. `windows.yml` runs
-   PHP 8.2-8.5 across TS/NTS and x86/x64 and uploads the tested DLL archives.
+   PHP 8.2-8.6 across TS/NTS and x86/x64 and uploads the tested DLL archives.
    `release-linux.yml` builds Linux x86_64/arm64 and macOS arm64 for PHP 8.4
    and 8.5 against the oldest patch release of each minor (8.4.1, 8.5.0),
    checks that every Linux import is exported by that patch, loads each exact

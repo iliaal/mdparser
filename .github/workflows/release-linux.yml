@@ -17,6 +17,12 @@ name: Release Linux & macOS binaries
 # anyway. Intel-Mac users source-build via PIE's composer-default
 # fallback, same path PHP 8.3 users already take.
 #
+# PHP 8.6 is absent: the Docker official php:8.6.0 images, including
+# php:8.6.0-cli-bookworm, are built thread-safe (PHP_ZTS) and no NTS tag
+# exists, so the Linux lane would publish only a -zts asset; and setup-php,
+# which supplies the macOS newest-patch PHP, still serves 8.6 from its
+# nightly channel. PIE's composer-default fallback source-builds for 8.6.
+#
 # Linux musl (Alpine) is absent: shivammathur/setup-php
 # in Alpine containers needs more setup, and Alpine users get install
 # via PIE's composer-default source-build fallback in the meantime.

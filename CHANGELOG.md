@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Prebuilt Windows DLLs for PHP 8.6 (TS/NTS, x86/x64). Linux and macOS users on 8.6 build from source through PIE.
+
 ### Changed
 
 - `validateUtf8` now checks input 64 bytes at a time with SSSE3 on x86-64 or NEON on ARM64, so `toHtml()` runs about twice as fast on mostly non-ASCII text such as Chinese or Russian; ASCII-heavy input parses at the same speed.

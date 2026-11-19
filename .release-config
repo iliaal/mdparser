@@ -9,6 +9,7 @@ build_matrix:
   - PHP-8.3
   - PHP-8.4
   - PHP-8.5
+  - PHP-8.6
 configure_base: "--enable-mdparser --enable-mdparser-dev"
 smoke_test: scripts/pie-smoke.sh
 windows_ci: true
