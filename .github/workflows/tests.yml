@@ -21,7 +21,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      # setup-php main until a release marks PHP 8.6 stable; return to a tagged release then.
+      - uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
         with:
           php-version: '8.4'
           tools: composer
@@ -44,7 +45,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      - uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
         with:
           php-version: '8.4'
           tools: phpize, php-config
@@ -68,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.2', '8.3', '8.4', '8.5']
+        php: ['8.2', '8.3', '8.4', '8.5', '8.6']
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,7 +77,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
         with:
           php-version: ${{ matrix.php }}
           tools: phpize, php-config
@@ -100,66 +101,6 @@ jobs:
           export NO_INTERACTION=1
           set +e
           php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
-          STATUS=${PIPESTATUS[0]}
-          set -e
-          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
-          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
-
-  linux-branch:
-    name: PHP ${{ matrix.php }} - Linux (PHP-${{ matrix.php }} branch)
-    runs-on: ubuntu-latest
-    # setup-php's '8.6' resolves to a master snapshot, not the PHP-8.6
-    # branch, so build the branch from source in release mode. dom is the
-    # only non-default extension the suite needs (069).
-    env:
-      PHP_VERSION: ${{ matrix.php }}
-    strategy:
-      fail-fast: false
-      matrix:
-        php: ['8.6']
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build PHP from branch
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends autoconf bison re2c libxml2-dev
-          git clone --depth=1 --branch="PHP-${PHP_VERSION}" https://github.com/php/php-src.git /tmp/php-src
-          cd /tmp/php-src
-          ./buildconf --force
-          ./configure \
-            --disable-all \
-            --enable-cli \
-            --with-libxml \
-            --enable-dom \
-            --prefix=/tmp/php-branch
-          make -j"$(nproc)"
-          make install
-
-      - name: Build extension
-        run: |
-          set -o pipefail
-          export PATH="/tmp/php-branch/bin:$PATH"
-          phpize
-          ./configure --enable-mdparser --enable-mdparser-dev --with-php-config=/tmp/php-branch/bin/php-config
-          make -j"$(nproc)" 2>&1 | tee /tmp/mdparser-build.log
-          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
-          if [ "$WARNINGS" -gt 0 ]; then
-            echo "::error::Build produced $WARNINGS warning(s)"
-            exit 1
-          fi
-
-      - name: Run tests
-        run: |
-          export TEST_PHP_EXECUTABLE=/tmp/php-branch/bin/php
-          TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
-          export TEST_PHP_ARGS
-          export NO_INTERACTION=1
-          set +e
-          /tmp/php-branch/bin/php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
           STATUS=${PIPESTATUS[0]}
           set -e
           # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
@@ -227,7 +168,9 @@ jobs:
       matrix:
         # Mirrors the PHP set release-linux.yml ships prebuilt macOS binaries
         # for (8.4, 8.5); a version built at release time but never built here
-        # would first fail on the release runner, after the tag is live.
+        # would first fail on the release runner, after the tag is live. 8.6
+        # is absent from both: the Homebrew php@8.6 formula setup-php installs
+        # builds php-src ed13285, 23 commits behind the php-8.6.0 tag.
         php: ['8.2', '8.3', '8.4', '8.5']
 
     steps:
@@ -236,7 +179,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
         with:
           php-version: ${{ matrix.php }}
           tools: phpize, php-config

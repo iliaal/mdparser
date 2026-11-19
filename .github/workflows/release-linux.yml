@@ -1,10 +1,10 @@
 name: Release Linux & macOS binaries
 
 # Triggered when a GitHub Release is published. Builds .so binaries for
-# Linux glibc (x86_64 + arm64) and macOS arm64 at PHP 8.4 and 8.5 (NTS
-# only, ZTS lives in the Windows lane), uploads each as a release asset
-# with PIE's pre-packaged-binary naming convention. Each archive is unpacked
-# and loaded before it is uploaded to the release.
+# Linux glibc (x86_64 + arm64) at PHP 8.4, 8.5, and 8.6 and macOS arm64 at
+# PHP 8.4 and 8.5 (NTS only, ZTS lives in the Windows lane), uploads each
+# as a release asset with PIE's pre-packaged-binary naming convention.
+# Each archive is unpacked and loaded before it is uploaded to the release.
 #
 # 8.3 is absent: PIE's composer-default fallback
 # source-builds for any PHP version not covered by a prebuilt, so 8.3
@@ -16,6 +16,17 @@ name: Release Linux & macOS binaries
 # days, blocking release closeout), and macOS 26 drops Intel support
 # anyway. Intel-Mac users source-build via PIE's composer-default
 # fallback, same path PHP 8.3 users already take.
+#
+# macOS PHP 8.6 is absent: the Homebrew php@8.6 formula that setup-php
+# installs for the newest-patch leg builds php-src ed13285, 23 commits
+# behind the php-8.6.0 tag. macOS 8.6 users source-build via PIE's
+# composer-default fallback.
+#
+# The Docker official php:8.6 images are thread-safe by design
+# (docker-library/php#1686) and have no NTS variant, so the Linux 8.6 lane
+# builds NTS PHP from the checksum-pinned php.net tarball inside the
+# digest-pinned debian:bookworm-slim image, the base of the other versions'
+# php images, and commits it as a local image for the build and smoke steps.
 #
 # Linux musl (Alpine) is absent: shivammathur/setup-php
 # in Alpine containers needs more setup, and Alpine users get install
@@ -30,15 +41,16 @@ name: Release Linux & macOS binaries
 # contents:write, and a moved tag would inherit the release-write token.
 #
 # Each binary is compiled against the oldest patch release of its PHP minor
-# (8.4.1, as 8.4.0 was never released, and 8.5.0): Linux inside the
-# digest-pinned php image, macOS against php-src built from the
-# checksum-pinned php.net tarball. Headers from a newer patch can select
+# (8.4.1, as 8.4.0 was never released, 8.5.0, and 8.6.0): Linux inside the
+# digest-pinned php image (8.6: the source-built NTS image), macOS against
+# php-src built from the checksum-pinned php.net tarball. Headers from a newer patch can select
 # engine APIs added mid-series, such as the fallible allocators behind
 # ZEND_HAS_OOM, and the binary then fails on earlier patches with an
 # undefined symbol. Before upload, every binary must load and grow a
 # 64 KiB+ output on both the oldest and the newest patch, and each Linux
 # import must be exported by the oldest patch's php binary or its libraries.
-# Bump the newest-image digests when a new patch ships.
+# Bump the newest-image digests (8.6: newest-version and
+# newest-source-sha256) when a new patch ships.
 
 on:
   release:
@@ -78,7 +90,10 @@ jobs:
           - ubuntu-24.04
           - ubuntu-24.04-arm
           - macos-15
-        php: ['8.4', '8.5']
+        php: ['8.4', '8.5', '8.6']
+        exclude:
+          - os: macos-15
+            php: '8.6'
         # The image digests are multi-arch indexes; ghcr.io/iliaal/php and
         # the ECR copy of the Docker official image serve the same digests
         # as Docker Hub, so the pull step tries GHCR first and falls back to
@@ -94,6 +109,12 @@ jobs:
             oldest-source-sha256: 39cb6e4acd679b574d3d3276f148213e935fc25f90403eb84fb1b836a806ef1e
             oldest-image: public.ecr.aws/docker/library/php:8.5.0-cli-bookworm@sha256:4ff93cd1b053c4d5ff468ced40962092a350a8c86798fee96e807bc9b383ec75
             newest-image: public.ecr.aws/docker/library/php:8.5.12-cli-bookworm@sha256:d4f6e10eb393de7e3a7a88e8b88e139072dd3ae297f6a5dada8257e6fe32c585
+          - php: '8.6'
+            oldest-version: '8.6.0'
+            oldest-source-sha256: 5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
+            newest-version: '8.6.0'
+            newest-source-sha256: 5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
+            base-image: public.ecr.aws/docker/library/debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
       PHP_MINOR: ${{ matrix.php }}
@@ -101,6 +122,9 @@ jobs:
       OLDEST_SOURCE_SHA256: ${{ matrix.oldest-source-sha256 }}
       OLDEST_IMAGE: ${{ matrix.oldest-image }}
       NEWEST_IMAGE: ${{ matrix.newest-image }}
+      NEWEST_VERSION: ${{ matrix.newest-version }}
+      NEWEST_SOURCE_SHA256: ${{ matrix.newest-source-sha256 }}
+      BASE_IMAGE: ${{ matrix.base-image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -127,9 +151,12 @@ jobs:
           test -n "${version}"
           printf 'version=%s\n' "${version}" >>"${GITHUB_OUTPUT}"
 
-      - name: Pull pinned PHP images (Linux)
+      - name: Pull pinned PHP images or build NTS PHP images (Linux)
         id: images
         if: runner.os == 'Linux'
+        env:
+          # Matches PHPIZE_DEPS in the Docker official php images.
+          PHPIZE_DEPS: autoconf dpkg-dev file g++ gcc libc-dev make pkg-config re2c
         run: |
           pull_pinned() {
             local ecr_ref="${1}" attempt candidate
@@ -152,8 +179,50 @@ jobs:
             printf 'ERROR: could not pull %s from GHCR, ECR, or Docker Hub\n' "${ecr_ref}" >&2
             return 1
           }
-          oldest=$(pull_pinned "${OLDEST_IMAGE}")
-          newest=$(pull_pinned "${NEWEST_IMAGE}")
+          build_nts() {
+            local version="${1}" sha256="${2}" base="${3}"
+            local ref="mdparser-php:${version}-nts"
+            local tarball="${RUNNER_TEMP}/php-${version}.tar.xz"
+            if docker image inspect "${ref}" >/dev/null 2>&1; then
+              printf '%s\n' "${ref}"
+              return 0
+            fi
+            curl -fsSL --retry 3 -o "${tarball}" \
+              "https://www.php.net/distributions/php-${version}.tar.xz"
+            printf '%s  %s\n' "${sha256}" "${tarball}" | sha256sum -c - >&2
+            rm -rf "${RUNNER_TEMP}/php-${version}"
+            tar -xJf "${tarball}" -C "${RUNNER_TEMP}"
+            docker rm -f php-nts-build >/dev/null 2>&1 || true
+            # CFLAGS, CPPFLAGS, and LDFLAGS match the Docker official php images.
+            docker run --name php-nts-build \
+              -v "${RUNNER_TEMP}/php-${version}:/php-src" -w /php-src \
+              -e PHPIZE_DEPS -e PHP_VERSION="${version}" \
+              "${base}" \
+              bash -euo pipefail -c '
+                apt-get update -qq
+                apt-get install -y -qq --no-install-recommends ${PHPIZE_DEPS} >/dev/null
+                export CFLAGS="-fstack-protector-strong -fpic -fpie -O2 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
+                export CPPFLAGS="${CFLAGS}" LDFLAGS="-Wl,-O1 -pie"
+                ./configure --prefix=/usr/local \
+                  --disable-all --enable-cli --disable-cgi --disable-phpdbg >/dev/null
+                make -j"$(nproc)" >/dev/null
+                make install >/dev/null
+                test "$(php -n -r "echo PHP_VERSION;")" = "${PHP_VERSION}"
+                php -n -r "exit(PHP_ZTS ? 1 : 0);"
+              ' >&2
+            docker commit --change "ENV PHPIZE_DEPS=\"${PHPIZE_DEPS}\"" \
+              php-nts-build "${ref}" >/dev/null
+            docker rm php-nts-build >/dev/null
+            printf '%s\n' "${ref}"
+          }
+          if [[ -n "${BASE_IMAGE}" ]]; then
+            base=$(pull_pinned "${BASE_IMAGE}")
+            oldest=$(build_nts "${OLDEST_VERSION}" "${OLDEST_SOURCE_SHA256}" "${base}")
+            newest=$(build_nts "${NEWEST_VERSION}" "${NEWEST_SOURCE_SHA256}" "${base}")
+          else
+            oldest=$(pull_pinned "${OLDEST_IMAGE}")
+            newest=$(pull_pinned "${NEWEST_IMAGE}")
+          fi
           printf 'oldest=%s\nnewest=%s\n' "${oldest}" "${newest}" >>"${GITHUB_OUTPUT}"
 
       - name: Build, package, and test prebuilt binary on the oldest patch (Linux)
@@ -172,6 +241,7 @@ jobs:
               trap '\''chown -R "${HOST_UID}:${HOST_GID}" /src /github-output'\'' EXIT
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends ${PHPIZE_DEPS} zip unzip >/dev/null
+              /usr/local/bin/php -n -r "exit(PHP_ZTS ? 1 : 0);"
               scripts/build-release-binary.sh "${BUILD_VERSION}"
               scripts/check-release-abi.sh modules/mdparser.so /usr/local/bin/php
             '
@@ -197,7 +267,8 @@ jobs:
 
       - name: Setup newest-patch PHP (macOS)
         if: runner.os == 'macOS'
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        # setup-php main until a release marks PHP 8.6 stable; return to a tagged release then.
+        uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
         with:
           php-version: ${{ matrix.php }}
           coverage: none
