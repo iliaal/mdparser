@@ -235,18 +235,28 @@ Each side has its own bound:
 
 | Side | Bound | On breach |
 |---|---|---|
-| md4c working set (libc) | `mdparser.parse_memory_limit`, default `128M` | `MdParser\Exception` |
+| md4c tracked live allocations (libc) | `mdparser.parse_memory_limit`, default `128M` | `MdParser\Exception` |
 | Rendered output (Zend MM) | `memory_limit` | PHP's usual memory-limit fatal |
 | Input | `MDPARSER_MAX_INPUT_SIZE`, 256 MiB, compiled in | `MdParser\Exception` |
 
-`mdparser.parse_memory_limit` caps the libc bytes a single parse may hold at
-once. In measured release builds, `[`-dense input used about 76-87 bytes of
+`mdparser.parse_memory_limit` caps the tracked size of the allocations a
+single parse holds live at once: the bytes md4c requests plus the registry
+header each allocation carries. It is not a hard cap on the libc working set. In measured release builds, `[`-dense input used about 76-87 bytes of
 md4c state per input byte, and `>`-dense input about 45-52 bytes of container
 and block records. Without a parse budget, a 16 MiB `[`-dense input can request
 more than 1 GiB of libc memory that `memory_limit` never sees. When a parse
 crosses the limit, the allocation is refused, md4c unwinds, and you get
 `MdParser\Exception` with the message
 `mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)`.
+
+The budget is per parse, not per process. Concurrent parses in separate
+request threads (FrankenPHP, other ZTS servers) or worker processes (PHP-FPM)
+each get their own, so the tracked bytes held at once can reach the number of
+concurrent parses times `mdparser.parse_memory_limit`, outside every
+thread's `memory_limit`. That product bounds requested bytes, not the libc
+working set: allocator overhead comes on top, and when a buffer grows, libc
+may allocate the larger block and copy into it while the old one is still
+live, so a parse can briefly hold more than its limit.
 
 The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
 treats an empty value as the default `128M`; explicit `0` or any negative
