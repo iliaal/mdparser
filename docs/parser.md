@@ -250,9 +250,12 @@ crosses the limit, the allocation is refused, md4c unwinds, and you get
 
 The budget is per parse, not per process. Concurrent parses in separate
 request threads (FrankenPHP, other ZTS servers) or worker processes (PHP-FPM)
-each get their own, so the peak libc working set is the number of concurrent
-parses times `mdparser.parse_memory_limit`, outside every thread's
-`memory_limit`.
+each get their own, so the tracked bytes held at once can reach the number of
+concurrent parses times `mdparser.parse_memory_limit`, outside every
+thread's `memory_limit`. That product bounds requested bytes, not the libc
+working set: allocator overhead comes on top, and when a buffer grows, libc
+may allocate the larger block and copy into it while the old one is still
+live, so a parse can briefly hold more than its limit.
 
 The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
 treats an empty value as the default `128M`; explicit `0` or any negative

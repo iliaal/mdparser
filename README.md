@@ -145,7 +145,7 @@ The parser's own working memory comes from libc rather than Zend MM, so `memory_
 
 `mdparser.parse_memory_limit` caps what a single parse may hold, defaulting to `128M`. Crossing it throws `MdParser\Exception`. The setting is `PHP_INI_ALL`, takes the usual `128M` / `1G` shorthand, and treats an empty value as the default `128M`; explicit `0` or any negative value is unlimited. With the limit off, a 256 MiB `[`-dense input could ask libc for roughly 19-22 GiB at the measured per-byte rate. Raise the limit if you render very large documents; lower it if you render untrusted Markdown in long-lived workers. Rendered output is separate and stays under `memory_limit`.
 
-The limit applies per parse, and each request thread parses independently. Under a threaded server such as FrankenPHP, or a process pool such as PHP-FPM, size memory for the number of concurrent workers times `parse_memory_limit`, on top of `memory_limit`: with 32 threads at the default, md4c alone can hold up to 4 GiB at once.
+The limit applies per parse, and each request thread parses independently. Under a threaded server such as FrankenPHP, or a process pool such as PHP-FPM, the tracked bytes md4c can hold at once reach the number of concurrent workers times `parse_memory_limit`, on top of `memory_limit`: 4 GiB with 32 threads at the default. Real peak memory is higher, because the limit counts requested bytes and not allocator overhead, and a growing buffer can briefly exist as both its old and new copy while libc moves it. Leave headroom above that product when you size a container.
 
 ## A note on `unsafe: true`
 
