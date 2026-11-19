@@ -101,12 +101,14 @@ static size_t mdu8_resume_point(const unsigned char *p, size_t end)
 /* ZTS threads can run the first detection concurrently. Every store writes
  * the same value and nothing else is published through it, so relaxed atomic
  * accesses are enough; plain ones would be a data race. */
-static int mdu8_ssse3_cached = -1;
+static long mdu8_ssse3_cached = -1;
 
 # if defined(_MSC_VER) && !defined(__clang__)
-/* MSVC: an aligned int load or store is single-copy atomic on x64. */
-#  define MDU8_CACHE_LOAD() (*(volatile int *)&mdu8_ssse3_cached)
-#  define MDU8_CACHE_STORE(v) (*(volatile int *)&mdu8_ssse3_cached = (v))
+/* Interlocked rather than volatile: /volatile:iso drops the atomicity that
+ * the default /volatile:ms gives volatile accesses. A compare-exchange of -1
+ * with -1 is an atomic read that leaves the value as it was. */
+#  define MDU8_CACHE_LOAD() _InterlockedCompareExchange(&mdu8_ssse3_cached, -1, -1)
+#  define MDU8_CACHE_STORE(v) _InterlockedExchange(&mdu8_ssse3_cached, (v))
 # else
 #  define MDU8_CACHE_LOAD() __atomic_load_n(&mdu8_ssse3_cached, __ATOMIC_RELAXED)
 #  define MDU8_CACHE_STORE(v) __atomic_store_n(&mdu8_ssse3_cached, (v), __ATOMIC_RELAXED)
@@ -114,7 +116,7 @@ static int mdu8_ssse3_cached = -1;
 
 static int mdu8_has_ssse3(void)
 {
-    int cached = MDU8_CACHE_LOAD();
+    long cached = MDU8_CACHE_LOAD();
     if (cached < 0) {
 # if defined(_MSC_VER)
         int regs[4];
@@ -126,7 +128,7 @@ static int mdu8_has_ssse3(void)
 # endif
         MDU8_CACHE_STORE(cached);
     }
-    return cached;
+    return (int)cached;
 }
 
 MDU8_TARGET static inline __m128i mdu8_check_ssse3(__m128i in, __m128i prev_in)
