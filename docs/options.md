@@ -75,9 +75,10 @@ echo (new Parser(new Options(sourcepos: true)))->toHtml("# hi\n");
 
 ### `hardbreaks: bool = false`
 
-When `true`, a single newline inside a paragraph becomes a `<br />`.
+In ordinary paragraph text, `true` turns a single newline into a `<br />`.
 When `false` (default, spec-compliant), single newlines are soft breaks
-rendered as a space.
+emitted as literal newlines in the HTML output. Set `nobreaks: true` to
+render these soft breaks as spaces instead.
 
 ```php
 $md = "line one\nline two";
