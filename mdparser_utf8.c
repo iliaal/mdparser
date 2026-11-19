@@ -98,10 +98,23 @@ static size_t mdu8_resume_point(const unsigned char *p, size_t end)
 #endif
 
 #ifdef MDU8_X86
+/* ZTS threads can run the first detection concurrently. Every store writes
+ * the same value and nothing else is published through it, so relaxed atomic
+ * accesses are enough; plain ones would be a data race. */
+static int mdu8_ssse3_cached = -1;
+
+# if defined(_MSC_VER) && !defined(__clang__)
+/* MSVC: an aligned int load or store is single-copy atomic on x64. */
+#  define MDU8_CACHE_LOAD() (*(volatile int *)&mdu8_ssse3_cached)
+#  define MDU8_CACHE_STORE(v) (*(volatile int *)&mdu8_ssse3_cached = (v))
+# else
+#  define MDU8_CACHE_LOAD() __atomic_load_n(&mdu8_ssse3_cached, __ATOMIC_RELAXED)
+#  define MDU8_CACHE_STORE(v) __atomic_store_n(&mdu8_ssse3_cached, (v), __ATOMIC_RELAXED)
+# endif
+
 static int mdu8_has_ssse3(void)
 {
-    /* Racy first write under ZTS is benign: every thread stores the same value. */
-    static int cached = -1;
+    int cached = MDU8_CACHE_LOAD();
     if (cached < 0) {
 # if defined(_MSC_VER)
         int regs[4];
@@ -111,6 +124,7 @@ static int mdu8_has_ssse3(void)
         unsigned int eax, ebx, ecx, edx;
         cached = (__get_cpuid(1, &eax, &ebx, &ecx, &edx) && ((ecx >> 9) & 1)) ? 1 : 0;
 # endif
+        MDU8_CACHE_STORE(cached);
     }
     return cached;
 }
