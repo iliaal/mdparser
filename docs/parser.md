@@ -235,12 +235,13 @@ Each side has its own bound:
 
 | Side | Bound | On breach |
 |---|---|---|
-| md4c working set (libc) | `mdparser.parse_memory_limit`, default `128M` | `MdParser\Exception` |
+| md4c tracked live allocations (libc) | `mdparser.parse_memory_limit`, default `128M` | `MdParser\Exception` |
 | Rendered output (Zend MM) | `memory_limit` | PHP's usual memory-limit fatal |
 | Input | `MDPARSER_MAX_INPUT_SIZE`, 256 MiB, compiled in | `MdParser\Exception` |
 
-`mdparser.parse_memory_limit` caps the libc bytes a single parse may hold at
-once. In measured release builds, `[`-dense input used about 76-87 bytes of
+`mdparser.parse_memory_limit` caps the tracked size of the allocations a
+single parse holds live at once: the bytes md4c requests plus the registry
+header each allocation carries. It is not a hard cap on the libc working set. In measured release builds, `[`-dense input used about 76-87 bytes of
 md4c state per input byte, and `>`-dense input about 45-52 bytes of container
 and block records. Without a parse budget, a 16 MiB `[`-dense input can request
 more than 1 GiB of libc memory that `memory_limit` never sees. When a parse

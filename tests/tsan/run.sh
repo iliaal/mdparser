@@ -51,7 +51,9 @@ if [ "$gate_rc" -eq 0 ] || ! printf '%s' "$gate_out" | grep -q 'WARNING: ThreadS
 fi
 echo "PASS TSan gate (canary race is reported)"
 
-for n in $(seq 1 "$runs"); do
+ran=0
+for ((n = 1; n <= runs; n++)); do
+    ran=$((ran + 1))
     out="$("${norandom[@]}" "$bin" 2>&1)"
     rc=$?
     if [ "$rc" -ne 0 ] || printf '%s' "$out" | grep -q 'ThreadSanitizer' \
@@ -63,5 +65,10 @@ for n in $(seq 1 "$runs"); do
         echo "PASS run $n ($(printf '%s' "$out" | grep '^prefix_total='))"
     fi
 done
+
+if [ "$ran" -ne "$runs" ]; then
+    echo "FAIL: ran $ran of $runs runs"
+    exit 2
+fi
 
 exit "$status"
