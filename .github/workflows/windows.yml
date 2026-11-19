@@ -57,8 +57,9 @@ jobs:
         # setup-php ships NTS only, which matches the NTS lanes exactly.
         # TS-packaged zips are covered by the builder's in-build suite;
         # a TS php.exe is not obtainable from setup-php (no TS selector).
-        if: matrix.arch == 'x64' && matrix.ts == 'nts' && matrix.php-version != '8.6'
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        if: matrix.arch == 'x64' && matrix.ts == 'nts'
+        # setup-php main until a release marks PHP 8.6 stable; return to a tagged release then.
+        uses: shivammathur/setup-php@292f25acb388a711c0c758f382e5c3109a391dd7 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
         with:
           php-version: ${{ matrix.php-version }}
           coverage: none
@@ -67,34 +68,6 @@ jobs:
           # The DLL is built against the newest patch's dev pack; a runner's
           # older preinstalled PHP can lack symbols it imports.
           update: true
-
-      - name: Install released PHP for smoke test
-        # setup-php still serves 8.6 from its nightly channel. Load the DLL on
-        # the windows.php.net release instead, the build whose devel pack the
-        # builder compiled against; resolving it at run time follows new
-        # patch releases the same way the builder does.
-        if: matrix.arch == 'x64' && matrix.ts == 'nts' && matrix.php-version == '8.6'
-        shell: pwsh
-        env:
-          PHP_MINOR: ${{ matrix.php-version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $base = 'https://downloads.php.net/~windows/releases'
-          $release = (Invoke-RestMethod "$base/releases.json").$env:PHP_MINOR
-          if ($null -eq $release) { throw "No release entry for PHP $env:PHP_MINOR" }
-          $build = $release.PSObject.Properties |
-            Where-Object Name -Match '^nts-vs\d+-x64$' | Select-Object -First 1
-          if ($null -eq $build) { throw "No NTS x64 build for PHP $($release.version)" }
-          $name = $build.Value.zip.path
-          $zip = Join-Path $env:RUNNER_TEMP $name
-          Invoke-WebRequest "$base/$name" -OutFile $zip
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-          if ($hash -ne $build.Value.zip.sha256) { throw "sha256 mismatch for $name" }
-          $dir = Join-Path $env:RUNNER_TEMP "php-$($release.version)"
-          Expand-Archive $zip -DestinationPath $dir
-          $version = & "$dir\php.exe" -n -r 'echo PHP_VERSION;'
-          if ($version -ne $release.version) { throw "php.exe reports $version, expected $($release.version)" }
-          Add-Content -Path $env:GITHUB_PATH -Value $dir
 
       - name: Smoke-test built DLL
         if: matrix.arch == 'x64' && matrix.ts == 'nts'

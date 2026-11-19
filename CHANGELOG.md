@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Prebuilt Windows DLLs for PHP 8.6 (TS/NTS, x86/x64). Linux and macOS users on 8.6 build from source through PIE.
+- Prebuilt binaries for PHP 8.6: Windows DLLs (TS/NTS, x86/x64) and Linux x86_64/arm64 (NTS). macOS users on 8.6 build from source through PIE.
 
 ### Changed
 
