@@ -4,7 +4,7 @@
 #
 # Not part of `make test`: phpt runs one request per process, so it never
 # has two threads inside the extension. Run it after touching
-# mdparser_utf8.c. The canary first proves TSan reports a known race, so a
+# mdparser_utf8.c. TSAN_RUNS sets the run count (default 5). The canary first proves TSan reports a known race, so a
 # toolchain that silently drops the instrumentation fails instead of passing,
 # and a zero prefix total means the SIMD path never ran, which also fails.
 set -u
@@ -26,23 +26,16 @@ if command -v setarch >/dev/null 2>&1 && setarch "$(uname -m)" -R true 2>/dev/nu
     norandom=(setarch "$(uname -m)" -R)
 fi
 
-# TSan uses the first value for duplicate keys, so inherited exitcode or
-# halt_on_error must be removed before the effective options are exported.
-tsan_options="${TSAN_OPTIONS:-}"
-normalized=""
-old_ifs="$IFS"
-IFS=:
-set -f
-set -- $tsan_options
-set +f
-IFS="$old_ifs"
-for option in "$@"; do
-    case "${option%%=*}" in
-        halt_on_error|exitcode) continue ;;
-    esac
-    normalized="${normalized:+$normalized:}$option"
-done
-export TSAN_OPTIONS="${normalized:+$normalized:}halt_on_error=1:exitcode=66"
+case "$runs" in
+    ''|*[!0-9]*|0*)
+        echo "FAIL: TSAN_RUNS must be a positive integer, got '$runs'"
+        exit 2
+        ;;
+esac
+
+# Fixed rather than inherited: a suppression or report_bugs=0 in the caller's
+# TSAN_OPTIONS could hide the race under test while the canary still fires.
+export TSAN_OPTIONS="halt_on_error=1:exitcode=66"
 
 "$cc" -g -O1 -fsanitize=thread -pthread -I "$root" \
     -o "$bin" "$here/utf8_threads.c" "$root/mdparser_utf8.c" || exit 2
