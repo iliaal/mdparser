@@ -248,6 +248,12 @@ crosses the limit, the allocation is refused, md4c unwinds, and you get
 `MdParser\Exception` with the message
 `mdparser: parse out of memory (allocation failed or mdparser.parse_memory_limit exceeded)`.
 
+The budget is per parse, not per process. Concurrent parses in separate
+request threads (FrankenPHP, other ZTS servers) or worker processes (PHP-FPM)
+each get their own, so the peak libc working set is the number of concurrent
+parses times `mdparser.parse_memory_limit`, outside every thread's
+`memory_limit`.
+
 The setting is `PHP_INI_ALL`, accepts the usual `128M` / `1G` shorthand, and
 treats an empty value as the default `128M`; explicit `0` or any negative
 value is unlimited. The count includes the registry header each md4c
