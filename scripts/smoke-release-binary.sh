@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-	printf 'Usage: %s <package.zip> <release-tag> <php-minor> {image=REF | php=PATH}...\n' \
+	printf 'Usage: %s <package.zip> <release-tag> <php-minor> {image=REF | refuse-image=REF | php=PATH}...\n' \
 		"${0##*/}" >&2
 }
 
@@ -27,12 +27,12 @@ main() {
 	for target in "$@"; do
 		set +e
 		case "${target}" in
-		image=*)
+		image=* | refuse-image=*)
 			output=$(docker run --rm --network none \
 				-v "${temporary_directory}:/ext:ro" \
 				-e MDPARSER_RELEASE_TAG="${release_tag}" \
 				-e MDPARSER_PHP_MINOR="${php_minor}" \
-				"${target#image=}" \
+				"${target#*image=}" \
 				php -n -d extension=/ext/mdparser.so /ext/release-abi-smoke.php 2>&1)
 			status=$?
 			;;
@@ -53,7 +53,16 @@ main() {
 		set -e
 
 		printf '%s: exit %d\n%s\n' "${target}" "${status}" "${output}"
-		if ((status != 0)) || [[ "${output}" == *'undefined symbol'* ]] ||
+		if [[ "${target}" == refuse-image=* ]]; then
+			# A binary built for a newer patch must fail MINIT with its
+			# version warning, not load and die on an unresolved import.
+			if ((status == 0)) || [[ "${output}" == *'undefined symbol'* ]] ||
+				[[ "${output}" != *'mdparser was built for PHP '*' and cannot run on PHP '* ]] ||
+				[[ "${output}" != *'Unable to start mdparser module'* ]]; then
+				printf 'ERROR: %s did not refuse to start the binary\n' "${target}" >&2
+				failures=$((failures + 1))
+			fi
+		elif ((status != 0)) || [[ "${output}" == *'undefined symbol'* ]] ||
 			[[ "${output}" != *'OK: mdparser '* ]]; then
 			printf 'ERROR: %s failed the release ABI smoke test\n' "${target}" >&2
 			failures=$((failures + 1))

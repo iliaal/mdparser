@@ -17,9 +17,7 @@ name: Release Linux & macOS binaries
 # anyway. Intel-Mac users source-build via PIE's composer-default
 # fallback, same path PHP 8.3 users already take.
 #
-# macOS PHP 8.6 is absent: the Homebrew php@8.6 formula that setup-php
-# installs for the newest-patch leg builds php-src ed13285, 23 commits
-# behind the php-8.6.0 tag. macOS 8.6 users source-build via PIE's
+# macOS PHP 8.6 is absent: macOS 8.6 users source-build via PIE's
 # composer-default fallback.
 #
 # The Docker official php:8.6 images are thread-safe by design
@@ -40,17 +38,24 @@ name: Release Linux & macOS binaries
 # Third-party actions are pinned to commit SHAs because this job has
 # contents:write, and a moved tag would inherit the release-write token.
 #
-# Each binary is compiled against the oldest patch release of its PHP minor
-# (8.4.1, as 8.4.0 was never released, 8.5.0, and 8.6.0): Linux inside the
-# digest-pinned php image (8.6: the source-built NTS image), macOS against
-# php-src built from the checksum-pinned php.net tarball. Headers from a newer patch can select
-# engine APIs added mid-series, such as the fallible allocators behind
-# ZEND_HAS_OOM, and the binary then fails on earlier patches with an
-# undefined symbol. Before upload, every binary must load and grow a
-# 64 KiB+ output on both the oldest and the newest patch, and each Linux
-# import must be exported by the oldest patch's php binary or its libraries.
-# Bump the newest-image digests (8.6: newest-version and
-# newest-source-sha256) when a new patch ships.
+# Each binary compiles against a pinned NEWEST patch release of its PHP
+# minor (8.4.28, 8.5.13, 8.6.0), so it carries the memory_limit stop behind
+# ZEND_HAS_OOM. Those headers make the module import symbols that earlier
+# patches do not export, so the binaries require 8.4.28+ / 8.5.13+ / 8.6.0+.
+# On an older patch the extension refuses to start with a warning (MINIT
+# compares php_version_id() against the build's PHP_VERSION_ID) instead of
+# dying with "undefined symbol" on first use. Linux builds inside the
+# digest-pinned php image (8.6: the source-built NTS image); macOS builds
+# PHP from the checksum-pinned php.net release tarball, so a later patch
+# release cannot raise the floor without a repo diff.
+#
+# Before upload, every binary must load and grow a 64 KiB+ output on the
+# build patch, every Linux import must be exported by that patch's php
+# binary or its libraries, and a Linux binary must refuse to start, not
+# crash, on the oldest patch of its minor (8.4.1, as 8.4.0 was never
+# released, and 8.5.0). While the build patch is the first release of its
+# minor (8.6.0), no older patch exists and that gate is skipped; a matrix
+# entry whose build patch is not X.Y.0 must name an oldest image.
 
 on:
   release:
@@ -98,28 +103,30 @@ jobs:
         # the ECR copy of the Docker official image serve the same digests
         # as Docker Hub, so the pull step tries GHCR first and falls back to
         # ECR and Docker Hub when a registry rate-limits.
+        #
+        # The newest patch (newest-image on Linux, the newest-version
+        # tarball on macOS and for Linux 8.6) produces the shipped binary
+        # and sets its PHP floor; bumping it raises that floor. Keep
+        # newest-version equal to the newest-image patch. The oldest-patch
+        # image is the gate that the binary refuses to start below the floor.
         include:
           - php: '8.4'
-            oldest-version: '8.4.1'
-            oldest-source-sha256: 94c8a4fd419d45748951fa6d73bd55f6bdf0adaefb8814880a67baa66027311f
+            newest-version: '8.4.28'
+            newest-source-sha256: 0c8ec360e5dd8154f270b2fd50cd44ecc824e6ee39c85f911312b80d4daecd72
             oldest-image: public.ecr.aws/docker/library/php:8.4.1-cli-bookworm@sha256:246d2ca7e9cf21c4e7c354ce87e87bf1ad6d41b2061c77668845e04a8f8889d4
-            newest-image: public.ecr.aws/docker/library/php:8.4.27-cli-bookworm@sha256:496b5e02fe9fe44fcfb715023b931048111dc4e0bc719789d83c906be9f04b05
+            newest-image: public.ecr.aws/docker/library/php:8.4.28-cli-bookworm@sha256:85da896b3eeb8bcd83fe612e51a529b7d5983a1fab92ef5f63c7ac6e2842fc46
           - php: '8.5'
-            oldest-version: '8.5.0'
-            oldest-source-sha256: 39cb6e4acd679b574d3d3276f148213e935fc25f90403eb84fb1b836a806ef1e
+            newest-version: '8.5.13'
+            newest-source-sha256: 607602acaf0c3061818e9916ec44a058e8b3d43959a83862b9cd3ec7bf5b785f
             oldest-image: public.ecr.aws/docker/library/php:8.5.0-cli-bookworm@sha256:4ff93cd1b053c4d5ff468ced40962092a350a8c86798fee96e807bc9b383ec75
-            newest-image: public.ecr.aws/docker/library/php:8.5.12-cli-bookworm@sha256:d4f6e10eb393de7e3a7a88e8b88e139072dd3ae297f6a5dada8257e6fe32c585
+            newest-image: public.ecr.aws/docker/library/php:8.5.13-cli-bookworm@sha256:d6991172c4282d2a09d6418073923a81664173bb0a0e07a16663a9a645746092
           - php: '8.6'
-            oldest-version: '8.6.0'
-            oldest-source-sha256: 5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
             newest-version: '8.6.0'
             newest-source-sha256: 5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
             base-image: public.ecr.aws/docker/library/debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
       PHP_MINOR: ${{ matrix.php }}
-      OLDEST_VERSION: ${{ matrix.oldest-version }}
-      OLDEST_SOURCE_SHA256: ${{ matrix.oldest-source-sha256 }}
       OLDEST_IMAGE: ${{ matrix.oldest-image }}
       NEWEST_IMAGE: ${{ matrix.newest-image }}
       NEWEST_VERSION: ${{ matrix.newest-version }}
@@ -217,78 +224,77 @@ jobs:
           }
           if [[ -n "${BASE_IMAGE}" ]]; then
             base=$(pull_pinned "${BASE_IMAGE}")
-            oldest=$(build_nts "${OLDEST_VERSION}" "${OLDEST_SOURCE_SHA256}" "${base}")
             newest=$(build_nts "${NEWEST_VERSION}" "${NEWEST_SOURCE_SHA256}" "${base}")
           else
-            oldest=$(pull_pinned "${OLDEST_IMAGE}")
             newest=$(pull_pinned "${NEWEST_IMAGE}")
+          fi
+          oldest=""
+          if [[ -n "${OLDEST_IMAGE}" ]]; then
+            oldest=$(pull_pinned "${OLDEST_IMAGE}")
+          elif [[ "${NEWEST_VERSION}" != *.*.0 ]]; then
+            printf 'ERROR: no oldest-patch image for PHP %s\n' "${NEWEST_VERSION}" >&2
+            exit 1
           fi
           printf 'oldest=%s\nnewest=%s\n' "${oldest}" "${newest}" >>"${GITHUB_OUTPUT}"
 
-      - name: Build, package, and test prebuilt binary on the oldest patch (Linux)
+      - name: Build, package, and test prebuilt binary on the newest patch (Linux)
         id: package-linux
         if: runner.os == 'Linux'
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
-          PULLED_OLDEST_IMAGE: ${{ steps.images.outputs.oldest }}
+          PULLED_NEWEST_IMAGE: ${{ steps.images.outputs.newest }}
         run: |
           docker run --rm \
             -v "${PWD}:/src" -w /src \
             -v "${GITHUB_OUTPUT}:/github-output" -e GITHUB_OUTPUT=/github-output \
-            -e BUILD_VERSION -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
-            "${PULLED_OLDEST_IMAGE}" \
+            -e BUILD_VERSION -e NEWEST_VERSION \
+            -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            "${PULLED_NEWEST_IMAGE}" \
             bash -euo pipefail -c '
               trap '\''chown -R "${HOST_UID}:${HOST_GID}" /src /github-output'\'' EXIT
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends ${PHPIZE_DEPS} zip unzip >/dev/null
+              test "$(/usr/local/bin/php -n -r "echo PHP_VERSION;")" = "${NEWEST_VERSION}"
               /usr/local/bin/php -n -r "exit(PHP_ZTS ? 1 : 0);"
               scripts/build-release-binary.sh "${BUILD_VERSION}"
               scripts/check-release-abi.sh modules/mdparser.so /usr/local/bin/php
             '
 
-      - name: Build oldest-patch PHP from source (macOS)
+      - name: Build newest-patch PHP from source (macOS)
         if: runner.os == 'macOS'
         run: |
-          prefix="${RUNNER_TEMP}/php-${OLDEST_VERSION}"
-          tarball="${RUNNER_TEMP}/php-${OLDEST_VERSION}.tar.xz"
+          prefix="${RUNNER_TEMP}/php-${NEWEST_VERSION}"
+          tarball="${RUNNER_TEMP}/php-${NEWEST_VERSION}.tar.xz"
           curl -fsSL --retry 3 -o "${tarball}" \
-            "https://www.php.net/distributions/php-${OLDEST_VERSION}.tar.xz"
-          printf '%s  %s\n' "${OLDEST_SOURCE_SHA256}" "${tarball}" | shasum -a 256 -c -
+            "https://www.php.net/distributions/php-${NEWEST_VERSION}.tar.xz"
+          printf '%s  %s\n' "${NEWEST_SOURCE_SHA256}" "${tarball}" | shasum -a 256 -c -
           tar -xJf "${tarball}" -C "${RUNNER_TEMP}"
-          cd "${RUNNER_TEMP}/php-${OLDEST_VERSION}"
+          cd "${RUNNER_TEMP}/php-${NEWEST_VERSION}"
           ./configure --prefix="${prefix}" \
             --disable-all --enable-cli --disable-cgi --disable-phpdbg
           make -j"$(sysctl -n hw.ncpu)"
           make install
-          test "$("${prefix}/bin/php" -n -r 'echo PHP_VERSION;')" = "${OLDEST_VERSION}"
-          printf 'OLDEST_PREFIX=%s\n' "${prefix}" >>"${GITHUB_ENV}"
+          test "$("${prefix}/bin/php" -n -r 'echo PHP_VERSION;')" = "${NEWEST_VERSION}"
+          printf 'NEWEST_PREFIX=%s\n' "${prefix}" >>"${GITHUB_ENV}"
         env:
           MACOSX_DEPLOYMENT_TARGET: "14.0"
 
-      - name: Setup newest-patch PHP (macOS)
-        if: runner.os == 'macOS'
-        # setup-php main until a release marks PHP 8.6 stable; return to a tagged release then.
-        uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
-        with:
-          php-version: ${{ matrix.php }}
-          coverage: none
-
-      - name: Build, package, and test prebuilt binary on the oldest patch (macOS)
+      - name: Build, package, and test prebuilt binary on the newest patch (macOS)
         id: package-macos
         if: runner.os == 'macOS'
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
-          # Builds on macos-15 because setup-php's Homebrew install hangs on
-          # macos-14 runners; the macOS asset still targets macOS 14 as its
-          # minimum.
+          # The macOS asset targets macOS 14 as its minimum.
           MACOSX_DEPLOYMENT_TARGET: "14.0"
         run: |
-          PHPIZE="${OLDEST_PREFIX}/bin/phpize" \
-            PHP_CONFIG="${OLDEST_PREFIX}/bin/php-config" \
-            PHP_BIN="${OLDEST_PREFIX}/bin/php" \
+          # phpize needs autoconf, which the runner image does not ship.
+          brew install autoconf
+          PHPIZE="${NEWEST_PREFIX}/bin/phpize" \
+            PHP_CONFIG="${NEWEST_PREFIX}/bin/php-config" \
+            PHP_BIN="${NEWEST_PREFIX}/bin/php" \
             scripts/build-release-binary.sh "${BUILD_VERSION}"
 
-      - name: Smoke test on the oldest and newest patch
+      - name: Smoke test on the newest patch, refuse the oldest
         id: package
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
@@ -298,11 +304,12 @@ jobs:
         run: |
           test -n "${PACKAGE_PATH}"
           if [[ "${RUNNER_OS}" == Linux ]]; then
-            targets=("image=${PULLED_OLDEST_IMAGE}" "image=${PULLED_NEWEST_IMAGE}")
+            targets=("image=${PULLED_NEWEST_IMAGE}")
+            if [[ -n "${PULLED_OLDEST_IMAGE}" ]]; then
+              targets+=("refuse-image=${PULLED_OLDEST_IMAGE}")
+            fi
           else
-            newest_php=$(command -v php)
-            test "${newest_php}" != "${OLDEST_PREFIX}/bin/php"
-            targets=("php=${OLDEST_PREFIX}/bin/php" "php=${newest_php}")
+            targets=("php=${NEWEST_PREFIX}/bin/php")
           fi
           scripts/smoke-release-binary.sh "${PACKAGE_PATH}" "${BUILD_VERSION}" \
             "${PHP_MINOR}" "${targets[@]}"
