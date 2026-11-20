@@ -20,10 +20,19 @@ No external libraries are required. md4c is bundled under
 pie install iliaal/mdparser
 ```
 
-PIE resolves the package through the root `composer.json` (`type:
-"php-ext"` plus the `configure-options` schema), downloads the source
-from the matching GitHub release, builds and installs it, and writes the
-INI fragment. The output looks like this:
+PIE resolves the package through the root `composer.json` (with `type` set
+to `php-ext`). Its `download-url-method` list tries `pre-packaged-binary`
+before `composer-default`: a matching release binary can avoid a source
+build. Available binaries depend on the selected release, PHP version,
+thread-safety mode, operating system, architecture and libc; check that
+release's assets rather than assuming every supported source-build target
+has a binary.
+
+For example, [0.8.2](https://github.com/iliaal/mdparser/releases/tag/0.8.2)
+provides Unix binaries for PHP 8.4 and 8.5 NTS on glibc Linux x86_64/arm64
+and Apple Silicon macOS. Other targets may require a source build and its
+build tools. The following historical PIE 1.4.0 output illustrates the
+source-build path, not what every installation prints:
 
 ```
 🥧 PHP Installer for Extensions (PIE) 1.4.0, from The PHP Foundation
@@ -52,8 +61,11 @@ brew install bison libtool
 ```
 
 The Docker Hub `php:8.x-cli` image doesn't include them.
-`scripts/pie-smoke.sh` installs them before running PIE and serves as
-the end-to-end install check.
+`scripts/pie-smoke.sh` provisions the release smoke environment (including
+`git`, CA certificates and `unzip`) and checks the published-package install.
+The Tests workflow instead runs `pie build` against the checkout on pushes
+to `master` and pull requests targeting `master`. That build-only check
+does not verify downloading a published binary.
 
 ### Before the first stable tag is indexed
 
@@ -113,7 +125,10 @@ ships a compatible `phpize`. Intel and Apple Silicon are both supported.
 
 The Windows build uses `config.w32` and the `php/php-windows-builder`
 GitHub Action (see `.github/workflows/windows.yml`). Prebuilt DLLs are
-attached to GitHub releases for PHP 8.2-8.6, TS and NTS, x64 and x86.
+attached per release. Release 0.8.2 has PHP 8.2-8.5 DLLs, TS and NTS,
+x64 and x86. The workflow also targets PHP 8.6, but a workflow lane alone
+does not mean a matching archive has been published; check the selected
+release's assets.
 
 To build on Windows from source:
 

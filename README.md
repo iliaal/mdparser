@@ -41,7 +41,7 @@ echo 'extension=mdparser.so' | sudo tee /etc/php/conf.d/mdparser.ini
 
 ### Windows binaries
 
-Pre-built DLLs for PHP 8.2, 8.3, 8.4, 8.5, and 8.6 (TS/NTS, x86/x64) are attached to each [GitHub release](https://github.com/iliaal/mdparser/releases).
+Windows DLL availability depends on the selected [GitHub release](https://github.com/iliaal/mdparser/releases), not just the current CI matrix. See the [installation guide](docs/installation.md#windows) for published version coverage.
 
 ## 🛠️ Usage
 
