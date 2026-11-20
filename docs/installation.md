@@ -20,8 +20,8 @@ No external libraries are required. md4c is bundled under
 pie install iliaal/mdparser
 ```
 
-PIE resolves the package through the root `composer.json` (`type:
-"php-ext"). Its `download-url-method` list tries `pre-packaged-binary`
+PIE resolves the package through the root `composer.json` (with `type` set
+to `php-ext`). Its `download-url-method` list tries `pre-packaged-binary`
 before `composer-default`: a matching release binary can avoid a source
 build. Available binaries depend on the selected release, PHP version,
 thread-safety mode, operating system, architecture and libc; check that
@@ -63,8 +63,9 @@ brew install bison libtool
 The Docker Hub `php:8.x-cli` image doesn't include them.
 `scripts/pie-smoke.sh` provisions the release smoke environment (including
 `git`, CA certificates and `unzip`) and checks the published-package install.
-The pull-request workflow instead runs `pie build` against the checkout;
-that build-only check does not verify downloading a published binary.
+The Tests workflow instead runs `pie build` against the checkout on pushes
+to `master` and pull requests targeting `master`. That build-only check
+does not verify downloading a published binary.
 
 ### Before the first stable tag is indexed
 

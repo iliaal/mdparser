@@ -298,3 +298,20 @@ jobs:
           UBSAN_OPTIONS: exitcode=0:halt_on_error=0
         run: |
           CC=gcc tests/oom/run.sh
+
+  tsan:
+    name: TSan (UTF-8 front end)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc
+
+      - name: Run TSan harness
+        run: |
+          CC=gcc tests/tsan/run.sh

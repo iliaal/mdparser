@@ -1,0 +1,109 @@
+name: PHP master (advisory)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: php-master-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  php-master:
+    name: PHP 8.7 (master, advisory)
+    runs-on: ubuntu-latest
+    # php-src master changes without notice; a failure here is an early
+    # warning, not a merge gate.
+    continue-on-error: true
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
+        with:
+          php-version: '8.7'
+          tools: phpize, php-config
+
+      - name: Show PHP version
+        run: php -v
+
+      - name: Build extension
+        run: |
+          set -o pipefail
+          phpize
+          ./configure --enable-mdparser --enable-mdparser-dev
+          make -j"$(nproc)" 2>&1 | tee /tmp/mdparser-build.log
+          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "::error::Build produced $WARNINGS warning(s)"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          TEST_PHP_EXECUTABLE=$(which php)
+          export TEST_PHP_EXECUTABLE
+          TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
+          export TEST_PHP_ARGS
+          export NO_INTERACTION=1
+          set +e
+          php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
+
+  report:
+    name: Report master result
+    needs: php-master
+    # Runs for the weekly schedule and manual runs only; the job above never
+    # fails the workflow, so this is what surfaces a break without a PR.
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # read this run's job conclusions
+      issues: write # open, comment on, and close the tracking issue
+    steps:
+      - name: Open, update, or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_NAME: PHP 8.7 (master, advisory)
+          TITLE: PHP master (8.7-dev) build is failing
+        run: |
+          set -euo pipefail
+          conclusion=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name == env.JOB_NAME) | .conclusion')
+          issue=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == env.TITLE) | .number' | head -n 1)
+          echo "job conclusion: ${conclusion:-unknown}; open issue: ${issue:-none}"
+          case "$conclusion" in
+            failure|timed_out)
+              if [ -n "$issue" ]; then
+                gh issue comment "$issue" --body "Still failing against php-src master: $RUN_URL"
+              else
+                gh issue create --title "$TITLE" --body "The advisory job that builds and tests against php-src master (PHP 8.7-dev) failed: $RUN_URL
+
+          This issue closes itself after a later scheduled or manual run passes."
+              fi
+              ;;
+            success)
+              if [ -n "$issue" ]; then
+                gh issue comment "$issue" --body "Passing against php-src master again: $RUN_URL"
+                gh issue close "$issue"
+              fi
+              ;;
+          esac
