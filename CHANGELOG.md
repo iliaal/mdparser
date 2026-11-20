@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `validateUtf8` now checks input 64 bytes at a time with SSSE3 on x86-64 or NEON on ARM64, so `toHtml()` runs about twice as fast on mostly non-ASCII text such as Chinese or Russian; ASCII-heavy input parses at the same speed.
 - PHP now refuses to start with a clear warning when mdparser was compiled against a newer patch release of the same PHP minor than the one running, such as a build for 8.4.27 loaded on 8.4.26. Previously such a build loaded and then killed the process with an `undefined symbol` error on the first call that needed a newer engine function. Requires PHP 8.3 or later headers; older builds are unchanged.
+- Prebuilt Linux and macOS binaries are compiled against the newest PHP patch release again (8.4.28 and 8.5.13), so the 0.8.1 early stop at deferred memory-limit errors applies to them too. They now require PHP 8.4.28+ or 8.5.13+; on an older 8.4 or 8.5 patch the extension refuses to start with a warning, so build from source there. Builds from source are unaffected.
 
 ## [0.8.2] - 2026-10-26
 
