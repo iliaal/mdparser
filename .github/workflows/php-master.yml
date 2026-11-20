@@ -1,0 +1,66 @@
+name: PHP master (advisory)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: php-master-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  php-master:
+    name: PHP 8.7 (master, advisory)
+    runs-on: ubuntu-latest
+    # php-src master changes without notice; a failure here is an early
+    # warning, not a merge gate.
+    continue-on-error: true
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@3c21e10268bafaf84c59e8f4e65b39acacb62ca4 # main # zizmor: ignore[stale-action-refs,ref-version-mismatch]
+        with:
+          php-version: '8.7'
+          tools: phpize, php-config
+
+      - name: Show PHP version
+        run: php -v
+
+      - name: Build extension
+        run: |
+          set -o pipefail
+          phpize
+          ./configure --enable-mdparser --enable-mdparser-dev
+          make -j"$(nproc)" 2>&1 | tee /tmp/mdparser-build.log
+          WARNINGS=$(grep -c 'warning:' /tmp/mdparser-build.log || true)
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "::error::Build produced $WARNINGS warning(s)"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          TEST_PHP_EXECUTABLE=$(which php)
+          export TEST_PHP_EXECUTABLE
+          TEST_PHP_ARGS="-d extension=$(pwd)/modules/mdparser.so"
+          export TEST_PHP_ARGS
+          export NO_INTERACTION=1
+          set +e
+          php run-tests.php --show-diff -g FAIL,BORK,LEAK,XLEAK tests/ 2>&1 | tee /tmp/mdparser-phpt.txt
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          # 077 skips without ASAN_OPTIONS; expect exactly that one skip.
+          scripts/check-phpt-result.sh /tmp/mdparser-phpt.txt "$STATUS" 1
