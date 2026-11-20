@@ -172,11 +172,12 @@ For maintainers cutting a new version:
 6. Confirm both release workflows finish successfully. `windows.yml` runs
    PHP 8.2-8.6 across TS/NTS and x86/x64 and uploads the tested DLL archives.
    `release-linux.yml` builds Linux x86_64/arm64 for PHP 8.4, 8.5, and 8.6
-   and macOS arm64 for PHP 8.4 and 8.5 against the newest patch release of
-   each minor pinned in the workflow (8.4.28, 8.5.13, 8.6.0), which sets the
+   and macOS arm64 for PHP 8.4 and 8.5 against the patch release of
+   each minor pinned in the workflow (8.4.27, 8.5.12, 8.6.0), which sets the
    binaries' PHP floor. It checks that every Linux import is exported by that
    patch, loads each exact `.so` on it, checks that a Linux `.so` refuses to
-   start on the oldest patch of its minor, then uploads it. If a Unix lane needs
+   start on the oldest patch of its minor and on the patch just below the
+   pinned one, then uploads it. If a Unix lane needs
    recovery, dispatch `release-linux.yml` manually with the same tag; the
    workflow verifies that it checked out the tag commit before it builds.
    Dispatch it with an empty tag to build and test a branch without

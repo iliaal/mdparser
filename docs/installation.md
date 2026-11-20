@@ -28,10 +28,16 @@ thread-safety mode, operating system, architecture and libc; check that
 release's assets rather than assuming every supported source-build target
 has a binary.
 
+From 0.9.0 on, prebuilt Linux and macOS binaries require a minimum patch
+release of PHP 8.4 and 8.5: 8.4.27+ or 8.5.12+ from 0.9.1 on (0.9.0 required
+8.4.28+ or 8.5.13+). Any PHP 8.6 release works. On an older 8.4 or 8.5 patch
+release the extension refuses to start with a warning; build from source
+there.
+
 For example, [0.8.2](https://github.com/iliaal/mdparser/releases/tag/0.8.2)
 provides Unix binaries for PHP 8.4 and 8.5 NTS on glibc Linux x86_64/arm64
 and Apple Silicon macOS. Other targets may require a source build and its
-build tools. Prebuilt Linux and macOS binaries require PHP 8.4.28+ or 8.5.13+ (any PHP 8.6 release). On an older 8.4 or 8.5 patch release the extension refuses to start with a warning; build from source there. The following historical PIE 1.4.0 output illustrates the
+build tools. The following historical PIE 1.4.0 output illustrates the
 source-build path, not what every installation prints:
 
 ```
