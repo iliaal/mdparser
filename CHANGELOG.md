@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-20
+
 ### Fixed
 
 - The 0.9.0 prebuilt Linux and macOS binaries refused to start on PHP 8.4.27 and 8.5.12, which provide everything they need. The 0.9.1 binaries run on PHP 8.4.27+ or 8.5.12+; on an older 8.4 or 8.5 patch the extension still refuses to start with a warning, so build from source there.
@@ -620,7 +622,8 @@ First release. Native C CommonMark + GFM parser for PHP 8.3+.
 - No custom userland render hooks. Use `toAst()` if you need to walk
   the tree and emit custom output.
 
-[Unreleased]: https://github.com/iliaal/mdparser/compare/0.9.0...HEAD
+[Unreleased]: https://github.com/iliaal/mdparser/compare/0.9.1...HEAD
+[0.9.1]: https://github.com/iliaal/mdparser/releases/tag/0.9.1
 [0.9.0]: https://github.com/iliaal/mdparser/releases/tag/0.9.0
 [0.8.2]: https://github.com/iliaal/mdparser/releases/tag/0.8.2
 [0.8.1]: https://github.com/iliaal/mdparser/releases/tag/0.8.1
