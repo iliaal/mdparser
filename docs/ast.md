@@ -271,6 +271,43 @@ md4c supports several dialect extensions outside CommonMark and GFM.
 Each is off by default and surfaces as its own node type only when you
 enable the matching option.
 
+### `admonition`
+
+Appears with `Options(admonitions: true)` for GitHub-style alerts, such as
+`> [!NOTE]` followed by a quoted body. The `admonition_type` is one of
+`note`, `tip`, `important`, `warning`, or `caution`; body blocks appear
+in `children` when present. With the option off, the alert remains a
+`block_quote` with the marker in its text.
+
+```php
+[
+    'type' => 'admonition',
+    'admonition_type' => 'note',
+    'children' => [
+        ['type' => 'paragraph', 'children' => [['type' => 'text', 'literal' => 'Body.']]],
+    ],
+]
+```
+
+### `insert`
+
+Appears with `Options(insert: true)` for `++added++`. Its inline content
+appears in `children`; with the option off, the plus signs stay literal.
+
+```php
+['type' => 'insert', 'children' => [['type' => 'text', 'literal' => 'added']]]
+```
+
+### `blank`
+
+Appears with `Options(preserveBlankLines: true)` for a blank-line run
+between blocks. This leaf has no count, literal, or children. A run of one
+blank line and a run of several blank lines have the same representation.
+
+```php
+['type' => 'blank']
+```
+
 ### `underline`
 
 Appears with `Options(underline: true)`. Inline span for `_text_` when

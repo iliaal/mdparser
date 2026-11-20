@@ -307,12 +307,10 @@ code blocks.
 ## Dialect extensions
 
 These md4c extensions fall outside the CommonMark and GFM specs. They
-default off, and spec conformance holds only with all of them off. Each
-renders as standard HTML: a semantic tag, or an element with a `class`
-hook. In `toXml()` / `toAst()` they surface as the node types
-`underline`, `highlight`, `superscript`, `subscript`, `spoiler`,
-`latex_math`, `latex_math_display`, `wikilink`, and the block-level
-`admonition`.
+default off, and spec conformance holds only with all of them off. Most
+render as HTML elements. `preserveBlankLines` produces markers only in
+the structural outputs. See [the AST node inventory](ast.md#dialect-extension-node-types)
+for the node types emitted by `toAst()`.
 
 ### `underline: bool = false`
 
@@ -386,8 +384,9 @@ stay literal text.
 When `true`, runs of blank lines between blocks are reported instead of
 discarded. `toHtml()` output is unchanged, since blank runs carry no
 HTML; `toXml()` emits `<blank />` between the surrounding blocks and
-`toAst()` emits a `blank` node. Use it to round-trip a document's
-vertical spacing.
+`toAst()` emits a `blank` leaf. Each marker records that a run occurred,
+not how many blank lines it held. It cannot reconstruct exact vertical
+spacing.
 
 ## Patterns
 
