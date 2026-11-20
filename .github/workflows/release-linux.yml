@@ -38,10 +38,14 @@ name: Release Linux & macOS binaries
 # Third-party actions are pinned to commit SHAs because this job has
 # contents:write, and a moved tag would inherit the release-write token.
 #
-# Each binary compiles against a pinned NEWEST patch release of its PHP
-# minor (8.4.28, 8.5.13, 8.6.0), so it carries the memory_limit stop behind
+# Each binary compiles against a pinned patch release of its PHP minor
+# (8.4.27, 8.5.12, 8.6.0), so it carries the memory_limit stop behind
 # ZEND_HAS_OOM. Those headers make the module import symbols that earlier
-# patches do not export, so the binaries require 8.4.28+ / 8.5.13+ / 8.6.0+.
+# patches do not export (smart_str_alloc() calls smart_str_ferealloc(), first
+# exported by 8.4.27 and 8.5.12), so the binaries require 8.4.27+ / 8.5.12+ /
+# 8.6.0+. The pins sit on the first patch that exports those symbols, not the
+# newest patch: a later pin would refuse users on patches that can run the
+# binary.
 # On an older patch the extension refuses to start with a warning (MINIT
 # compares php_version_id() against the build's PHP_VERSION_ID) instead of
 # dying with "undefined symbol" on first use. Linux builds inside the
@@ -53,9 +57,10 @@ name: Release Linux & macOS binaries
 # build patch, every Linux import must be exported by that patch's php
 # binary or its libraries, and a Linux binary must refuse to start, not
 # crash, on the oldest patch of its minor (8.4.1, as 8.4.0 was never
-# released, and 8.5.0). While the build patch is the first release of its
-# minor (8.6.0), no older patch exists and that gate is skipped; a matrix
-# entry whose build patch is not X.Y.0 must name an oldest image.
+# released, and 8.5.0) and on the patch just below the build patch (8.4.26,
+# 8.5.11). While the build patch is the first release of its minor (8.6.0),
+# no older patch exists and those gates are skipped; a matrix entry whose
+# build patch is not X.Y.0 must name an oldest and a below-floor image.
 
 on:
   release:
@@ -99,27 +104,31 @@ jobs:
         exclude:
           - os: macos-15
             php: '8.6'
-        # The image digests are multi-arch indexes; ghcr.io/iliaal/php and
-        # the ECR copy of the Docker official image serve the same digests
-        # as Docker Hub, so the pull step tries GHCR first and falls back to
-        # ECR and Docker Hub when a registry rate-limits.
+        # The image digests are multi-arch indexes of the Docker official
+        # image, which ECR Public serves under the same digests as Docker Hub.
+        # The pull step tries the ghcr.io/iliaal/php mirror first, then ECR
+        # and Docker Hub; the mirror does not carry every pinned digest, and a
+        # miss falls through to the next registry.
         #
         # The newest patch (newest-image on Linux, the newest-version
         # tarball on macOS and for Linux 8.6) produces the shipped binary
         # and sets its PHP floor; bumping it raises that floor. Keep
         # newest-version equal to the newest-image patch. The oldest-patch
-        # image is the gate that the binary refuses to start below the floor.
+        # and below-floor (build patch minus one) images are the gates that
+        # the binary refuses to start below the floor.
         include:
           - php: '8.4'
-            newest-version: '8.4.28'
-            newest-source-sha256: 0c8ec360e5dd8154f270b2fd50cd44ecc824e6ee39c85f911312b80d4daecd72
+            newest-version: '8.4.27'
+            newest-source-sha256: dcf93923b0e38e0d5252b25b796520b5a47761a08b3488b6d0b5d1115764d3f0
             oldest-image: public.ecr.aws/docker/library/php:8.4.1-cli-bookworm@sha256:246d2ca7e9cf21c4e7c354ce87e87bf1ad6d41b2061c77668845e04a8f8889d4
-            newest-image: public.ecr.aws/docker/library/php:8.4.28-cli-bookworm@sha256:85da896b3eeb8bcd83fe612e51a529b7d5983a1fab92ef5f63c7ac6e2842fc46
+            below-floor-image: public.ecr.aws/docker/library/php:8.4.26-cli-bookworm@sha256:58a95e5fe74d1d9f41c5f48ff1ebf10199c77bbe00a07d9236917154717e228c
+            newest-image: public.ecr.aws/docker/library/php:8.4.27-cli-bookworm@sha256:b3e907a1108629c562c4bb313ce3449e34d49991f6bb2487913f6146f47200fe
           - php: '8.5'
-            newest-version: '8.5.13'
-            newest-source-sha256: 607602acaf0c3061818e9916ec44a058e8b3d43959a83862b9cd3ec7bf5b785f
+            newest-version: '8.5.12'
+            newest-source-sha256: 08bc2eba2a588654ade1357174aa646b761556c862dda0678345ee29ed481209
             oldest-image: public.ecr.aws/docker/library/php:8.5.0-cli-bookworm@sha256:4ff93cd1b053c4d5ff468ced40962092a350a8c86798fee96e807bc9b383ec75
-            newest-image: public.ecr.aws/docker/library/php:8.5.13-cli-bookworm@sha256:d6991172c4282d2a09d6418073923a81664173bb0a0e07a16663a9a645746092
+            below-floor-image: public.ecr.aws/docker/library/php:8.5.11-cli-bookworm@sha256:878bbda19358b8be328c9c037b8812ce256f75be0af6869c8414aa65231a20d4
+            newest-image: public.ecr.aws/docker/library/php:8.5.12-cli-bookworm@sha256:050713ce008e2360ea9dc96e1f9a075690132388d917fc3552806f7a7be6f2a0
           - php: '8.6'
             newest-version: '8.6.0'
             newest-source-sha256: 5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
@@ -128,6 +137,7 @@ jobs:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release-tag }}
       PHP_MINOR: ${{ matrix.php }}
       OLDEST_IMAGE: ${{ matrix.oldest-image }}
+      BELOW_FLOOR_IMAGE: ${{ matrix.below-floor-image }}
       NEWEST_IMAGE: ${{ matrix.newest-image }}
       NEWEST_VERSION: ${{ matrix.newest-version }}
       NEWEST_SOURCE_SHA256: ${{ matrix.newest-source-sha256 }}
@@ -229,13 +239,15 @@ jobs:
             newest=$(pull_pinned "${NEWEST_IMAGE}")
           fi
           oldest=""
-          if [[ -n "${OLDEST_IMAGE}" ]]; then
+          below_floor=""
+          if [[ -n "${OLDEST_IMAGE}" && -n "${BELOW_FLOOR_IMAGE}" ]]; then
             oldest=$(pull_pinned "${OLDEST_IMAGE}")
+            below_floor=$(pull_pinned "${BELOW_FLOOR_IMAGE}")
           elif [[ "${NEWEST_VERSION}" != *.*.0 ]]; then
-            printf 'ERROR: no oldest-patch image for PHP %s\n' "${NEWEST_VERSION}" >&2
+            printf 'ERROR: no oldest-patch or below-floor image for PHP %s\n' "${NEWEST_VERSION}" >&2
             exit 1
           fi
-          printf 'oldest=%s\nnewest=%s\n' "${oldest}" "${newest}" >>"${GITHUB_OUTPUT}"
+          printf 'oldest=%s\nbelow-floor=%s\nnewest=%s\n' "${oldest}" "${below_floor}" "${newest}" >>"${GITHUB_OUTPUT}"
 
       - name: Build, package, and test prebuilt binary on the newest patch (Linux)
         id: package-linux
@@ -294,12 +306,13 @@ jobs:
             PHP_BIN="${NEWEST_PREFIX}/bin/php" \
             scripts/build-release-binary.sh "${BUILD_VERSION}"
 
-      - name: Smoke test on the newest patch, refuse the oldest
+      - name: Smoke test on the build patch, refuse older patches
         id: package
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
           PACKAGE_PATH: ${{ steps.package-linux.outputs.package-path || steps.package-macos.outputs.package-path }}
           PULLED_OLDEST_IMAGE: ${{ steps.images.outputs.oldest }}
+          PULLED_BELOW_FLOOR_IMAGE: ${{ steps.images.outputs.below-floor }}
           PULLED_NEWEST_IMAGE: ${{ steps.images.outputs.newest }}
         run: |
           test -n "${PACKAGE_PATH}"
@@ -307,6 +320,9 @@ jobs:
             targets=("image=${PULLED_NEWEST_IMAGE}")
             if [[ -n "${PULLED_OLDEST_IMAGE}" ]]; then
               targets+=("refuse-image=${PULLED_OLDEST_IMAGE}")
+            fi
+            if [[ -n "${PULLED_BELOW_FLOOR_IMAGE}" ]]; then
+              targets+=("refuse-image=${PULLED_BELOW_FLOOR_IMAGE}")
             fi
           else
             targets=("php=${NEWEST_PREFIX}/bin/php")

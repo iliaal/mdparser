@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The 0.9.0 prebuilt Linux and macOS binaries refused to start on PHP 8.4.27 and 8.5.12, which provide everything they need. The 0.9.1 binaries run on PHP 8.4.27+ or 8.5.12+; on an older 8.4 or 8.5 patch the extension still refuses to start with a warning, so build from source there.
+
 ## [0.9.0] - 2026-11-20
 
 ### Added
