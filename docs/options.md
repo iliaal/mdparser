@@ -381,12 +381,15 @@ stay literal text.
 
 ### `preserveBlankLines: bool = false`
 
-When `true`, runs of blank lines between blocks are reported instead of
-discarded. `toHtml()` output is unchanged, since blank runs carry no
-HTML; `toXml()` emits `<blank />` between the surrounding blocks and
-`toAst()` emits a `blank` leaf. Each marker records that a run occurred,
-not how many blank lines it held. It cannot reconstruct exact vertical
-spacing.
+When `true`, the block parser reports blank-line runs. A run can be
+between blocks, at a document edge, the only content of a blank-only
+document, or inside a block quote or list item. A blank line inside fenced
+or indented code stays part of the code text, not a separate marker.
+
+`toHtml()` output is unchanged. `toXml()` emits `<blank />` and `toAst()`
+emits a `blank` leaf at the run's position in the block tree. Each marker
+records that a run occurred, not how many blank lines it held. It cannot
+reconstruct exact vertical spacing.
 
 ## Patterns
 

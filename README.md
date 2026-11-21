@@ -122,7 +122,7 @@ Comparison with the major pure-PHP Markdown libraries. "via ext" means the featu
 
 ## Opt-in dialect extensions
 
-md4c also ships dialect extensions beyond CommonMark + GFM. Each one is an opt-in `Options` flag, off by default: `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`||text||`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), `subscript` (`~text~`), `admonitions` (GitHub-style `> [!NOTE]` alert blocks), `insert` (`++text++` renders `<ins>`), and `preserveBlankLines` (blank-line runs are reported instead of discarded, visible in `toXml()` and `toAst()`). Parser-behavior toggles: `noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`. See [`docs/options.md`](docs/options.md) for behavior and edge cases.
+md4c also ships dialect extensions beyond CommonMark + GFM. Each one is an opt-in `Options` flag, off by default: `latexMath` (`$inline$`, `$$block$$`), `wikiLinks` (`[[target]]`), `spoilers` (`||text||`), `underline`, `highlight` (`==text==`), `superscript` (`^text^`), `subscript` (`~text~`), `admonitions` (GitHub-style `> [!NOTE]` alert blocks), `insert` (`++text++` renders `<ins>`), and `preserveBlankLines` (the block parser reports blank-line runs as markers in `toXml()` and `toAst()`). Parser-behavior toggles: `noIndentedCodeBlocks`, `permissiveAtxHeadings`, `collapseWhitespace`. See [`docs/options.md`](docs/options.md) for behavior and edge cases.
 
 ## What we don't cover
 
