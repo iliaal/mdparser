@@ -301,8 +301,13 @@ appears in `children`; with the option off, the plus signs stay literal.
 ### `blank`
 
 Appears with `Options(preserveBlankLines: true)` for a blank-line run
-between blocks. This leaf has no count, literal, or children. A run of one
-blank line and a run of several blank lines have the same representation.
+recognized by the block parser. It can appear between blocks, at the start
+or end of the document, or as the only child of a blank-only document.
+It can also appear inside a block quote or list item. A blank line between
+two items can be the last child of the first item, not a sibling of the items.
+
+This leaf has no count, literal, or children. A run of one blank line and
+a run of several blank lines have the same representation.
 
 ```php
 ['type' => 'blank']
