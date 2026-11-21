@@ -386,10 +386,21 @@ between blocks, at a document edge, the only content of a blank-only
 document, or inside a block quote or list item. A blank line inside fenced
 or indented code stays part of the code text, not a separate marker.
 
+Raw HTML follows the block parser's termination rules. In HTML block types
+1–5 (`<pre>`, `<script>`, `<style>`, and `<textarea>` blocks; comments;
+processing instructions; declarations; and CDATA sections), an interior
+blank line stays in the `html_block` literal. A blank line ends HTML block
+types 6 and 7 (recognized block tags such as `<div>` and other complete
+tags on their own line, respectively). The terminating run is a separate
+`blank` marker, not part of the HTML literal.
+
 `toHtml()` output is unchanged. `toXml()` emits `<blank />` and `toAst()`
 emits a `blank` leaf at the run's position in the block tree. Each marker
 records that a run occurred, not how many blank lines it held. It cannot
 reconstruct exact vertical spacing.
+
+These AST and XML distinctions do not depend on the HTML rendering options
+`unsafe` and `tagfilter`.
 
 ## Patterns
 

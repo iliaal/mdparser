@@ -120,7 +120,9 @@ Fenced or indented code block.
 
 ### `html_block`
 
-Raw HTML block.
+Raw HTML block. If the block contains blank lines, they remain in its
+`literal`. See [the blank-line option](options.md#preserveblanklines-bool--false)
+for HTML block types where a blank line ends the block instead.
 
 ```php
 ['type' => 'html_block', 'literal' => "<div>...</div>\n"]
