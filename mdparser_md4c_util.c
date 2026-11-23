@@ -122,34 +122,12 @@ static void mdu_decode_attr(smart_str *out, const MD_ATTRIBUTE *attr)
     }
 }
 
-void mdparser_md4c_attr_view_init(mdparser_md4c_attr_view *view,
+void mdparser_md4c_attr_view_init_slow(mdparser_md4c_attr_view *view,
     const MD_ATTRIBUTE *attr)
 {
-    memset(view, 0, sizeof(*view));
-
-    if (attr == NULL || attr->text == NULL || attr->size == 0) {
-        view->text = "";
-        return;
-    }
-    /* A single substring spans the whole value when substr_offsets[1]
-     * already reaches attr->size. Entity / NUL substrings still need real
-     * decoding; a plain substring decodes to itself. */
-    if (attr->substr_offsets[1] >= attr->size &&
-        attr->substr_types[0] != MD_TEXT_ENTITY &&
-        attr->substr_types[0] != MD_TEXT_NULLCHAR) {
-        view->text = attr->text;
-        view->size = attr->size;
-        return;
-    }
-
     mdu_decode_attr(&view->storage, attr);
     view->text = view->storage.s ? ZSTR_VAL(view->storage.s) : "";
     view->size = view->storage.s ? ZSTR_LEN(view->storage.s) : 0;
-}
-
-void mdparser_md4c_attr_view_destroy(mdparser_md4c_attr_view *view)
-{
-    smart_str_free(&view->storage);
 }
 
 /* RFC 3629 lead-byte classification shared by the sequence validator and
@@ -247,14 +225,31 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
      * loop below, so it avoids the len*3 worst case (768 MB at the 256 MB
      * input cap) when only a handful of bytes are invalid. */
     size_t out_size = valid_prefix;
+    size_t clean_streak = 0;
     while (i < len) {
+        if (clean_streak >= 16 && len - i >= 64) {
+            size_t run = mdparser_utf8_valid_prefix(p + i, len - i);
+            clean_streak = 0;
+            if (run > 0) {
+                out_size += run;
+                i += run;
+            }
+        }
         size_t beg = i;
         i = mdu_skip_ascii(p, i, len);
         out_size += i - beg;
+        clean_streak += i - beg;
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
-        if (n == 0) { i += mdu_invalid_subpart_len(p + i, len - i); out_size += 3; }
-        else { out_size += n; i += n; }
+        if (n == 0) {
+            i += mdu_invalid_subpart_len(p + i, len - i);
+            out_size += 3;
+            clean_streak = 0;
+        } else {
+            out_size += n;
+            i += n;
+            clean_streak += n;
+        }
     }
 #ifdef ZEND_HAS_OOM
     /* Invalid bytes can triple the copy. An infallible allocation that large
@@ -272,20 +267,36 @@ const char *mdparser_md4c_validate_utf8(const char *src, size_t len,
     memcpy(dst, p, valid_prefix);
     size_t o = valid_prefix;
     i = valid_prefix;
+    clean_streak = 0;
     while (i < len) {
+        if (clean_streak >= 16 && len - i >= 64) {
+            size_t run = mdparser_utf8_valid_prefix(p + i, len - i);
+            clean_streak = 0;
+            if (run > 0) {
+                memcpy(dst + o, p + i, run);
+                o += run;
+                i += run;
+            }
+        }
         /* Bulk-copy ASCII runs (same fast path as the clean scan). */
         size_t beg = i;
         i = mdu_skip_ascii(p, i, len);
-        if (i > beg) { memcpy(dst + o, p + beg, i - beg); o += i - beg; }
+        if (i > beg) {
+            memcpy(dst + o, p + beg, i - beg);
+            o += i - beg;
+            clean_streak += i - beg;
+        }
         if (i >= len) break;
         size_t n = mdparser_md4c_utf8_seqlen(p + i, len - i);
         if (n == 0) {
             dst[o++] = (char)0xEF; dst[o++] = (char)0xBF; dst[o++] = (char)0xBD;
             i += mdu_invalid_subpart_len(p + i, len - i);
+            clean_streak = 0;
         } else {
             memcpy(dst + o, p + i, n);
             o += n;
             i += n;
+            clean_streak += n;
         }
     }
     dst[o] = '\0';

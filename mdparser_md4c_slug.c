@@ -28,15 +28,17 @@
  * Heading-anchor slug
  * =================================================================== */
 
-char *mdm_slugify(const char *text, size_t len)
+void mdm_slugify_into(smart_str *s, const char *text, size_t len)
 {
     static const char hex[] = "0123456789abcdef";
+    if (s->s) {
+        ZSTR_LEN(s->s) = 0;
+    }
     /* Single-pass into smart_str: avoids a full UTF-8 sizing walk. Invalid
      * bytes expand to %xx (3 bytes); smart_str grows on demand so pathological
      * invalid input does not need a len*3 preallocation. */
-    smart_str s = {0};
     if (len) {
-        smart_str_alloc(&s, len + 1, 0);
+        smart_str_alloc(s, len + 1, 0);
     }
     bool prev_dash = true;
     size_t i = 0;
@@ -45,17 +47,17 @@ char *mdm_slugify(const char *text, size_t len)
         if (c < 0x80) {
             if (c == 0) {
                 /* Verbatim code/math runs can still contain raw NUL bytes. */
-                smart_str_appendl(&s, "\xef\xbf\xbd", 3);
+                smart_str_appendl(s, "\xef\xbf\xbd", 3);
                 prev_dash = false;
             } else if (c >= 'A' && c <= 'Z') {
-                smart_str_appendc(&s, (char)(c + ('a' - 'A')));
+                smart_str_appendc(s, (char)(c + ('a' - 'A')));
                 prev_dash = false;
             } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
-                smart_str_appendc(&s, (char)c);
+                smart_str_appendc(s, (char)c);
                 prev_dash = false;
             } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '-') {
                 if (!prev_dash) {
-                    smart_str_appendc(&s, '-');
+                    smart_str_appendc(s, '-');
                     prev_dash = true;
                 }
             }
@@ -64,31 +66,23 @@ char *mdm_slugify(const char *text, size_t len)
         }
         size_t n = mdparser_md4c_utf8_seqlen((const unsigned char *)text + i, len - i);
         if (n) {
-            smart_str_appendl(&s, text + i, n);
+            smart_str_appendl(s, text + i, n);
             prev_dash = false;
             i += n;
         } else {
             char enc[3] = { '%', hex[(c >> 4) & 0xF], hex[c & 0xF] };
-            smart_str_appendl(&s, enc, 3);
+            smart_str_appendl(s, enc, 3);
             prev_dash = false;
             i++;
         }
     }
     /* Trim trailing dashes. */
-    if (s.s) {
-        while (ZSTR_LEN(s.s) > 0 && ZSTR_VAL(s.s)[ZSTR_LEN(s.s) - 1] == '-') {
-            ZSTR_LEN(s.s)--;
+    if (s->s) {
+        while (ZSTR_LEN(s->s) > 0 && ZSTR_VAL(s->s)[ZSTR_LEN(s->s) - 1] == '-') {
+            ZSTR_LEN(s->s)--;
         }
-        ZSTR_VAL(s.s)[ZSTR_LEN(s.s)] = '\0';
+        ZSTR_VAL(s->s)[ZSTR_LEN(s->s)] = '\0';
     }
-    size_t out_len = s.s ? ZSTR_LEN(s.s) : 0;
-    char *out = emalloc(out_len + 1);
-    if (out_len) {
-        memcpy(out, ZSTR_VAL(s.s), out_len);
-    }
-    out[out_len] = '\0';
-    smart_str_free(&s);
-    return out;
 }
 
 typedef struct mdm_slug_node {
@@ -127,7 +121,7 @@ static void mdm_slug_rotate_right(mdm_slug_node **root, mdm_slug_node *node)
 }
 
 static mdm_slug_node *mdm_slug_insert(mdm_slug_node **root, const char *slug,
-    bool *inserted)
+    size_t len, bool *inserted)
 {
     mdm_slug_node *parent = NULL;
     mdm_slug_node *node = *root;
@@ -142,13 +136,14 @@ static mdm_slug_node *mdm_slug_insert(mdm_slug_node **root, const char *slug,
         node = cmp < 0 ? node->left : node->right;
     }
 
-    size_t len = strlen(slug);
-    node = emalloc(sizeof(*node) + len + 1);
+    mdm_slug_node *inserted_node = emalloc(sizeof(*node) + len + 1);
+    node = inserted_node;
     node->left = node->right = NULL;
     node->parent = parent;
     node->next_suffix = 1;
     node->red = true;
-    memcpy(node->slug, slug, len + 1);
+    memcpy(node->slug, slug, len);
+    node->slug[len] = '\0';
     if (!parent) *root = node;
     else if (cmp < 0) parent->left = node;
     else parent->right = node;
@@ -191,7 +186,7 @@ static mdm_slug_node *mdm_slug_insert(mdm_slug_node **root, const char *slug,
     }
     (*root)->red = false;
     *inserted = true;
-    return node;
+    return inserted_node;
 }
 
 void mdm_slugs_init(mdm_slugs *s)
@@ -223,35 +218,47 @@ void mdm_slugs_destroy(mdm_slugs *s)
     s->active = false;
 }
 
-char *mdm_slug_unique(mdm_slugs *s, char *base)
+const char *mdm_slug_unique_str(mdm_slugs *s, const char *base, size_t base_len,
+    size_t *out_len)
 {
-    if (base[0] == '\0') return base;
+    if (base_len == 0) {
+        *out_len = 0;
+        return "";
+    }
     bool inserted;
-    mdm_slug_node *base_node = mdm_slug_insert(&s->root, base, &inserted);
-    if (inserted) return base;
+    mdm_slug_node *base_node = mdm_slug_insert(&s->root, base, base_len, &inserted);
+    if (inserted) {
+        *out_len = base_len;
+        return base_node->slug;
+    }
     zend_long start = base_node->next_suffix;
     if (start < 1) {
-        efree(base);
-        char *empty = emalloc(1);
-        empty[0] = '\0';
-        return empty;
+        *out_len = 0;
+        return "";
     }
-    size_t blen = strlen(base);
-    char *cand = emalloc(blen + 24);
+    char stack_cand[256];
+    char *cand = (base_len + 24 <= sizeof(stack_cand))
+        ? stack_cand : emalloc(base_len + 24);
+    memcpy(cand, base, base_len);
+    cand[base_len] = '-';
     for (zend_long n = start; n <= 100000; n++) {
-        int w = snprintf(cand, blen + 24, "%s-" ZEND_LONG_FMT, base, n);
-        if (w < 0 || (size_t)w >= blen + 24) continue;
-        mdm_slug_insert(&s->root, cand, &inserted);
+        char num_buf[24];
+        char *num_end = num_buf + sizeof(num_buf);
+        char *num_start = zend_print_long_to_buf(num_end - 1, n);
+        size_t num_len = (size_t)((num_end - 1) - num_start);
+        size_t cand_len = base_len + 1 + num_len;
+        memcpy(cand + base_len + 1, num_start, num_len);
+        cand[cand_len] = '\0';
+        mdm_slug_node *cand_node = mdm_slug_insert(&s->root, cand, cand_len, &inserted);
         if (inserted) {
             base_node->next_suffix = n + 1;
-            efree(base);
-            return cand;
+            if (cand != stack_cand) efree(cand);
+            *out_len = cand_len;
+            return cand_node->slug;
         }
     }
     base_node->next_suffix = -1;
-    efree(cand);
-    efree(base);
-    char *empty = emalloc(1);
-    empty[0] = '\0';
-    return empty;
+    if (cand != stack_cand) efree(cand);
+    *out_len = 0;
+    return "";
 }

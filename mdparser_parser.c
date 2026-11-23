@@ -38,6 +38,8 @@ typedef char mdparser_input_cap_fits_md_size[
     (MDPARSER_MAX_INPUT_SIZE <= (size_t)(MD_SIZE)-1) ? 1 : -1];
 
 static zend_object_handlers mdparser_parser_handlers;
+static uintptr_t mdparser_parser_options_offset = 0;
+static bool mdparser_parser_options_offset_valid = false;
 
 static zend_object *mdparser_parser_create(zend_class_entry *ce)
 {
@@ -79,6 +81,13 @@ void mdparser_parser_register_class(void)
     mdparser_parser_handlers.offset = offsetof(mdparser_parser_obj, std);
     mdparser_parser_handlers.free_obj = mdparser_parser_free;
     mdparser_parser_handlers.clone_obj = NULL;
+
+    zend_property_info *info = zend_hash_str_find_ptr(
+        &mdparser_parser_ce->properties_info, "options", sizeof("options") - 1);
+    if (info && IS_VALID_PROPERTY_OFFSET(info->offset)) {
+        mdparser_parser_options_offset = info->offset;
+        mdparser_parser_options_offset_valid = true;
+    }
 }
 
 PHP_METHOD(MdParser_Parser, __construct)
@@ -97,46 +106,64 @@ PHP_METHOD(MdParser_Parser, __construct)
 
     zval default_options;
     bool default_owned = false;
+    unsigned new_md4c_pflags;
+    int new_md4c_ropts;
 
     if (!options_zv) {
-        /* Build a default Options and stash it so $parser->options is
-         * never null. mdparser_parser_create already seeded the cached
-         * default masks on obj; nothing else to compute here. */
-        object_init_ex(&default_options, mdparser_options_ce);
-        zend_call_known_instance_method_with_0_params(
-            mdparser_options_ce->constructor, Z_OBJ(default_options), NULL);
-        if (EG(exception)) {
+        /* Build a default Options directly without a PHP method call frame;
+         * masks are already constant defaults. */
+        mdparser_options_create_default(&default_options);
+        if (UNEXPECTED(EG(exception))) {
             zval_ptr_dtor(&default_options);
             RETURN_THROWS();
         }
         options_zv = &default_options;
         default_owned = true;
-    }
+        new_md4c_pflags = mdparser_default_md4c_pflags;
+        new_md4c_ropts = mdparser_default_md4c_ropts;
+    } else {
+        /* Commit the cached masks only after the readonly $options write
+         * succeeds. A second __construct() throws on that write; committing
+         * first would leave $options reporting safe options while rendering
+         * with an unsafe mask. */
+        mdparser_options_read_masks(options_zv, &new_md4c_pflags, &new_md4c_ropts);
 
-    /* Commit the cached masks only after the readonly $options write
-     * succeeds. A second __construct() throws on that write; committing
-     * first would leave $options reporting safe options while rendering
-     * with an unsafe mask. */
-    unsigned new_md4c_pflags;
-    int new_md4c_ropts;
-    mdparser_options_read_masks(options_zv, &new_md4c_pflags, &new_md4c_ropts);
-
-    /* read_masks throws if the Options object skipped __construct; bail
-     * before publishing a half-constructed Options. */
-    if (EG(exception)) {
-        if (default_owned) {
-            zval_ptr_dtor(&default_options);
+        /* read_masks throws if the Options object skipped __construct; bail
+         * before publishing a half-constructed Options. */
+        if (UNEXPECTED(EG(exception))) {
+            RETURN_THROWS();
         }
-        RETURN_THROWS();
     }
 
-    zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
+    bool wrote_direct = false;
+    if (EXPECTED(mdparser_parser_options_offset_valid)) {
+#if PHP_VERSION_ID >= 80400
+        if (EXPECTED(!zend_object_is_lazy(this_obj)))
+#endif
+        {
+            zval *slot = OBJ_PROP(this_obj, mdparser_parser_options_offset);
+            if (EXPECTED(Z_TYPE_P(slot) == IS_UNDEF && Z_PROP_FLAG_P(slot) == IS_PROP_UNINIT)) {
+                if (default_owned) {
+                    ZVAL_COPY_VALUE(slot, &default_options);
+                    default_owned = false;
+                } else {
+                    ZVAL_COPY(slot, options_zv);
+                }
+                Z_PROP_FLAG_P(slot) = 0;
+                wrote_direct = true;
+            }
+        }
+    }
+
+    if (UNEXPECTED(!wrote_direct)) {
+        zend_update_property(mdparser_parser_ce, this_obj, "options", sizeof("options") - 1, options_zv);
+    }
 
     if (default_owned) {
         zval_ptr_dtor(&default_options);
     }
 
-    if (EG(exception)) {
+    if (UNEXPECTED(EG(exception))) {
         RETURN_THROWS();
     }
 
@@ -367,14 +394,54 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     /* One sentinel-prefixed paragraph (Parsedown::line() semantics). */
     const char *src = ZSTR_VAL(source);
     size_t src_len = ZSTR_LEN(source);
+    char stack_buf[1024];
     smart_str norm = {0};
-    mdparser_inline_normalize(&norm, src, src_len);
+    const char *buf = "";
+    size_t buf_len = 0;
 
-    const char *buf = norm.s ? ZSTR_VAL(norm.s) : "";
-    size_t buf_len = norm.s ? ZSTR_LEN(norm.s) : 0;
+    mdparser_md4c_skip_bom(&src, &src_len);
+    if (src_len > 0) {
+        if (memchr(src, '\n', src_len) == NULL && memchr(src, '\r', src_len) == NULL) {
+            size_t s = 0;
+            while (s < src_len && (src[s] == ' ' || src[s] == '\t')) s++;
+            if (s < src_len) {
+                if (EXPECTED(src_len < sizeof(stack_buf))) {
+                    stack_buf[0] = ';';
+                    memcpy(stack_buf + 1, src, src_len);
+                    buf = stack_buf;
+                    buf_len = src_len + 1;
+                } else {
+                    smart_str_alloc(&norm, src_len + 2, 0);
+                    if (!mdparser_md4c_oom_pending()) {
+                        smart_str_appendc(&norm, ';');
+                        smart_str_appendl(&norm, src, src_len);
+                        buf = ZSTR_VAL(norm.s);
+                        buf_len = ZSTR_LEN(norm.s);
+                    }
+                }
+            }
+        } else {
+            mdparser_inline_normalize(&norm, src, src_len);
+            if (norm.s) {
+                buf = ZSTR_VAL(norm.s);
+                buf_len = ZSTR_LEN(norm.s);
+            }
+        }
+    }
+
+    if (mdparser_md4c_oom_pending()) {
+        smart_str_free(&norm);
+        return;
+    }
+
+    if (buf_len == 0) {
+        smart_str_free(&norm);
+        RETURN_EMPTY_STRING();
+    }
 
     /* The sentinel normalization suppresses headings, so heading anchors
-     * are dropped; nofollow still applies to inline links. */
+     * are dropped; nofollow still applies to inline links. The HTML renderer
+     * suppresses the outer <p>...</p>\n directly under INLINE_SENTINEL. */
     int inline_status = 0;
     int inline_ropts = (obj->md4c_ropts & ~MDPARSER_RF_HEADING_ANCHORS)
         | MDPARSER_RF_INLINE_SENTINEL;
@@ -388,24 +455,6 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
         zend_throw_exception(mdparser_exception_ce,
             mdparser_md4c_status_message(inline_status), 0);
         RETURN_THROWS();
-    }
-    const char *rendered = ZSTR_VAL(rendered_zs);
-
-    /* Strip the <p> wrapper. */
-    size_t out_len = ZSTR_LEN(rendered_zs);
-    static const char prefix[] = "<p>";
-    static const size_t prefix_len = sizeof(prefix) - 1;
-    static const char suffix[] = "</p>\n";
-    static const size_t suffix_len = sizeof(suffix) - 1;
-
-    if (out_len >= prefix_len + suffix_len &&
-        memcmp(rendered, prefix, prefix_len) == 0 &&
-        memcmp(rendered + out_len - suffix_len, suffix, suffix_len) == 0)
-    {
-        size_t body_len = out_len - prefix_len - suffix_len;
-        memmove(ZSTR_VAL(rendered_zs), rendered + prefix_len, body_len);
-        ZSTR_VAL(rendered_zs)[body_len] = '\0';
-        ZSTR_LEN(rendered_zs) = body_len;
     }
 
     RETVAL_STR(rendered_zs);

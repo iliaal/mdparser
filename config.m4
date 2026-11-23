@@ -31,7 +31,7 @@ if test "$PHP_MDPARSER" != "no"; then
   dnl callback-style APIs and bundled static helpers we don't reach.
   dnl -fvisibility=hidden keeps vendored md4c symbols and our internals out of
   dnl the .so's dynamic symbol table (only get_module needs exporting).
-  MDPARSER_CFLAGS="-fvisibility=hidden \
+  MDPARSER_CFLAGS="-fvisibility=hidden -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1 \
     -Wall -Wextra -Wno-unused-parameter -Wno-unused-function"
 
   dnl -Wshadow is intentionally NOT enabled; PHP's own headers

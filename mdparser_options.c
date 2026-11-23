@@ -146,6 +146,10 @@ typedef char mdparser_options_field_count_assert[
 typedef char mdparser_options_zpp_arity_assert[
     (MDPARSER_OPTIONS_FIELD_COUNT == 32) ? 1 : -1];
 
+static bool mdparser_options_default_values[MDPARSER_OPTIONS_FIELD_COUNT];
+static uintptr_t mdparser_options_prop_offsets[MDPARSER_OPTIONS_FIELD_COUNT];
+static bool mdparser_options_offsets_valid = false;
+
 void mdparser_options_init_defaults(void)
 {
     unsigned mpf = 0;
@@ -153,6 +157,7 @@ void mdparser_options_init_defaults(void)
 
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
         const mdparser_options_field *f = &mdparser_options_fields[i];
+        mdparser_options_default_values[i] = f->default_value;
         if (!f->default_value) {
             continue;
         }
@@ -170,6 +175,30 @@ void mdparser_options_init_defaults(void)
 static void mdparser_options_populate_object(zend_object *this_obj,
     const bool values[MDPARSER_OPTIONS_FIELD_COUNT])
 {
+    bool fast = mdparser_options_offsets_valid;
+#if PHP_VERSION_ID >= 80400
+    if (UNEXPECTED(zend_object_is_lazy(this_obj))) {
+        fast = false;
+    }
+#endif
+    if (EXPECTED(fast)) {
+        for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
+            zval *slot = OBJ_PROP(this_obj, mdparser_options_prop_offsets[i]);
+            if (EXPECTED(Z_TYPE_P(slot) == IS_UNDEF && Z_PROP_FLAG_P(slot) == IS_PROP_UNINIT)) {
+                ZVAL_BOOL(slot, values[i]);
+                Z_PROP_FLAG_P(slot) = 0;
+            } else {
+                const mdparser_options_field *f = &mdparser_options_fields[i];
+                zval tmp;
+                ZVAL_BOOL(&tmp, values[i]);
+                zend_update_property(mdparser_options_ce, this_obj,
+                    f->name, f->name_len, &tmp);
+                if (EG(exception)) return;
+            }
+        }
+        return;
+    }
+
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
         const mdparser_options_field *f = &mdparser_options_fields[i];
         zval tmp;
@@ -182,11 +211,15 @@ static void mdparser_options_populate_object(zend_object *this_obj,
     }
 }
 
-static void mdparser_options_seed_defaults(bool values[MDPARSER_OPTIONS_FIELD_COUNT])
+static zend_always_inline void mdparser_options_seed_defaults(bool values[MDPARSER_OPTIONS_FIELD_COUNT])
 {
-    for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
-        values[i] = mdparser_options_fields[i].default_value;
-    }
+    memcpy(values, mdparser_options_default_values, sizeof(mdparser_options_default_values));
+}
+
+void mdparser_options_create_default(zval *return_value)
+{
+    object_init_ex(return_value, mdparser_options_ce);
+    mdparser_options_populate_object(Z_OBJ_P(return_value), mdparser_options_default_values);
 }
 
 typedef void (*mdparser_options_modifier)(bool v[MDPARSER_OPTIONS_FIELD_COUNT]);
@@ -209,6 +242,34 @@ void mdparser_options_read_masks(zval *options_zv, unsigned *md4c_pflags, int *m
     unsigned mpf = 0;
     int mro = 0;
     zend_object *obj = Z_OBJ_P(options_zv);
+    bool fast = mdparser_options_offsets_valid && obj->ce == mdparser_options_ce;
+#if PHP_VERSION_ID >= 80400
+    if (UNEXPECTED(zend_object_is_lazy(obj))) {
+        fast = false;
+    }
+#endif
+
+    if (EXPECTED(fast)) {
+        for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
+            const mdparser_options_field *f = &mdparser_options_fields[i];
+            zval *prop = OBJ_PROP(obj, mdparser_options_prop_offsets[i]);
+            if (UNEXPECTED(Z_TYPE_P(prop) != IS_TRUE && Z_TYPE_P(prop) != IS_FALSE)) {
+                zend_throw_exception_ex(mdparser_exception_ce, 0,
+                    "mdparser: Options::$%s is uninitialized; "
+                    "Options instances must be constructed via __construct() "
+                    "(or one of strict()/github()/permissive())",
+                    f->name);
+                return;
+            }
+            if (Z_TYPE_P(prop) == IS_TRUE) {
+                mpf |= f->md4c_pflag;
+                mro |= f->md4c_ropt;
+            }
+        }
+        *md4c_pflags = mpf;
+        *md4c_ropts = mro;
+        return;
+    }
 
     for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
         const mdparser_options_field *f = &mdparser_options_fields[i];
@@ -249,6 +310,18 @@ void mdparser_options_register_class(void)
 {
     mdparser_options_ce = register_class_MdParser_Options();
     mdparser_options_ce->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+
+    mdparser_options_offsets_valid = true;
+    for (size_t i = 0; i < MDPARSER_OPTIONS_FIELD_COUNT; i++) {
+        const mdparser_options_field *f = &mdparser_options_fields[i];
+        zend_property_info *info = zend_hash_str_find_ptr(
+            &mdparser_options_ce->properties_info, f->name, f->name_len);
+        if (!info || !IS_VALID_PROPERTY_OFFSET(info->offset)) {
+            mdparser_options_offsets_valid = false;
+            break;
+        }
+        mdparser_options_prop_offsets[i] = info->offset;
+    }
 }
 
 PHP_METHOD(MdParser_Options, __construct)

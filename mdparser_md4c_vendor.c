@@ -26,10 +26,23 @@
 typedef union mdparser_md4c_alloc_header mdparser_md4c_alloc_header;
 typedef struct mdparser_md4c_alloc_tracker mdparser_md4c_alloc_tracker;
 
+/* Stack-backed arena for md4c's scratch working set inside mdparser_md4c_parse.
+ * Satisfies small/medium parses and LIFO link-attribute allocations without
+ * touching libc malloc/free, while preserving exact parse_memory_limit
+ * accounting and overflowing cleanly to the tracked libc list. */
+#define MDPARSER_MD4C_ARENA_SIZE  16384U
+#define MDPARSER_MD4C_ARENA_ALIGN 16U
+#define MDPARSER_ARENA_LIVE  ((mdparser_md4c_alloc_header *)(uintptr_t)1)
+#define MDPARSER_ARENA_FREED ((mdparser_md4c_alloc_header *)(uintptr_t)2)
+
 struct mdparser_md4c_alloc_tracker {
     mdparser_md4c_alloc_header *head;
     mdparser_md4c_alloc_tracker *previous;
-    size_t live;        /* bytes requested from libc, headers included */
+    unsigned char *arena;
+    mdparser_md4c_alloc_header *arena_last;
+    size_t arena_used;
+    size_t arena_cap;
+    size_t live;        /* bytes charged to the parse budget, headers included */
     /* 0 = unlimited. With the limit off, 256 MiB of bracket-heavy input
      * can ask libc for about 19-22 GiB; keep a limit for untrusted
      * input in long-lived workers. */
@@ -40,7 +53,9 @@ struct mdparser_md4c_alloc_tracker {
 
 /* The size field rides in the union's existing padding: three pointers plus a
  * size_t is 32 bytes, which is what long double's 16-byte alignment already
- * rounded the header up to. */
+ * rounded the header up to. For arena blocks, links.next holds
+ * MDPARSER_ARENA_LIVE or MDPARSER_ARENA_FREED and links.previous chains
+ * blocks in allocation order for LIFO tail rewind. */
 union mdparser_md4c_alloc_header {
     struct {
         mdparser_md4c_alloc_header *previous;
@@ -52,12 +67,39 @@ union mdparser_md4c_alloc_header {
     void *pointer_alignment;
 };
 
+typedef char mdparser_alloc_header_align_assert[
+    (sizeof(mdparser_md4c_alloc_header) % MDPARSER_MD4C_ARENA_ALIGN == 0) ? 1 : -1];
+
 ZEND_TLS mdparser_md4c_alloc_tracker *mdparser_md4c_active_tracker;
-/* Small-input parse floor: every md4c allocation pays the 32B registry
- * header (charged to the budget) plus a doubly-linked-list splice on
- * malloc/realloc/free. Negligible next to md4c's own per-byte state, but
- * it is the dominant wrapper cost on tiny inputs. */
-static zend_always_inline void *mdparser_md4c_malloc(size_t size)
+
+static zend_always_inline size_t mdparser_md4c_arena_round(size_t n)
+{
+    return (n + (MDPARSER_MD4C_ARENA_ALIGN - 1)) & ~(size_t)(MDPARSER_MD4C_ARENA_ALIGN - 1);
+}
+
+static zend_always_inline void mdparser_md4c_arena_rewind(
+    mdparser_md4c_alloc_tracker *owner, mdparser_md4c_alloc_header *header)
+{
+    header->links.next = MDPARSER_ARENA_FREED;
+    if (header == owner->arena_last) {
+        mdparser_md4c_alloc_header *cur = header;
+        while (cur && cur->links.next == MDPARSER_ARENA_FREED) {
+            owner->arena_used = (size_t)((unsigned char *)cur - owner->arena);
+            cur = cur->links.previous;
+        }
+        owner->arena_last = cur;
+    }
+}
+
+#if defined(_MSC_VER)
+# define MDPARSER_ALIGN16 __declspec(align(16))
+#elif defined(__GNUC__) || defined(__clang__)
+# define MDPARSER_ALIGN16 __attribute__((aligned(16)))
+#else
+# define MDPARSER_ALIGN16
+#endif
+
+static zend_never_inline void *mdparser_md4c_malloc(size_t size)
 {
     mdparser_md4c_alloc_header *header;
     mdparser_md4c_alloc_tracker *owner = mdparser_md4c_active_tracker;
@@ -67,22 +109,36 @@ static zend_always_inline void *mdparser_md4c_malloc(size_t size)
      * overflow size_t). This is not a budget refusal, so it counts as a
      * genuine allocation failure (alloc_failed), mapping to ERR_MEMORY
      * rather than ERR_PARSE. */
-    if (size > SIZE_MAX - sizeof(*header)) {
+    if (UNEXPECTED(size > SIZE_MAX - sizeof(*header))) {
         if (owner) {
             owner->alloc_failed = true;
         }
         return NULL;
     }
-    /* Charge the header as well: the budget is meant to bound what md4c makes
-     * us ask libc for, not just the payload md4c sees. */
+    /* Charge the header as well: the budget is meant to bound md4c's working
+     * set consistently regardless of arena vs libc backing. */
     charged = sizeof(*header) + size;
-    if (owner && owner->limit
-            && charged > owner->limit - MIN(owner->live, owner->limit)) {
+    if (owner && UNEXPECTED(owner->limit
+            && charged > owner->limit - MIN(owner->live, owner->limit))) {
         owner->exceeded = true;
         return NULL;
     }
-    header = malloc(sizeof(*header) + size);
-    if (!header) {
+    /* arena_cap and arena_used are multiples of MDPARSER_MD4C_ARENA_ALIGN, so
+     * charged <= avail implies arena_round(charged) <= avail without overflow. */
+    if (EXPECTED(owner && charged <= owner->arena_cap - owner->arena_used)) {
+        header = (mdparser_md4c_alloc_header *)(owner->arena + owner->arena_used);
+        owner->arena_used += mdparser_md4c_arena_round(charged);
+        header->links.previous = owner->arena_last;
+        header->links.next = MDPARSER_ARENA_LIVE;
+        header->links.owner = owner;
+        header->links.size = charged;
+        owner->arena_last = header;
+        owner->live += charged;
+        return header + 1;
+    }
+
+    header = malloc(charged);
+    if (UNEXPECTED(!header)) {
         if (owner) {
             owner->alloc_failed = true;
         }
@@ -103,7 +159,7 @@ static zend_always_inline void *mdparser_md4c_malloc(size_t size)
     return header + 1;
 }
 
-static zend_always_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
+static zend_never_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
 {
     mdparser_md4c_alloc_header *header;
     mdparser_md4c_alloc_header *new_header;
@@ -116,30 +172,82 @@ static zend_always_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
     if (!ptr) {
         return mdparser_md4c_malloc(size);
     }
+    header = (mdparser_md4c_alloc_header *)ptr - 1;
+    owner = header->links.owner;
     /* Same SIZE_MAX policy as malloc: unsatisfiable, not budget-refused. */
-    if (size > SIZE_MAX - sizeof(*header)) {
-        mdparser_md4c_alloc_header *h = (mdparser_md4c_alloc_header *)ptr - 1;
-        mdparser_md4c_alloc_tracker *o = h->links.owner;
-        if (o) {
-            o->alloc_failed = true;
+    if (UNEXPECTED(size > SIZE_MAX - sizeof(*header))) {
+        if (owner) {
+            owner->alloc_failed = true;
         }
         return NULL;
     }
 
-    header = (mdparser_md4c_alloc_header *)ptr - 1;
-    previous = header->links.previous;
-    next = header->links.next;
-    owner = header->links.owner;
     old_charged = header->links.size;
     charged = sizeof(*header) + size;
-    if (owner && owner->limit && charged > old_charged
+    if (owner && UNEXPECTED(owner->limit && charged > old_charged
             && charged - old_charged
-                > owner->limit - MIN(owner->live, owner->limit)) {
+                > owner->limit - MIN(owner->live, owner->limit))) {
         owner->exceeded = true;
         return NULL;
     }
-    new_header = realloc(header, sizeof(*header) + size);
-    if (!new_header) {
+
+    if (header->links.next == MDPARSER_ARENA_LIVE) {
+        size_t old_payload = old_charged - sizeof(*header);
+        if (header == owner->arena_last) {
+            size_t start = (size_t)((unsigned char *)header - owner->arena);
+            if (charged <= owner->arena_cap - start) {
+                owner->arena_used = start + mdparser_md4c_arena_round(charged);
+                header->links.size = charged;
+                owner->live = owner->live - old_charged + charged;
+                return ptr;
+            }
+        } else if (charged <= old_charged) {
+            header->links.size = charged;
+            owner->live = owner->live - old_charged + charged;
+            return ptr;
+        }
+
+        if (charged <= owner->arena_cap - owner->arena_used) {
+            new_header = (mdparser_md4c_alloc_header *)(owner->arena + owner->arena_used);
+            owner->arena_used += mdparser_md4c_arena_round(charged);
+            new_header->links.previous = owner->arena_last;
+            new_header->links.next = MDPARSER_ARENA_LIVE;
+            new_header->links.owner = owner;
+            new_header->links.size = charged;
+            owner->arena_last = new_header;
+            if (old_payload) {
+                memcpy(new_header + 1, ptr, MIN(old_payload, size));
+            }
+            header->links.next = MDPARSER_ARENA_FREED;
+            owner->live = owner->live - old_charged + charged;
+            return new_header + 1;
+        }
+
+        new_header = malloc(charged);
+        if (UNEXPECTED(!new_header)) {
+            owner->alloc_failed = true;
+            return NULL;
+        }
+        if (old_payload) {
+            memcpy(new_header + 1, ptr, MIN(old_payload, size));
+        }
+        mdparser_md4c_arena_rewind(owner, header);
+        new_header->links.previous = NULL;
+        new_header->links.next = owner->head;
+        new_header->links.owner = owner;
+        new_header->links.size = charged;
+        if (owner->head) {
+            owner->head->links.previous = new_header;
+        }
+        owner->head = new_header;
+        owner->live = owner->live - old_charged + charged;
+        return new_header + 1;
+    }
+
+    previous = header->links.previous;
+    next = header->links.next;
+    new_header = realloc(header, charged);
+    if (UNEXPECTED(!new_header)) {
         if (owner) {
             owner->alloc_failed = true;
         }
@@ -163,7 +271,7 @@ static zend_always_inline void *mdparser_md4c_realloc(void *ptr, size_t size)
     return new_header + 1;
 }
 
-static zend_always_inline void mdparser_md4c_free(void *ptr)
+static zend_never_inline void mdparser_md4c_free(void *ptr)
 {
     mdparser_md4c_alloc_header *header;
     mdparser_md4c_alloc_tracker *owner;
@@ -176,6 +284,10 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
     owner = header->links.owner;
     if (owner) {
         owner->live -= header->links.size;
+    }
+    if (EXPECTED(header->links.next == MDPARSER_ARENA_LIVE)) {
+        mdparser_md4c_arena_rewind(owner, header);
+        return;
     }
     if (header->links.previous) {
         header->links.previous->links.next = header->links.next;
@@ -232,105 +344,35 @@ static zend_always_inline void mdparser_md4c_free(void *ptr)
 #undef malloc
 #undef MD_PARSER_BAILOUT_GUARD
 
-#ifdef ZEND_HAS_OOM
-/* Without this relay a parse that crosses memory_limit keeps allocating until
- * it reaches the engine's hard limit (memory_hard_limit_percent; by default
- * twice memory_limit, or memory_limit + 1G above 1G), which terminates the
- * process with _exit() and no shutdown. A non-zero callback result makes md4c
- * abort and run its normal cleanup. */
-#define MDPARSER_MD4C_OOM_STATUS (-3)
-
-typedef struct {
-    const MD_PARSER *parser;
-    void *userdata;
-} mdparser_md4c_oom_relay;
-
-static zend_always_inline int mdparser_md4c_oom_relay_result(int result)
-{
-    return (result == 0 && ZEND_HAS_OOM()) ? MDPARSER_MD4C_OOM_STATUS : result;
-}
-
-static int mdparser_md4c_relay_enter_block(MD_BLOCKTYPE type, void *detail,
-    void *userdata)
-{
-    const mdparser_md4c_oom_relay *relay = userdata;
-    return mdparser_md4c_oom_relay_result(
-        relay->parser->enter_block(type, detail, relay->userdata));
-}
-
-static int mdparser_md4c_relay_leave_block(MD_BLOCKTYPE type, void *detail,
-    void *userdata)
-{
-    const mdparser_md4c_oom_relay *relay = userdata;
-    return mdparser_md4c_oom_relay_result(
-        relay->parser->leave_block(type, detail, relay->userdata));
-}
-
-static int mdparser_md4c_relay_enter_span(MD_SPANTYPE type, void *detail,
-    void *userdata)
-{
-    const mdparser_md4c_oom_relay *relay = userdata;
-    return mdparser_md4c_oom_relay_result(
-        relay->parser->enter_span(type, detail, relay->userdata));
-}
-
-static int mdparser_md4c_relay_leave_span(MD_SPANTYPE type, void *detail,
-    void *userdata)
-{
-    const mdparser_md4c_oom_relay *relay = userdata;
-    return mdparser_md4c_oom_relay_result(
-        relay->parser->leave_span(type, detail, relay->userdata));
-}
-
-static int mdparser_md4c_relay_text(MD_TEXTTYPE type, const MD_CHAR *text,
-    MD_SIZE size, void *userdata)
-{
-    const mdparser_md4c_oom_relay *relay = userdata;
-    return mdparser_md4c_oom_relay_result(
-        relay->parser->text(type, text, size, relay->userdata));
-}
-
-static void mdparser_md4c_relay_debug_log(const char *msg, void *userdata)
-{
-    const mdparser_md4c_oom_relay *relay = userdata;
-    relay->parser->debug_log(msg, relay->userdata);
-}
-#endif
-
 int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     const MD_PARSER *parser, void *userdata, bool *bailed_out,
     bool *limit_exceeded, bool *alloc_failed)
 {
+    MDPARSER_ALIGN16 union {
+        long double alignment;
+        unsigned char bytes[MDPARSER_MD4C_ARENA_SIZE];
+    } arena_storage;
     mdparser_md4c_alloc_tracker tracker = {0};
     zend_long limit = MDPARSER_G(parse_memory_limit);
     int result;
 
+    tracker.arena = arena_storage.bytes;
+    tracker.arena_cap = sizeof(arena_storage.bytes);
     tracker.limit = limit > 0 ? (size_t)limit : 0;
     tracker.previous = mdparser_md4c_active_tracker;
     mdparser_md4c_active_tracker = &tracker;
 #ifdef ZEND_HAS_OOM
-    if (ZEND_HAS_OOM()) {
+    if (UNEXPECTED(ZEND_HAS_OOM())) {
         result = MDPARSER_MD4C_OOM_STATUS;
     } else {
-        mdparser_md4c_oom_relay relay = { parser, userdata };
-        MD_PARSER relayed = *parser;
-
-        relayed.enter_block = mdparser_md4c_relay_enter_block;
-        relayed.leave_block = mdparser_md4c_relay_leave_block;
-        relayed.enter_span = mdparser_md4c_relay_enter_span;
-        relayed.leave_span = mdparser_md4c_relay_leave_span;
-        relayed.text = mdparser_md4c_relay_text;
-        if (parser->debug_log) {
-            relayed.debug_log = mdparser_md4c_relay_debug_log;
-        }
-        result = md_parse(text, size, &relayed, &relay);
+        result = md_parse(text, size, parser, userdata);
     }
 #else
     result = md_parse(text, size, parser, userdata);
 #endif
     mdparser_md4c_active_tracker = tracker.previous;
 
-    while (tracker.head) {
+    while (UNEXPECTED(tracker.head != NULL)) {
         mdparser_md4c_alloc_header *header = tracker.head;
         tracker.head = header->links.next;
         free(header);
