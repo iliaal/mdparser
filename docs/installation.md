@@ -28,11 +28,14 @@ thread-safety mode, operating system, architecture and libc; check that
 release's assets rather than assuming every supported source-build target
 has a binary.
 
-From 0.9.0 on, prebuilt Linux and macOS binaries require a minimum patch
-release of PHP 8.4 and 8.5: 8.4.27+ or 8.5.12+ from 0.9.1 on (0.9.0 required
-8.4.28+ or 8.5.13+). Any PHP 8.6 release works. On an older 8.4 or 8.5 patch
-release the extension refuses to start with a warning; build from source
-there.
+The 0.9.1 Unix NTS archives require PHP 8.4.27+, 8.5.12+, or 8.6.0+ within
+the matching PHP minor. Its PHP 8.6 Unix archives are Linux-only. For a
+matching NTS target, PIE 1.5.5 selects the 0.9.1 archive on PHP
+8.4.1–8.4.26 or 8.5.0–8.5.11 because it matches PHP
+major and minor, not the patch. The selected extension then refuses to start
+with a warning. Upgrade PHP or [build from source](#from-source) on those
+older patches. The earlier 0.9.0 release had higher 8.4 and 8.5 floors:
+8.4.28 and 8.5.13.
 
 For example, [0.8.2](https://github.com/iliaal/mdparser/releases/tag/0.8.2)
 provides Unix binaries for PHP 8.4 and 8.5 NTS on glibc Linux x86_64/arm64

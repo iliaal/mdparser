@@ -18,7 +18,12 @@ Native C CommonMark + GitHub Flavored Markdown parser for PHP. ~10-20× faster t
 pie install iliaal/mdparser
 ```
 
-Prebuilt Linux and macOS binaries require PHP 8.4.27+ or 8.5.12+ (any PHP 8.6 release). On an older 8.4 or 8.5 patch release the extension refuses to start with a warning; [build from source](#from-source) there.
+The 0.9.1 Unix NTS prebuilts require PHP 8.4.27+, 8.5.12+, or 8.6.0+ within
+the matching PHP minor. On a matching NTS target, PIE 1.5.5 still selects the
+0.9.1 archive on PHP 8.4.1–8.4.26 or 8.5.0–8.5.11, but the extension refuses
+to start with a warning. Upgrade PHP or [build from source](#from-source) on
+those older patches. See the [installation guide](docs/installation.md#pie)
+for details.
 
 On a minimal PHP image (e.g. `php:8.x-cli` from Docker Hub), PIE needs a few build tools installed first:
 
