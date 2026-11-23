@@ -3433,19 +3433,9 @@ md_collect_marks(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines, int table_m
     #define IS_MARK_CHAR(off)   (ctx->mark_char_map[(unsigned char) CH(off)])
 #endif
 
-            /* mdparser local patch (performance; see vendor/VENDOR.md):
-             * combine 8-byte (or 4-byte) mark-map lookups via bitwise OR. */
-#ifndef MD4C_USE_UTF16
-            while(off < line->end  &&  line->end - off > 7  &&
-                  !(IS_MARK_CHAR(off+0) | IS_MARK_CHAR(off+1) |
-                    IS_MARK_CHAR(off+2) | IS_MARK_CHAR(off+3) |
-                    IS_MARK_CHAR(off+4) | IS_MARK_CHAR(off+5) |
-                    IS_MARK_CHAR(off+6) | IS_MARK_CHAR(off+7)))
-                off += 8;
-#endif
-            while(off < line->end  &&  line->end - off > 3  &&
-                  !(IS_MARK_CHAR(off+0) | IS_MARK_CHAR(off+1) |
-                    IS_MARK_CHAR(off+2) | IS_MARK_CHAR(off+3)))
+            /* Optimization: Use some loop unrolling. */
+            while(off + 3 < line->end  &&  !IS_MARK_CHAR(off+0)  &&  !IS_MARK_CHAR(off+1)
+                                       &&  !IS_MARK_CHAR(off+2)  &&  !IS_MARK_CHAR(off+3))
                 off += 4;
             while(off < line->end  &&  !IS_MARK_CHAR(off+0))
                 off++;
