@@ -168,7 +168,6 @@ struct MD_MARKSTACK_tag {
     int top;        /* -1 if empty. */
 };
 
-/* Context propagated through all the parsing. */
 /* mdparser local patch (performance; see vendor/VENDOR.md): 128-bit ASCII
  * mark bitmask replacing strchr() calls in md_analyze_marks(). */
 typedef struct MD_MARK_MASK_tag MD_MARK_MASK;
@@ -201,6 +200,7 @@ md_mark_mask_has(MD_MARK_MASK m, CHAR ch)
     return 0;
 }
 
+/* Context propagated through all the parsing. */
 typedef struct MD_CTX_tag MD_CTX;
 struct MD_CTX_tag {
     /* Immutable stuff (parameters of md_parse()). */
@@ -239,6 +239,8 @@ struct MD_CTX_tag {
 #else
     char mark_char_map[256];
 #endif
+    /* mdparser local patch (performance; see vendor/VENDOR.md): mark masks
+     * built by md_build_mark_char_map(). */
     MD_MARK_MASK emph_mark_mask;
     MD_MARK_MASK autolink_mark_mask;
 
@@ -1560,6 +1562,8 @@ md_free_attribute(MD_CTX* ctx, MD_ATTRIBUTE_BUILD* build)
 }
 
 #ifndef MD4C_USE_UTF16
+/* mdparser local patch (performance; see vendor/VENDOR.md): zero-byte test for the
+ * SWAR scan in md_build_attribute(). */
 #define MD_SWAR_HASZERO(v) (((v) - 0x0101010101010101ULL) & ~(v) & 0x8080808080808080ULL)
 #endif
 
@@ -1571,6 +1575,8 @@ md_build_attribute(MD_CTX* ctx, const CHAR* raw_text, SZ raw_size,
     int is_trivial;
     int ret = 0;
 
+    /* mdparser local patch (performance; see vendor/VENDOR.md): no up-front memset();
+     * initialize only the fields md_free_attribute() and the callers read. */
     if(raw_size == 0) {
         build->text = NULL;
         build->substr_types = build->trivial_types;
@@ -1626,6 +1632,8 @@ md_build_attribute(MD_CTX* ctx, const CHAR* raw_text, SZ raw_size,
         build->trivial_offsets[1] = raw_size;
         off = raw_size;
     } else {
+        /* mdparser local patch (performance; see vendor/VENDOR.md): explicit init replaces
+         * the removed memset(). */
         build->substr_types = NULL;
         build->substr_offsets = NULL;
         build->substr_count = 0;
@@ -2389,6 +2397,8 @@ md_is_link_destination_A(MD_CTX* ctx, OFF beg, OFF max_end, OFF* p_end,
 }
 
 #ifndef MD4C_USE_UTF16
+/* mdparser local patch (performance; see vendor/VENDOR.md): lookup table for
+ * md_is_link_destination_B(). */
 /* Marks bytes that terminate or need special handling in unbracketed link
  * destinations: C0 controls + space (0x00..0x20), '(', ')', '\\', DEL (0x7F). */
 static const unsigned char md_link_dest_b_special[256] = {
@@ -3156,6 +3166,8 @@ md_build_mark_char_map(MD_CTX* ctx)
         }
     }
 
+    /* mdparser local patch (performance; see vendor/VENDOR.md): build the mark masks
+     * used by md_analyze_marks(). */
     ctx->emph_mark_mask.lo = 0;
     ctx->emph_mark_mask.hi = 0;
     md_mark_mask_set(&ctx->emph_mark_mask, '&');
@@ -4184,6 +4196,7 @@ md_resolve_bracket_link(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
              * may live inside the autolink. */
             if((first_nested->flags & MD_MARK_RESOLVED)  &&
                first_nested->beg == opener->end  &&
+               /* mdparser local patch (performance; see vendor/VENDOR.md): ISANYOF3_ instead of ISANYOF_ */
                ISANYOF3_(first_nested->ch, _T('@'), _T(':'), _T('.'))  &&
                ctx->marks[first_nested->next].end == closer->beg)
             {
@@ -4632,6 +4645,7 @@ md_analyze_permissive_autolink(MD_CTX* ctx, int mark_index)
 
     /* Verify there's line boundary, whitespace, allowed punctuation or
      * resolved opener mark just before the suspected autolink. */
+    /* mdparser local patch (performance; see vendor/VENDOR.md): ISANYOF3 instead of ISANYOF */
     if(beg > line_beg  &&  !ISUNICODEWHITESPACEBEFORE(beg)  &&  !ISANYOF3(beg-1, _T('('), _T('{'), _T('['))) {
         MD_MARK* mark;
 
@@ -4661,6 +4675,7 @@ md_analyze_permissive_autolink(MD_CTX* ctx, int mark_index)
     if(end < ctx->permissive_autolink_tail_horizon)
         return;
 
+    /* mdparser local patch (performance; see vendor/VENDOR.md): ISANYOF3 instead of ISANYOF */
     if(opener->ch != '@' && end < line_end && ISANYOF3(end, _T('/'), _T('?'), _T('#'))) {
         OFF tail_beg = end;
         OFF off = end;
@@ -4779,6 +4794,8 @@ md_analyze_permissive_autolink(MD_CTX* ctx, int mark_index)
 
 #define MD_ANALYZE_NOSKIP_EMPH  0x01
 
+/* mdparser local patch (performance; see vendor/VENDOR.md): takes MD_MARK_MASK
+ * arguments instead of strchr()-style character strings. */
 static inline void
 md_analyze_marks(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
                  int mark_beg, int mark_end, MD_MARK_MASK mark_mask, MD_MARK_MASK noskip_mask)
@@ -4857,6 +4874,7 @@ md_analyze_marks(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
 static int
 md_analyze_inlines(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines, int table_mode)
 {
+    /* mdparser local patch (performance; see vendor/VENDOR.md): masks passed to md_analyze_marks(). */
     static const MD_MARK_MASK bracket_mask = {
         ((uint64_t)1 << '!'),
         ((uint64_t)1 << ('[' - 64)) | ((uint64_t)1 << (']' - 64))
@@ -4914,6 +4932,8 @@ md_analyze_link_contents(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines,
     static const MD_MARK_MASK empty_mask = { 0, 0 };
     int i;
 
+    /* mdparser local patch (performance; see vendor/VENDOR.md): precomputed masks replace the
+     * per-call mark character arrays. */
     md_analyze_marks(ctx, lines, n_lines, mark_beg, mark_end, ctx->emph_mark_mask, empty_mask);
 
     if(ctx->parser.flags & MD_FLAG_PERMISSIVEAUTOLINKS) {
@@ -4933,6 +4953,8 @@ md_enter_leave_span_a(MD_CTX* ctx, int enter, MD_SPANTYPE type,
                       const CHAR* dest, SZ dest_size, int is_autolink,
                       const CHAR* title, SZ title_size)
 {
+    /* mdparser local patch (performance; see vendor/VENDOR.md): no zero-initialization;
+     * md_build_attribute() fills the build/detail fields. */
     MD_ATTRIBUTE_BUILD href_build;
     MD_ATTRIBUTE_BUILD title_build;
     MD_SPAN_A_DETAIL det;
@@ -4962,6 +4984,7 @@ abort:
 static int
 md_enter_leave_span_wikilink(MD_CTX* ctx, int enter, const CHAR* target, SZ target_size)
 {
+    /* mdparser local patch (performance; see vendor/VENDOR.md): no zero-initialization. */
     MD_ATTRIBUTE_BUILD target_build;
     MD_SPAN_WIKILINK_DETAIL det;
     int ret = 0;
@@ -4983,6 +5006,7 @@ static int
 md_enter_leave_span_footnote_ref(MD_CTX* ctx, unsigned int id,
                                  unsigned int ref_id, const CHAR* label, SZ label_size)
 {
+    /* mdparser local patch (performance; see vendor/VENDOR.md): no zero-initialization. */
     MD_ATTRIBUTE_BUILD label_build;
     MD_SPAN_FOOTNOTE_REF_DETAIL det;
     int ret = 0;
@@ -6202,6 +6226,7 @@ md_is_hr_line(MD_CTX* ctx, OFF beg, OFF* p_end, OFF* p_killer)
     OFF off = beg + 1;
     int n = 1;
 
+    /* mdparser local patch (performance; see vendor/VENDOR.md): ISANYOF3 instead of ISANYOF */
     if(!ISANYOF3(beg, _T('-'), _T('_'), _T('*')))
         return false;
 
@@ -6761,6 +6786,7 @@ md_is_container_mark(MD_CTX* ctx, unsigned indent, OFF beg, OFF* p_end, MD_CONTA
     }
 
     /* Check for list item bullet mark. */
+    /* mdparser local patch (performance; see vendor/VENDOR.md): ISANYOF3 instead of ISANYOF */
     if(ISANYOF3(off, _T('-'), _T('+'), _T('*'))  &&  (off+1 >= ctx->size || ISBLANK(off+1) || ISNEWLINE(off+1))) {
         p_container->ch = CH(off);
         p_container->is_loose = false;
@@ -7189,7 +7215,9 @@ md_analyze_line(MD_CTX* ctx, OFF beg, OFF* p_end,
             n_parents = ctx->n_containers;
         }
 
-        /* Check for task mark. */
+        /* Check for task mark. mdparser local patch (performance; see
+         * vendor/VENDOR.md): ISANYOF2_/ISANYOF3_/ISANYOF3 instead of
+         * ISANYOF_/ISANYOF here and in the "[x]" test below. */
         if((ctx->parser.flags & MD_FLAG_TASKLISTS)  &&  n_brothers + n_children > 0  &&
            (ISANYOF3_(ctx->containers[ctx->n_containers-1].ch, _T('-'), _T('+'), _T('*')) ||
             ISANYOF2_(ctx->containers[ctx->n_containers-1].ch, _T('.'), _T(')'))))

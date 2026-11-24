@@ -110,8 +110,10 @@ Before filing, try to reproduce against the latest `master` branch.
 `vendor/md4c/` is a mostly clean upstream copy of md4c. Its local
 modifications (the NUL-replacement fix, the `md_is_table_underline`
 table-column guard, the spoiler length test in `md_analyze_marks`, the
-link-destination byte test, and the `MD_PARSER_BAILOUT_GUARD` embedding
-hook) are listed in
+link-destination byte test, the six performance patches (`MD_MARK_MASK`,
+the mark-free fast exit, the prose-line fast path, the NUL scan, the
+attribute-build and span-init changes, and the link-destination table), and
+the `MD_PARSER_BAILOUT_GUARD` embedding hook) are listed in
 `vendor/VENDOR.md`, the authority on what is local versus upstream. Do
 not add cherry-picks or hand-edited build shims.
 
