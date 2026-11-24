@@ -26,8 +26,8 @@ typedef struct {
     bool active;
 } mdm_slugs;
 
-/* Lowercase/percent-encode `text` into a URL-fragment slug appended to `out`
- * (caller owns and may reuse `out`). */
+/* Lowercase/percent-encode `text` into a URL-fragment slug, replacing the
+ * contents of `out` (caller owns and may reuse `out`). */
 void mdm_slugify_into(smart_str *out, const char *text, size_t len);
 
 void mdm_slugs_init(mdm_slugs *s);
