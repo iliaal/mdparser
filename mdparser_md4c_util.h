@@ -98,26 +98,6 @@ static zend_always_inline void mdparser_md4c_attr_view_destroy(
     }
 }
 
-/* Length of the leading run of bytes needing no escaping: the unrolled
- * 4-wide scan shared by the HTML and XML escapers. `map` marks attention
- * bytes (nonzero & `mask`); the caller handles the first flagged byte with
- * its own output-context policy (HTML entities vs XML+C0 rules). */
-static inline size_t mdparser_md4c_scan_plain(const unsigned char *map,
-    unsigned char mask, const char *s, size_t n)
-{
-    size_t off = 0;
-    while (off + 3 < n && !(map[(unsigned char)s[off]] & mask)
-        && !(map[(unsigned char)s[off + 1]] & mask)
-        && !(map[(unsigned char)s[off + 2]] & mask)
-        && !(map[(unsigned char)s[off + 3]] & mask)) {
-        off += 4;
-    }
-    while (off < n && !(map[(unsigned char)s[off]] & mask)) {
-        off++;
-    }
-    return off;
-}
-
 /* Skip a single leading UTF-8 BOM (EF BB BF) in place. md4c doesn't strip
  * it, so it would leak into output and hide line-leading syntax on the first
  * line (ATX headings, list markers, blockquotes). Mirrors md4c-html's

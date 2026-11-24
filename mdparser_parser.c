@@ -302,11 +302,6 @@ PHP_METHOD(MdParser_Parser, toAst)
  * are not searched or removed afterward. */
 static void mdparser_inline_normalize(smart_str *norm, const char *src, size_t src_len)
 {
-    /* A leading BOM is content-free: drop it here, not at the call site.
-     * render_html owns the BOM skip for the plain paths, but the inline
-     * path normalizes first and its sentinel prefix would hide a BOM from
-     * that skip, leaking it into output verbatim. */
-    mdparser_md4c_skip_bom(&src, &src_len);
     static const char sentinel = ';';
 
     /* Grow on demand rather than reserving the 2*src_len + 1 worst case:
@@ -399,6 +394,8 @@ PHP_METHOD(MdParser_Parser, toInlineHtml)
     const char *buf = "";
     size_t buf_len = 0;
 
+    /* render_html owns the BOM skip for the plain paths, but the sentinel
+     * prefix added below would hide a BOM from it, so skip exactly one here. */
     mdparser_md4c_skip_bom(&src, &src_len);
     if (src_len > 0) {
         if (memchr(src, '\n', src_len) == NULL && memchr(src, '\r', src_len) == NULL) {

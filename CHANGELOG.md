@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Six local md4c patches speed up mark collection and analysis, inline analysis of lines with no marks, line classification, NUL replacement, attribute building, and link-destination scanning. Parse events are byte-identical; five of the patches are proposed upstream as mity/md4c#484 to #488.
+- `toHtml()`, `toInlineHtml()`, `toXml()`, and `toAst()` do less work per call: small documents parse in a stack arena instead of the heap, HTML, URL, and XML escaping scan 16 bytes at a time with SSE2 or NEON, and `Options` and `Parser` read their properties through offsets cached at startup. Output and `mdparser.parse_memory_limit` accounting are unchanged.
+
 ## [0.9.1] - 2026-11-20
 
 ### Fixed
