@@ -153,7 +153,11 @@ For maintainers cutting a new version:
    `CHANGELOG.md` and is valid SemVer 2.0.0.
 
 3. Commit + push to master. CI (Tests + Windows Build) must be
-   green on the resulting commit before tagging.
+   green on the resulting commit before tagging. Push CI builds one x64
+   Windows lane per MSVC toolset (PHP 8.2, 8.4, 8.6), so also run
+   `gh workflow run windows.yml --ref master` and require it green on the
+   release commit: that dispatch builds and tests every shipped Windows DLL
+   (x86 and PHP 8.3/8.5 included) without uploading anything.
 4. Create and push the annotated tag. Use bare semver (`0.4.4`, not
    `v0.4.4`) to match the existing convention:
 

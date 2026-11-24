@@ -1,5 +1,12 @@
 name: Windows Build
 
+# Push and PR runs build and test one x64 lane per MSVC toolset (vs16: 8.2,
+# vs17: 8.4, vs18: 8.6) in TS and NTS. The release event, the weekly schedule,
+# and workflow_dispatch build and test every shipped combination, x86 and PHP
+# 8.3/8.5 included; only the release event uploads. Dispatch it on the release
+# commit before tagging so a break in a lane push CI skips fails before the
+# all-or-nothing upload job would ship zero Windows assets.
+
 on:
   push:
     branches: [master]
@@ -7,11 +14,16 @@ on:
     branches: [master]
   release:
     types: [published]
+  workflow_dispatch:
+  schedule:
+    - cron: '41 5 * * 2'
 
 permissions: {}
 
 concurrency:
-  group: windows-${{ github.event.release.tag_name || github.ref }}
+  # The event name keeps a scheduled or dispatched full-matrix run on master
+  # out of the push group, so a push does not cancel it.
+  group: windows-${{ github.event_name }}-${{ github.event.release.tag_name || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
@@ -29,7 +41,9 @@ jobs:
         uses: php/php-windows-builder/extension-matrix@29352c0ef9e8ce65264ea9e287881a6f7758a953 # 1.9.0
         with:
           extension-url: ${{ github.event.repository.html_url }}
-          php-version-list: '8.2, 8.3, 8.4, 8.5, 8.6'
+          php-version-list: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && '8.2, 8.4, 8.6' || '8.2, 8.3, 8.4, 8.5, 8.6' }}
+          arch-list: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && 'x64' || 'x64, x86' }}
+          ts-list: 'nts, ts'
 
   windows-build:
     name: Build ${{ matrix.php-version }} ${{ matrix.arch }} ${{ matrix.ts }}
