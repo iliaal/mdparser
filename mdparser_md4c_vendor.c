@@ -35,6 +35,14 @@ typedef struct mdparser_md4c_alloc_tracker mdparser_md4c_alloc_tracker;
 #define MDPARSER_ARENA_LIVE  ((mdparser_md4c_alloc_header *)(uintptr_t)1)
 #define MDPARSER_ARENA_FREED ((mdparser_md4c_alloc_header *)(uintptr_t)2)
 
+#if defined(__SANITIZE_ADDRESS__)
+# define MDPARSER_HAVE_ASAN 1
+#elif defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#  define MDPARSER_HAVE_ASAN 1
+# endif
+#endif
+
 struct mdparser_md4c_alloc_tracker {
     mdparser_md4c_alloc_header *head;
     mdparser_md4c_alloc_tracker *previous;
@@ -357,7 +365,15 @@ int mdparser_md4c_parse(const MD_CHAR *text, MD_SIZE size,
     int result;
 
     tracker.arena = arena_storage.bytes;
+#ifdef MDPARSER_HAVE_ASAN
+    /* ASan places redzones only around real heap blocks and cannot see block
+     * boundaries inside the arena, so overruns between arena blocks and
+     * use-after-free after a LIFO rewind would go unreported. A zero
+     * capacity sends every allocation to the tracked libc path. */
+    tracker.arena_cap = 0;
+#else
     tracker.arena_cap = sizeof(arena_storage.bytes);
+#endif
     tracker.limit = limit > 0 ? (size_t)limit : 0;
     tracker.previous = mdparser_md4c_active_tracker;
     mdparser_md4c_active_tracker = &tracker;
