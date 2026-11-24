@@ -21,6 +21,31 @@
 #include <stdint.h>
 #include <string.h>
 
+#if !defined(MDPARSER_DISABLE_SIMD) && (defined(__x86_64__) || defined(_M_X64))
+# define MDM_SIMD_SSE2 1
+# include <emmintrin.h>
+# if defined(_MSC_VER) && !defined(__clang__)
+#  include <intrin.h>
+static zend_always_inline unsigned mdm_ctz32(uint32_t m)
+{
+    unsigned long idx;
+    _BitScanForward(&idx, m);
+    return (unsigned)idx;
+}
+# else
+static zend_always_inline unsigned mdm_ctz32(uint32_t m)
+{
+    return (unsigned)__builtin_ctz(m);
+}
+# endif
+#elif !defined(MDPARSER_DISABLE_SIMD) && defined(__aarch64__) \
+    && (defined(__ARM_NEON) || defined(__ARM_NEON__)) \
+    && (defined(__AARCH64EL__) || defined(_M_ARM64) \
+        || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__))
+# define MDM_SIMD_NEON 1
+# include <arm_neon.h>
+#endif
+
 #include "md4c.h"
 #include "mdparser_md4c_html.h"
 #include "mdparser_md4c_util.h"
@@ -64,6 +89,7 @@ typedef struct {
     int heading_level;
     smart_str heading_html; /* buffered inner HTML of current heading */
     smart_str heading_text; /* plain text of current heading, for the slug */
+    smart_str slug_buf;     /* reusable slugify buffer */
     mdm_slugs slugs;
 
     /* SmartyPants quote context: last normal-text byte emitted (0 at
@@ -101,7 +127,7 @@ void mdparser_md4c_html_minit(void)
         /* NUL is replaced with U+FFFD (same policy as MD_TEXT_NULLCHAR). */
         if (ch == 0 || strchr("\"&<>", ch) != NULL)
             mdm_escape_map_template[i] |= NEED_HTML_ESC_FLAG;
-        if (!ISALNUM(ch) && strchr("~-_.+!*(),%#@?=;:/$", ch) == NULL)
+        if (ch == 0 || (!ISALNUM(ch) && strchr("~-_.+!*(),%#@?=;:/$", ch) == NULL))
             mdm_escape_map_template[i] |= NEED_URL_ESC_FLAG;
     }
 }
@@ -123,56 +149,290 @@ static int mdm_ascii_ncasecmp(const char *a, const char *b, size_t n);
  * Escaping helpers (ported from md4c-html.c, output to smart_str)
  * =================================================================== */
 
+static zend_always_inline char *mdm_emit_html_escaped(char *dst, unsigned char ch)
+{
+    switch (ch) {
+        case '\0': memcpy(dst, "\xef\xbf\xbd", 3); return dst + 3;
+        case '"':  memcpy(dst, "&quot;", 6); return dst + 6;
+        case '&':  memcpy(dst, "&amp;", 5);  return dst + 5;
+        case '<':  memcpy(dst, "&lt;", 4);   return dst + 4;
+        case '>':  memcpy(dst, "&gt;", 4);   return dst + 4;
+        default:   *dst++ = (char)ch;        return dst;
+    }
+}
+
 static void mdm_escape_html(mdm_ctx *r, const char *data, size_t size)
 {
-    /* Plain runs use the shared unrolled scan over the MINIT-built map;
-     * only the per-byte replacement policy stays local. */
-    size_t beg = 0;
-    while (beg < size && !mdparser_md4c_oom_pending()) {
-        size_t run = mdparser_md4c_scan_plain(
-            (const unsigned char *)mdm_escape_map_template,
-            NEED_HTML_ESC_FLAG, data + beg, size - beg);
-        if (run > 0) {
-            out_append(r, data + beg, run);
-            beg += run;
-        }
-        if (beg < size) {
-            switch (data[beg]) {
-                case '\0': OUT_LIT(r, "\xef\xbf\xbd"); break;
-                case '"':  OUT_LIT(r, "&quot;"); break;
-                case '&':  OUT_LIT(r, "&amp;");  break;
-                case '<':  OUT_LIT(r, "&lt;");   break;
-                case '>':  OUT_LIT(r, "&gt;");   break;
-            }
-            beg++;
-        }
+    if (size == 0) {
+        return;
     }
+    smart_str *out = r->cur;
+    const unsigned char *p = (const unsigned char *)data;
+    const unsigned char *end = p + size;
+
+#ifdef MDM_SIMD_SSE2
+    const __m128i v_nul  = _mm_setzero_si128();
+    const __m128i v_quot = _mm_set1_epi8('"');
+    const __m128i v_amp  = _mm_set1_epi8('&');
+    const __m128i v_lt   = _mm_set1_epi8('<');
+    const __m128i v_gt   = _mm_set1_epi8('>');
+#elif defined(MDM_SIMD_NEON)
+    const uint8x16_t v_nul  = vdupq_n_u8(0);
+    const uint8x16_t v_quot = vdupq_n_u8('"');
+    const uint8x16_t v_amp  = vdupq_n_u8('&');
+    const uint8x16_t v_lt   = vdupq_n_u8('<');
+    const uint8x16_t v_gt   = vdupq_n_u8('>');
+#endif
+
+    bool grew_once = false;
+    while (p < end) {
+        if (UNEXPECTED(mdparser_md4c_oom_pending())) {
+            return;
+        }
+        size_t rem = (size_t)(end - p);
+        size_t min_avail = rem < 24 ? rem + 6 : 24;
+        if (UNEXPECTED(!out->s || out->a - ZSTR_LEN(out->s) < min_avail)) {
+            size_t grow = (!grew_once && rem <= (16U << 20))
+                ? rem + 6
+                : (rem < (2U << 20) ? rem + 6 : (2U << 20) + 6);
+            grew_once = true;
+            smart_str_alloc(out, grow, 0);
+            if (UNEXPECTED(mdparser_md4c_oom_pending())) {
+                return;
+            }
+        }
+        size_t len = ZSTR_LEN(out->s);
+        char *dst = ZSTR_VAL(out->s) + len;
+        size_t avail = out->a - len;
+
+#ifdef MDM_SIMD_SSE2
+        while (p + 16 <= end && avail >= 22) {
+            __m128i v = _mm_loadu_si128((const __m128i *)p);
+            __m128i m = _mm_or_si128(_mm_cmpeq_epi8(v, v_nul),
+                _mm_or_si128(_mm_cmpeq_epi8(v, v_quot),
+                _mm_or_si128(_mm_cmpeq_epi8(v, v_amp),
+                _mm_or_si128(_mm_cmpeq_epi8(v, v_lt), _mm_cmpeq_epi8(v, v_gt)))));
+            uint32_t mask = (uint32_t)_mm_movemask_epi8(m);
+            if (EXPECTED(mask == 0)) {
+                _mm_storeu_si128((__m128i *)dst, v);
+                p += 16;
+                dst += 16;
+                avail -= 16;
+            } else {
+                size_t k = mdm_ctz32(mask);
+                if (k > 0) {
+                    memcpy(dst, p, k);
+                    p += k;
+                    dst += k;
+                    avail -= k;
+                }
+                char *next_dst = mdm_emit_html_escaped(dst, *p++);
+                avail -= (size_t)(next_dst - dst);
+                dst = next_dst;
+            }
+        }
+#elif defined(MDM_SIMD_NEON)
+        while (p + 16 <= end && avail >= 22) {
+            uint8x16_t v = vld1q_u8(p);
+            uint8x16_t m = vorrq_u8(vceqq_u8(v, v_nul),
+                vorrq_u8(vceqq_u8(v, v_quot),
+                vorrq_u8(vceqq_u8(v, v_amp),
+                vorrq_u8(vceqq_u8(v, v_lt), vceqq_u8(v, v_gt)))));
+            uint64x2_t m64 = vreinterpretq_u64_u8(m);
+            uint64_t lo = vgetq_lane_u64(m64, 0);
+            uint64_t hi = vgetq_lane_u64(m64, 1);
+            if (EXPECTED((lo | hi) == 0)) {
+                vst1q_u8((uint8_t *)dst, v);
+                p += 16;
+                dst += 16;
+                avail -= 16;
+            } else {
+                size_t k = lo ? (size_t)(__builtin_ctzll(lo) >> 3)
+                              : 8 + (size_t)(__builtin_ctzll(hi) >> 3);
+                if (k > 0) {
+                    memcpy(dst, p, k);
+                    p += k;
+                    dst += k;
+                    avail -= k;
+                }
+                char *next_dst = mdm_emit_html_escaped(dst, *p++);
+                avail -= (size_t)(next_dst - dst);
+                dst = next_dst;
+            }
+        }
+#endif
+
+        while (p < end && avail >= 6) {
+            unsigned char ch = *p++;
+            if (EXPECTED(!(mdm_escape_map_template[ch] & NEED_HTML_ESC_FLAG))) {
+                *dst++ = (char)ch;
+                avail--;
+            } else {
+                char *next_dst = mdm_emit_html_escaped(dst, ch);
+                avail -= (size_t)(next_dst - dst);
+                dst = next_dst;
+            }
+        }
+        ZSTR_LEN(out->s) = (size_t)(dst - ZSTR_VAL(out->s));
+    }
+}
+
+static zend_always_inline char *mdm_emit_url_escaped(char *dst, unsigned char ch)
+{
+    static const char hex_chars[] = "0123456789ABCDEF";
+    if (ch == '&') {
+        memcpy(dst, "&amp;", 5);
+        return dst + 5;
+    }
+    dst[0] = '%';
+    dst[1] = hex_chars[(ch >> 4) & 0xf];
+    dst[2] = hex_chars[ch & 0xf];
+    return dst + 3;
 }
 
 static void mdm_escape_url(mdm_ctx *r, const char *data, size_t size)
 {
-    static const char hex_chars[] = "0123456789ABCDEF";
-    size_t beg = 0, off = 0;
-    #define NEED_URL_ESC(ch) (mdm_escape_map_template[(unsigned char)(ch)] & NEED_URL_ESC_FLAG)
-    while (!mdparser_md4c_oom_pending()) {
-        while (off < size && !NEED_URL_ESC(data[off])) off++;
-        if (off > beg) out_append(r, data + beg, off - beg);
-        if (off < size) {
-            char hex[3];
-            switch (data[off]) {
-                case '&': OUT_LIT(r, "&amp;"); break;
-                default:
-                    hex[0] = '%';
-                    hex[1] = hex_chars[((unsigned)data[off] >> 4) & 0xf];
-                    hex[2] = hex_chars[((unsigned)data[off] >> 0) & 0xf];
-                    out_append(r, hex, 3);
-                    break;
-            }
-            off++;
-        } else break;
-        beg = off;
+    if (size == 0) {
+        return;
     }
-    #undef NEED_URL_ESC
+    smart_str *out = r->cur;
+    const unsigned char *p = (const unsigned char *)data;
+    const unsigned char *end = p + size;
+
+#ifdef MDM_SIMD_SSE2
+    const __m128i v_sign   = _mm_set1_epi8((char)0x80);
+    const __m128i v_off21  = _mm_set1_epi8(0x21);
+    const __m128i v_span5d = _mm_set1_epi8((char)(0x5D ^ 0x80));
+    const __m128i v_off5b  = _mm_set1_epi8(0x5B);
+    const __m128i v_span6  = _mm_set1_epi8((char)(6 ^ 0x80));
+    const __m128i v_us     = _mm_set1_epi8('_');
+    const __m128i v_off7b  = _mm_set1_epi8(0x7B);
+    const __m128i v_span3  = _mm_set1_epi8((char)(3 ^ 0x80));
+    const __m128i v_quot   = _mm_set1_epi8('"');
+    const __m128i v_amp    = _mm_set1_epi8('&');
+    const __m128i v_apos   = _mm_set1_epi8('\'');
+    const __m128i v_lt     = _mm_set1_epi8('<');
+    const __m128i v_gt     = _mm_set1_epi8('>');
+#elif defined(MDM_SIMD_NEON)
+    const uint8x16_t v_off21  = vdupq_n_u8(0x21);
+    const uint8x16_t v_span5d = vdupq_n_u8(0x5D);
+    const uint8x16_t v_off5b  = vdupq_n_u8(0x5B);
+    const uint8x16_t v_span5  = vdupq_n_u8(5);
+    const uint8x16_t v_us     = vdupq_n_u8('_');
+    const uint8x16_t v_off7b  = vdupq_n_u8(0x7B);
+    const uint8x16_t v_span2  = vdupq_n_u8(2);
+    const uint8x16_t v_quot   = vdupq_n_u8('"');
+    const uint8x16_t v_amp    = vdupq_n_u8('&');
+    const uint8x16_t v_apos   = vdupq_n_u8('\'');
+    const uint8x16_t v_lt     = vdupq_n_u8('<');
+    const uint8x16_t v_gt     = vdupq_n_u8('>');
+#endif
+
+    bool grew_once = false;
+    while (p < end) {
+        if (UNEXPECTED(mdparser_md4c_oom_pending())) {
+            return;
+        }
+        size_t rem = (size_t)(end - p);
+        size_t min_avail = rem < 21 ? rem + 5 : 21;
+        if (UNEXPECTED(!out->s || out->a - ZSTR_LEN(out->s) < min_avail)) {
+            size_t grow = (!grew_once && rem <= (16U << 20))
+                ? rem + 5
+                : (rem < (2U << 20) ? rem + 5 : (2U << 20) + 5);
+            grew_once = true;
+            smart_str_alloc(out, grow, 0);
+            if (UNEXPECTED(mdparser_md4c_oom_pending())) {
+                return;
+            }
+        }
+        size_t len = ZSTR_LEN(out->s);
+        char *dst = ZSTR_VAL(out->s) + len;
+        size_t avail = out->a - len;
+
+#ifdef MDM_SIMD_SSE2
+        while (p + 16 <= end && avail >= 21) {
+            __m128i v = _mm_loadu_si128((const __m128i *)p);
+            __m128i out_rng = _mm_cmpgt_epi8(
+                _mm_xor_si128(_mm_sub_epi8(v, v_off21), v_sign), v_span5d);
+            __m128i in_5b60 = _mm_andnot_si128(_mm_cmpeq_epi8(v, v_us),
+                _mm_cmplt_epi8(_mm_xor_si128(_mm_sub_epi8(v, v_off5b), v_sign), v_span6));
+            __m128i in_7b7d = _mm_cmplt_epi8(
+                _mm_xor_si128(_mm_sub_epi8(v, v_off7b), v_sign), v_span3);
+            __m128i singles = _mm_or_si128(_mm_cmpeq_epi8(v, v_quot),
+                _mm_or_si128(_mm_cmpeq_epi8(v, v_amp),
+                _mm_or_si128(_mm_cmpeq_epi8(v, v_apos),
+                _mm_or_si128(_mm_cmpeq_epi8(v, v_lt), _mm_cmpeq_epi8(v, v_gt)))));
+            __m128i m = _mm_or_si128(_mm_or_si128(out_rng, in_5b60),
+                _mm_or_si128(in_7b7d, singles));
+            uint32_t mask = (uint32_t)_mm_movemask_epi8(m);
+            if (EXPECTED(mask == 0)) {
+                _mm_storeu_si128((__m128i *)dst, v);
+                p += 16;
+                dst += 16;
+                avail -= 16;
+            } else {
+                size_t k = mdm_ctz32(mask);
+                if (k > 0) {
+                    memcpy(dst, p, k);
+                    p += k;
+                    dst += k;
+                    avail -= k;
+                }
+                char *next_dst = mdm_emit_url_escaped(dst, *p++);
+                avail -= (size_t)(next_dst - dst);
+                dst = next_dst;
+            }
+        }
+#elif defined(MDM_SIMD_NEON)
+        while (p + 16 <= end && avail >= 21) {
+            uint8x16_t v = vld1q_u8(p);
+            uint8x16_t out_rng = vcgtq_u8(vsubq_u8(v, v_off21), v_span5d);
+            uint8x16_t in_5b60 = vbicq_u8(
+                vcleq_u8(vsubq_u8(v, v_off5b), v_span5), vceqq_u8(v, v_us));
+            uint8x16_t in_7b7d = vcleq_u8(vsubq_u8(v, v_off7b), v_span2);
+            uint8x16_t singles = vorrq_u8(vceqq_u8(v, v_quot),
+                vorrq_u8(vceqq_u8(v, v_amp),
+                vorrq_u8(vceqq_u8(v, v_apos),
+                vorrq_u8(vceqq_u8(v, v_lt), vceqq_u8(v, v_gt)))));
+            uint8x16_t m = vorrq_u8(vorrq_u8(out_rng, in_5b60),
+                vorrq_u8(in_7b7d, singles));
+            uint64x2_t m64 = vreinterpretq_u64_u8(m);
+            uint64_t lo = vgetq_lane_u64(m64, 0);
+            uint64_t hi = vgetq_lane_u64(m64, 1);
+            if (EXPECTED((lo | hi) == 0)) {
+                vst1q_u8((uint8_t *)dst, v);
+                p += 16;
+                dst += 16;
+                avail -= 16;
+            } else {
+                size_t k = lo ? (size_t)(__builtin_ctzll(lo) >> 3)
+                              : 8 + (size_t)(__builtin_ctzll(hi) >> 3);
+                if (k > 0) {
+                    memcpy(dst, p, k);
+                    p += k;
+                    dst += k;
+                    avail -= k;
+                }
+                char *next_dst = mdm_emit_url_escaped(dst, *p++);
+                avail -= (size_t)(next_dst - dst);
+                dst = next_dst;
+            }
+        }
+#endif
+
+        while (p < end && avail >= 5) {
+            unsigned char ch = *p++;
+            if (EXPECTED(!(mdm_escape_map_template[ch] & NEED_URL_ESC_FLAG))) {
+                *dst++ = (char)ch;
+                avail--;
+            } else {
+                char *next_dst = mdm_emit_url_escaped(dst, ch);
+                avail -= (size_t)(next_dst - dst);
+                dst = next_dst;
+            }
+        }
+        ZSTR_LEN(out->s) = (size_t)(dst - ZSTR_VAL(out->s));
+    }
 }
 
 static void mdm_append_codepoint(mdm_ctx *r, unsigned cp)
@@ -247,6 +507,14 @@ static bool mdm_url_is_safe(const char *url, size_t len, bool image_context)
     size_t i = 0;
     /* Skip leading control/space bytes, mirroring browser tolerance. */
     while (i < len && (unsigned char)url[i] <= 0x20) i++;
+    if (i >= len) return true;
+
+    /* Every blocked scheme starts with j/v/f/d (case-insensitive); ordinary
+     * http:, https:, mailto:, /relative, and #fragment URLs exit in 1 check. */
+    unsigned char first = (unsigned char)url[i] | 0x20;
+    if (EXPECTED(first != 'j' && first != 'v' && first != 'f' && first != 'd')) {
+        return true;
+    }
 
     /* Find a scheme: letters up to ':'. No ':' before a path/query/frag
      * delimiter means a relative URL, which is safe. */
@@ -268,13 +536,18 @@ static bool mdm_url_is_safe(const char *url, size_t len, bool image_context)
         if (!image_context) return false;
         const char *rest = url + i + 1;
         size_t rest_len = len - (i + 1);
-        static const char *ok[] = { "image/gif", "image/png", "image/jpeg", "image/webp" };
+        static const struct { const char *mime; size_t len; } ok[] = {
+            { "image/gif",  sizeof("image/gif") - 1 },
+            { "image/png",  sizeof("image/png") - 1 },
+            { "image/jpeg", sizeof("image/jpeg") - 1 },
+            { "image/webp", sizeof("image/webp") - 1 },
+        };
         for (size_t k = 0; k < sizeof(ok) / sizeof(ok[0]); k++) {
-            size_t ol = strlen(ok[k]);
+            size_t ol = ok[k].len;
             /* Require an exact MIME match terminated by ';' or ',' (or the
              * whole URL): a bare prefix check would pass image/png+xml,
              * image/pnghtml, etc. */
-            if (rest_len >= ol && mdm_ascii_ncasecmp(rest, ok[k], ol) == 0 &&
+            if (rest_len >= ol && mdm_ascii_ncasecmp(rest, ok[k].mime, ol) == 0 &&
                 (rest_len == ol || rest[ol] == ';' || rest[ol] == ','))
                 return true;
         }
@@ -305,15 +578,23 @@ static int mdm_ascii_ncasecmp(const char *a, const char *b, size_t n)
 
 static bool mdm_tagfilter_blocked(const char *p, size_t avail)
 {
-    static const char *tags[] = {
-        "title", "textarea", "style", "xmp", "iframe",
-        "noembed", "noframes", "script", "plaintext"
+    static const struct { const char *name; size_t len; } tags[] = {
+        { "title",     sizeof("title") - 1 },
+        { "textarea",  sizeof("textarea") - 1 },
+        { "style",     sizeof("style") - 1 },
+        { "xmp",       sizeof("xmp") - 1 },
+        { "iframe",    sizeof("iframe") - 1 },
+        { "noembed",   sizeof("noembed") - 1 },
+        { "noframes",  sizeof("noframes") - 1 },
+        { "script",    sizeof("script") - 1 },
+        { "plaintext", sizeof("plaintext") - 1 },
     };
+    if (avail < 3) return false;
     /* p points just past '<' (and past '/' for a close tag). */
     for (size_t k = 0; k < sizeof(tags) / sizeof(tags[0]); k++) {
-        size_t tl = strlen(tags[k]);
+        size_t tl = tags[k].len;
         if (avail < tl) continue;
-        if (mdm_ascii_ncasecmp(p, tags[k], tl) != 0) continue;
+        if (mdm_ascii_ncasecmp(p, tags[k].name, tl) != 0) continue;
         /* Must be followed by a tag-name terminator. */
         char d = (avail > tl) ? p[tl] : '>';
         if (d == ' ' || d == '\t' || d == '\n' || d == '\r' || d == '\f'
@@ -331,21 +612,26 @@ static void render_raw_html_unsafe(mdm_ctx *r, const char *text, size_t size)
     }
     size_t beg = 0, i = 0;
     while (i < size && !mdparser_md4c_oom_pending()) {
-        if (text[i] == '<') {
-            const char *name = text + i + 1;
-            size_t avail = size - i - 1;
-            if (avail > 0 && name[0] == '/') { name++; avail--; }
-            if (mdm_tagfilter_blocked(name, avail)) {
-                if (i > beg) out_append(r, text + beg, i - beg);
-                OUT_LIT(r, "&lt;");
-                i++;
-                beg = i;
-                continue;
-            }
+        const char *lt = memchr(text + i, '<', size - i);
+        if (!lt) {
+            break;
+        }
+        i = (size_t)(lt - text);
+        const char *name = lt + 1;
+        size_t avail = size - i - 1;
+        if (avail > 0 && name[0] == '/') { name++; avail--; }
+        if (mdm_tagfilter_blocked(name, avail)) {
+            if (i > beg) out_append(r, text + beg, i - beg);
+            OUT_LIT(r, "&lt;");
+            i++;
+            beg = i;
+            continue;
         }
         i++;
     }
-    if (i > beg) out_append(r, text + beg, i - beg);
+    if (size > beg && !mdparser_md4c_oom_pending()) {
+        out_append(r, text + beg, size - beg);
+    }
 }
 
 /* Emit raw HTML text per the current safety posture. */
@@ -446,8 +732,8 @@ static void render_smart(mdm_ctx *r, const char *data, size_t size)
             else if (n % 2 == 0)  { en = (int)(n / 2); }
             else if (n % 3 == 2)  { en = 1; em = (int)((n - 2) / 3); }
             else                  { en = 2; em = (int)((n - 4) / 3); }
-            for (int k = 0; k < em; k++) mdm_append_codepoint(r, 0x2014); /* em dash */
-            for (int k = 0; k < en; k++) mdm_append_codepoint(r, 0x2013); /* en dash */
+            for (int k = 0; k < em && !mdparser_md4c_oom_pending(); k++) mdm_append_codepoint(r, 0x2014); /* em dash */
+            for (int k = 0; k < en && !mdparser_md4c_oom_pending(); k++) mdm_append_codepoint(r, 0x2013); /* en dash */
             r->prev_char = '-';
             i += n;
             continue;
@@ -490,19 +776,12 @@ static void render_smart(mdm_ctx *r, const char *data, size_t size)
  * md4c callbacks
  * =================================================================== */
 
-/* Append a fixed-size snprintf buffer by its written C-string length, never
- * by snprintf's return value (which is the would-be length on truncation). */
-static void out_buf(mdm_ctx *r, const char *buf)
-{
-    out_append(r, buf, strlen(buf));
-}
-
 static void render_ol_open(mdm_ctx *r, const MD_BLOCK_OL_DETAIL *d)
 {
     if (d->start == 1) { OUT_LIT(r, "<ol>\n"); return; }
-    char buf[64];
-    snprintf(buf, sizeof(buf), "<ol start=\"%u\">\n", d->start);
-    out_buf(r, buf);
+    OUT_LIT(r, "<ol start=\"");
+    smart_str_append_unsigned(r->cur, d->start);
+    OUT_LIT(r, "\">\n");
 }
 
 static void render_li_open(mdm_ctx *r, const MD_BLOCK_LI_DETAIL *d)
@@ -655,48 +934,69 @@ static void render_code_open(mdm_ctx *r, const MD_BLOCK_CODE_DETAIL *d)
     OUT_LIT(r, ">");
 }
 
-static void render_td_open(mdm_ctx *r, const char *cell, const MD_BLOCK_TD_DETAIL *d)
+static void render_td_open(mdm_ctx *r, bool is_th, const MD_BLOCK_TD_DETAIL *d)
 {
-    OUT_LIT(r, "<");
-    out_append(r, cell, strlen(cell));
+    static const struct { const char *s; size_t len; } cell_tags[2][4] = {
+        {
+            { "<td>", sizeof("<td>") - 1 },
+            { "<td align=\"left\">", sizeof("<td align=\"left\">") - 1 },
+            { "<td align=\"center\">", sizeof("<td align=\"center\">") - 1 },
+            { "<td align=\"right\">", sizeof("<td align=\"right\">") - 1 },
+        },
+        {
+            { "<th>", sizeof("<th>") - 1 },
+            { "<th align=\"left\">", sizeof("<th align=\"left\">") - 1 },
+            { "<th align=\"center\">", sizeof("<th align=\"center\">") - 1 },
+            { "<th align=\"right\">", sizeof("<th align=\"right\">") - 1 },
+        },
+    };
+    unsigned aidx = 0;
     switch (d->align) {
-        case MD_ALIGN_LEFT:   OUT_LIT(r, " align=\"left\">"); break;
-        case MD_ALIGN_CENTER: OUT_LIT(r, " align=\"center\">"); break;
-        case MD_ALIGN_RIGHT:  OUT_LIT(r, " align=\"right\">"); break;
-        default:              OUT_LIT(r, ">"); break;
+        case MD_ALIGN_LEFT:   aidx = 1; break;
+        case MD_ALIGN_CENTER: aidx = 2; break;
+        case MD_ALIGN_RIGHT:  aidx = 3; break;
+        default:              aidx = 0; break;
     }
+    const unsigned row = is_th ? 1 : 0;
+    out_append(r, cell_tags[row][aidx].s, cell_tags[row][aidx].len);
 }
 
 /* Emit `<a` + nofollow (if applicable) + optional class + `href="` + decoded
  * URL, decoding the attribute once so both the fragment-nofollow exception
  * and the scheme filter see entity-decoded bytes (md4c hands them out
  * entity-undecoded, so `&#35;section` and `javascript&colon;` would otherwise
- * dodge the respective checks). `class_attr` is NULL for regular links,
- * "wikilink" for wiki-link spans. */
+ * dodge the respective checks). */
 static void render_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
-    const char *class_attr)
+    bool is_wikilink)
 {
     mdparser_md4c_attr_view href;
     mdm_attr_view_init(r, &href, attr);
-    /* Fragment-only anchors (href="#...") are in-document links: skip nofollow.
-     * Trim the same leading C0/space bytes the scheme filter skips so
-     * `[x]( #section)` still counts as a fragment. */
-    size_t frag_i = 0;
-    while (frag_i < href.size && (unsigned char)href.text[frag_i] <= 0x20) {
-        frag_i++;
-    }
-    bool fragment = frag_i < href.size && href.text[frag_i] == '#';
 
-    /* rel before href: nofollow output keeps this attribute order. */
-    OUT_LIT(r, "<a");
-    if ((r->render_opts & MDPARSER_RF_NOFOLLOW) && !fragment)
-        OUT_LIT(r, " rel=\"nofollow noopener noreferrer\"");
-    if (class_attr) {
-        OUT_LIT(r, " class=\"");
-        out_append(r, class_attr, strlen(class_attr));
-        OUT_LIT(r, "\"");
+    if (UNEXPECTED(r->render_opts & MDPARSER_RF_NOFOLLOW)) {
+        /* Fragment-only anchors (href="#...") are in-document links: skip nofollow.
+         * Trim the same leading C0/space bytes the scheme filter skips so
+         * `[x]( #section)` still counts as a fragment. */
+        size_t frag_i = 0;
+        while (frag_i < href.size && (unsigned char)href.text[frag_i] <= 0x20) {
+            frag_i++;
+        }
+        bool fragment = frag_i < href.size && href.text[frag_i] == '#';
+        if (!fragment) {
+            if (is_wikilink) {
+                OUT_LIT(r, "<a rel=\"nofollow noopener noreferrer\" class=\"wikilink\" href=\"");
+            } else {
+                OUT_LIT(r, "<a rel=\"nofollow noopener noreferrer\" href=\"");
+            }
+        } else if (is_wikilink) {
+            OUT_LIT(r, "<a class=\"wikilink\" href=\"");
+        } else {
+            OUT_LIT(r, "<a href=\"");
+        }
+    } else if (UNEXPECTED(is_wikilink)) {
+        OUT_LIT(r, "<a class=\"wikilink\" href=\"");
+    } else {
+        OUT_LIT(r, "<a href=\"");
     }
-    OUT_LIT(r, " href=\"");
     /* Link context: data: URLs are rejected (no navigable data: documents). */
     render_decoded_url(r, href.text, href.size, false);
     mdparser_md4c_attr_view_destroy(&href);
@@ -704,7 +1004,7 @@ static void render_link_open(mdm_ctx *r, const MD_ATTRIBUTE *attr,
 
 static void render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
 {
-    render_link_open(r, &d->href, NULL);
+    render_link_open(r, &d->href, false);
     if (d->title.text != NULL) {
         OUT_LIT(r, "\" title=\"");
         render_attribute(r, &d->title);
@@ -716,7 +1016,7 @@ static void render_a_open(mdm_ctx *r, const MD_SPAN_A_DETAIL *d)
  * path as <a href>, so [[javascript:alert(1)]] can't emit a live link. */
 static void render_wikilink_open(mdm_ctx *r, const MD_SPAN_WIKILINK_DETAIL *d)
 {
-    render_link_open(r, &d->target, "wikilink");
+    render_link_open(r, &d->target, true);
     OUT_LIT(r, "\">");
 }
 
@@ -751,6 +1051,50 @@ static void render_admonition_open(mdm_ctx *r, const MD_BLOCK_ADMONITION_DETAIL 
     mdparser_md4c_attr_view_destroy(&type);
 }
 
+static void mdm_emit_heading_open(mdm_ctx *r, int level)
+{
+    static const char h_open[6][5] = {
+        "<h1>", "<h2>", "<h3>", "<h4>", "<h5>", "<h6>"
+    };
+    if (EXPECTED(level >= 1 && level <= 6)) {
+        out_append(r, h_open[level - 1], 4);
+    } else {
+        OUT_LIT(r, "<h");
+        smart_str_append_unsigned(r->cur, (zend_ulong)level);
+        OUT_LIT(r, ">");
+    }
+}
+
+static void mdm_emit_heading_open_id(mdm_ctx *r, int level)
+{
+    static const char h_open_id[6][22] = {
+        "<h1 id=\"user-content-", "<h2 id=\"user-content-",
+        "<h3 id=\"user-content-", "<h4 id=\"user-content-",
+        "<h5 id=\"user-content-", "<h6 id=\"user-content-"
+    };
+    if (EXPECTED(level >= 1 && level <= 6)) {
+        out_append(r, h_open_id[level - 1], 21);
+    } else {
+        OUT_LIT(r, "<h");
+        smart_str_append_unsigned(r->cur, (zend_ulong)level);
+        OUT_LIT(r, " id=\"user-content-");
+    }
+}
+
+static void mdm_emit_heading_close(mdm_ctx *r, int level)
+{
+    static const char h_close[6][7] = {
+        "</h1>\n", "</h2>\n", "</h3>\n", "</h4>\n", "</h5>\n", "</h6>\n"
+    };
+    if (EXPECTED(level >= 1 && level <= 6)) {
+        out_append(r, h_close[level - 1], 6);
+    } else {
+        OUT_LIT(r, "</h");
+        smart_str_append_unsigned(r->cur, (zend_ulong)level);
+        OUT_LIT(r, ">\n");
+    }
+}
+
 static int render_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
     mdm_ctx *r = (mdm_ctx *)userdata;
@@ -773,40 +1117,41 @@ static int render_enter_block(MD_BLOCKTYPE type, void *detail, void *userdata)
                 /* Buffer the heading's inner HTML + plain text; emit the
                  * full tag with id="slug" on leave. */
                 r->in_heading = true;
-                smart_str_free(&r->heading_html);
-                smart_str_free(&r->heading_text);
+                if (r->heading_html.s) ZSTR_LEN(r->heading_html.s) = 0;
+                if (r->heading_text.s) ZSTR_LEN(r->heading_text.s) = 0;
                 r->cur = &r->heading_html;
             } else {
-                char tag[8];
-                snprintf(tag, sizeof(tag), "<h%d>", r->heading_level);
-                out_append(r, tag, strlen(tag));
+                mdm_emit_heading_open(r, r->heading_level);
             }
             break;
         case MD_BLOCK_CODE: render_code_open(r, (MD_BLOCK_CODE_DETAIL *)detail); break;
         case MD_BLOCK_HTML: break;
-        case MD_BLOCK_P: OUT_LIT(r, "<p>"); break;
+        case MD_BLOCK_P:
+            if (EXPECTED(!(r->render_opts & MDPARSER_RF_INLINE_SENTINEL))) {
+                OUT_LIT(r, "<p>");
+            }
+            break;
         case MD_BLOCK_TABLE: OUT_LIT(r, "<table>\n"); break;
         case MD_BLOCK_THEAD: OUT_LIT(r, "<thead>\n"); break;
         case MD_BLOCK_TBODY: OUT_LIT(r, "<tbody>\n"); break;
         case MD_BLOCK_TR: OUT_LIT(r, "<tr>\n"); break;
-        case MD_BLOCK_TH: render_td_open(r, "th", (MD_BLOCK_TD_DETAIL *)detail); break;
-        case MD_BLOCK_TD: render_td_open(r, "td", (MD_BLOCK_TD_DETAIL *)detail); break;
+        case MD_BLOCK_TH: render_td_open(r, true, (MD_BLOCK_TD_DETAIL *)detail); break;
+        case MD_BLOCK_TD: render_td_open(r, false, (MD_BLOCK_TD_DETAIL *)detail); break;
         case MD_BLOCK_FOOTNOTE_DEF_SECTION:
             OUT_LIT(r, "<section class=\"footnotes\">\n<ol>\n");
             break;
-        case MD_BLOCK_FOOTNOTE_DEF: {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "<li id=\"fn-%u\">\n",
+        case MD_BLOCK_FOOTNOTE_DEF:
+            OUT_LIT(r, "<li id=\"fn-");
+            smart_str_append_unsigned(r->cur,
                 ((MD_BLOCK_FOOTNOTE_DEF_DETAIL *)detail)->id);
-            out_buf(r, buf);
+            OUT_LIT(r, "\">\n");
             break;
-        }
         case MD_BLOCK_ADMONITION:
             render_admonition_open(r, (MD_BLOCK_ADMONITION_DETAIL *)detail);
             break;
         default: break;
     }
-    return 0;
+    return mdparser_md4c_cb_status(0);
 }
 
 static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
@@ -824,41 +1169,48 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             if (r->in_heading) {
                 r->in_heading = false;
                 r->cur = &r->main;
-                char *base = mdm_slugify(
+                mdm_slugify_into(&r->slug_buf,
                     r->heading_text.s ? ZSTR_VAL(r->heading_text.s) : "",
                     r->heading_text.s ? ZSTR_LEN(r->heading_text.s) : 0);
-                char *slug = mdm_slug_unique(&r->slugs, base);
-                smart_str_free(&r->heading_text);
-                if (slug[0] != '\0') {
-                    char open[16];
-                    snprintf(open, sizeof(open), "<h%d id=\"", r->heading_level);
-                    out_buf(r, open);
-                    OUT_LIT(r, "user-content-");
-                    mdm_escape_html(r, slug, strlen(slug));
+                /* Free large heading buffers immediately so peak memory stays
+                 * bounded by main rather than main + last heading. */
+                if (r->heading_text.a > 4096) smart_str_free(&r->heading_text);
+                else if (r->heading_text.s) ZSTR_LEN(r->heading_text.s) = 0;
+
+                size_t slug_len = 0;
+                const char *slug = mdm_slug_unique_str(&r->slugs,
+                    r->slug_buf.s ? ZSTR_VAL(r->slug_buf.s) : "",
+                    r->slug_buf.s ? ZSTR_LEN(r->slug_buf.s) : 0,
+                    &slug_len);
+                if (r->slug_buf.a > 4096) smart_str_free(&r->slug_buf);
+                else if (r->slug_buf.s) ZSTR_LEN(r->slug_buf.s) = 0;
+
+                if (slug_len > 0) {
+                    mdm_emit_heading_open_id(r, r->heading_level);
+                    mdm_escape_html(r, slug, slug_len);
                     OUT_LIT(r, "\">");
                 } else {
-                    char tag[8];
-                    snprintf(tag, sizeof(tag), "<h%d>", r->heading_level);
-                    out_buf(r, tag);
+                    mdm_emit_heading_open(r, r->heading_level);
                 }
-                efree(slug);
-                if (r->heading_html.s)
+                if (!mdparser_md4c_oom_pending()
+                    && r->heading_html.s && ZSTR_LEN(r->heading_html.s) > 0) {
                     out_append(r, ZSTR_VAL(r->heading_html.s), ZSTR_LEN(r->heading_html.s));
-                /* Free now so peak memory stays at main, not main + the
-                 * last heading. */
-                smart_str_free(&r->heading_html);
-                char close[8];
-                snprintf(close, sizeof(close), "</h%d>\n", r->heading_level);
-                out_buf(r, close);
+                }
+                if (r->heading_html.a > 4096) smart_str_free(&r->heading_html);
+                else if (r->heading_html.s) ZSTR_LEN(r->heading_html.s) = 0;
+
+                mdm_emit_heading_close(r, r->heading_level);
             } else {
-                char tag[8];
-                snprintf(tag, sizeof(tag), "</h%d>\n", r->heading_level);
-                out_append(r, tag, strlen(tag));
+                mdm_emit_heading_close(r, r->heading_level);
             }
             break;
         case MD_BLOCK_CODE: OUT_LIT(r, "</code></pre>\n"); break;
         case MD_BLOCK_HTML: break;
-        case MD_BLOCK_P: OUT_LIT(r, "</p>\n"); break;
+        case MD_BLOCK_P:
+            if (EXPECTED(!(r->render_opts & MDPARSER_RF_INLINE_SENTINEL))) {
+                OUT_LIT(r, "</p>\n");
+            }
+            break;
         case MD_BLOCK_TABLE: OUT_LIT(r, "</table>\n"); break;
         case MD_BLOCK_THEAD: OUT_LIT(r, "</thead>\n"); break;
         case MD_BLOCK_TBODY: OUT_LIT(r, "</tbody>\n"); break;
@@ -870,14 +1222,14 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
             break;
         case MD_BLOCK_FOOTNOTE_DEF: {
             const MD_BLOCK_FOOTNOTE_DEF_DETAIL *d = detail;
-            char buf[128];
             for (unsigned ref = 1; ref <= d->ref_count
                 && !mdparser_md4c_oom_pending(); ref++) {
                 if (ref > 1) OUT_LIT(r, " ");
-                snprintf(buf, sizeof(buf),
-                    "<a href=\"#fnref-%u-%u\" class=\"footnote-backref\">&#8617;</a>",
-                    d->id, ref);
-                out_buf(r, buf);
+                OUT_LIT(r, "<a href=\"#fnref-");
+                smart_str_append_unsigned(r->cur, d->id);
+                smart_str_appendc(r->cur, '-');
+                smart_str_append_unsigned(r->cur, ref);
+                OUT_LIT(r, "\" class=\"footnote-backref\">&#8617;</a>");
             }
             OUT_LIT(r, "\n</li>\n");
             break;
@@ -885,7 +1237,7 @@ static int render_leave_block(MD_BLOCKTYPE type, void *detail, void *userdata)
         case MD_BLOCK_ADMONITION: OUT_LIT(r, "</div>\n"); break;
         default: break;
     }
-    return 0;
+    return mdparser_md4c_cb_status(0);
 }
 
 static int render_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
@@ -913,16 +1265,20 @@ static int render_enter_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_WIKILINK: render_wikilink_open(r, (MD_SPAN_WIKILINK_DETAIL *)detail); break;
         case MD_SPAN_FOOTNOTE_REF: {
             const MD_SPAN_FOOTNOTE_REF_DETAIL *d = detail;
-            char buf[128];
-            snprintf(buf, sizeof(buf),
-                "<sup><a href=\"#fn-%u\" id=\"fnref-%u-%u\">%u</a></sup>",
-                d->id, d->id, d->ref_id, d->id);
-            out_buf(r, buf);
+            OUT_LIT(r, "<sup><a href=\"#fn-");
+            smart_str_append_unsigned(r->cur, d->id);
+            OUT_LIT(r, "\" id=\"fnref-");
+            smart_str_append_unsigned(r->cur, d->id);
+            smart_str_appendc(r->cur, '-');
+            smart_str_append_unsigned(r->cur, d->ref_id);
+            OUT_LIT(r, "\">");
+            smart_str_append_unsigned(r->cur, d->id);
+            OUT_LIT(r, "</a></sup>");
             break;
         }
         default: break;
     }
-    return 0;
+    return mdparser_md4c_cb_status(0);
 }
 
 static int render_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
@@ -949,7 +1305,7 @@ static int render_leave_span(MD_SPANTYPE type, void *detail, void *userdata)
         case MD_SPAN_WIKILINK: OUT_LIT(r, "</a>"); break;
         default: break;
     }
-    return 0;
+    return mdparser_md4c_cb_status(0);
 }
 
 static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *userdata)
@@ -973,7 +1329,7 @@ static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *u
     /* While buffering a heading, also accumulate plain text for the slug.
      * Entities are decoded to their raw bytes so `# &copy;` slugs the same
      * as a literal `# ©` (otherwise the heading would get no id at all). */
-    if (r->in_heading) {
+    if (UNEXPECTED(r->in_heading)) {
         if (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE ||
             type == MD_TEXT_LATEXMATH)
             smart_str_appendl(&r->heading_text, text, size);
@@ -1011,10 +1367,12 @@ static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *u
             /* Seed quote context from the byte the entity actually rendered
              * (e.g. `&amp;` -> '&' is right-context; `&#32;` -> ' ' is left),
              * not a blanket 0 which would force an opening quote. */
-            if (cp != UINT_MAX) {
-                r->prev_char = mdm_codepoint_quote_char(cp);
-            } else if (r->cur->s && ZSTR_LEN(r->cur->s) > 0) {
-                r->prev_char = mdm_trailing_quote_char(ZSTR_VAL(r->cur->s), ZSTR_LEN(r->cur->s));
+            if (UNEXPECTED(r->render_opts & MDPARSER_RF_SMART)) {
+                if (cp != UINT_MAX) {
+                    r->prev_char = mdm_codepoint_quote_char(cp);
+                } else if (r->cur->s && ZSTR_LEN(r->cur->s) > 0) {
+                    r->prev_char = mdm_trailing_quote_char(ZSTR_VAL(r->cur->s), ZSTR_LEN(r->cur->s));
+                }
             }
             break;
         }
@@ -1022,18 +1380,19 @@ static int render_text(MD_TEXTTYPE type, const char *text, MD_SIZE size, void *u
         case MD_TEXT_LATEXMATH:
             /* Verbatim TeX / code: HTML-escape, never SmartyPants. */
             mdm_escape_html(r, text, size);
-            if (size) r->prev_char = mdm_trailing_quote_char(text, size);
+            if (UNEXPECTED((r->render_opts & MDPARSER_RF_SMART) && size)) {
+                r->prev_char = mdm_trailing_quote_char(text, size);
+            }
             break;
         default:  /* MD_TEXT_NORMAL */
-            if (r->render_opts & MDPARSER_RF_SMART) {
+            if (UNEXPECTED(r->render_opts & MDPARSER_RF_SMART)) {
                 render_smart(r, text, size);
             } else {
                 mdm_escape_html(r, text, size);
-                if (size) r->prev_char = mdm_trailing_quote_char(text, size);
             }
             break;
     }
-    return 0;
+    return mdparser_md4c_cb_status(0);
 }
 
 /* ===================================================================
@@ -1105,14 +1464,15 @@ zend_string *mdparser_md4c_render_html(const char *src, size_t len,
     if (owned) efree((void *)use_src);
     smart_str_free(&r.heading_html);
     smart_str_free(&r.heading_text);
+    smart_str_free(&r.slug_buf);
     mdm_slugs_destroy(&r.slugs);
 
-    if (bailed_out) {
+    if (UNEXPECTED(bailed_out)) {
         smart_str_free(&r.main);
         zend_bailout();
     }
 
-    if (rc != 0) {
+    if (UNEXPECTED(rc != 0)) {
         smart_str_free(&r.main);
         *status = (limit_exceeded || alloc_failed) ? MDM_ERR_MEMORY : MDM_ERR_PARSE;
         return NULL;

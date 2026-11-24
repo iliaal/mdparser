@@ -62,28 +62,40 @@ typedef struct {
     smart_str storage;
 } mdparser_md4c_attr_view;
 
-void mdparser_md4c_attr_view_init(mdparser_md4c_attr_view *view,
+void mdparser_md4c_attr_view_init_slow(mdparser_md4c_attr_view *view,
     const MD_ATTRIBUTE *attr);
-void mdparser_md4c_attr_view_destroy(mdparser_md4c_attr_view *view);
 
-/* Length of the leading run of bytes needing no escaping: the unrolled
- * 4-wide scan shared by the HTML and XML escapers. `map` marks attention
- * bytes (nonzero & `mask`); the caller handles the first flagged byte with
- * its own output-context policy (HTML entities vs XML+C0 rules). */
-static inline size_t mdparser_md4c_scan_plain(const unsigned char *map,
-    unsigned char mask, const char *s, size_t n)
+static zend_always_inline void mdparser_md4c_attr_view_init(
+    mdparser_md4c_attr_view *view, const MD_ATTRIBUTE *attr)
 {
-    size_t off = 0;
-    while (off + 3 < n && !(map[(unsigned char)s[off]] & mask)
-        && !(map[(unsigned char)s[off + 1]] & mask)
-        && !(map[(unsigned char)s[off + 2]] & mask)
-        && !(map[(unsigned char)s[off + 3]] & mask)) {
-        off += 4;
+    view->storage.s = NULL;
+    view->storage.a = 0;
+
+    if (UNEXPECTED(attr == NULL || attr->text == NULL || attr->size == 0)) {
+        view->text = "";
+        view->size = 0;
+        return;
     }
-    while (off < n && !(map[(unsigned char)s[off]] & mask)) {
-        off++;
+    /* A single substring spans the whole value when substr_offsets[1]
+     * already reaches attr->size. Entity / NUL substrings still need real
+     * decoding; a plain substring decodes to itself. */
+    if (EXPECTED(attr->substr_offsets[1] >= attr->size &&
+        attr->substr_types[0] != MD_TEXT_ENTITY &&
+        attr->substr_types[0] != MD_TEXT_NULLCHAR)) {
+        view->text = attr->text;
+        view->size = attr->size;
+        return;
     }
-    return off;
+
+    mdparser_md4c_attr_view_init_slow(view, attr);
+}
+
+static zend_always_inline void mdparser_md4c_attr_view_destroy(
+    mdparser_md4c_attr_view *view)
+{
+    if (UNEXPECTED(view->storage.s != NULL)) {
+        smart_str_free(&view->storage);
+    }
 }
 
 /* Skip a single leading UTF-8 BOM (EF BB BF) in place. md4c doesn't strip

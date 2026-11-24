@@ -14,6 +14,7 @@
 #define MDPARSER_MD4C_SLUG_H
 
 #include "php.h"
+#include "zend_smart_str.h"
 
 struct mdm_slug_node;
 
@@ -25,15 +26,17 @@ typedef struct {
     bool active;
 } mdm_slugs;
 
-/* Lowercase/percent-encode `text` into a URL-fragment slug (emalloc'd,
- * caller frees). */
-char *mdm_slugify(const char *text, size_t len);
+/* Lowercase/percent-encode `text` into a URL-fragment slug, replacing the
+ * contents of `out` (caller owns and may reuse `out`). */
+void mdm_slugify_into(smart_str *out, const char *text, size_t len);
 
 void mdm_slugs_init(mdm_slugs *s);
 void mdm_slugs_destroy(mdm_slugs *s);
 
-/* Return a unique slug for `base` (emalloc'd, caller frees), recording it
- * as taken. Empty base returns an empty string (id suppressed at emit). */
-char *mdm_slug_unique(mdm_slugs *s, char *base);
+/* Record and return a unique slug for `base[0..base_len)`. The returned
+ * pointer is owned by `s` (valid until mdm_slugs_destroy) and its length is
+ * stored in `*out_len`. Empty base or suffix exhaustion returns "" (*out_len=0). */
+const char *mdm_slug_unique_str(mdm_slugs *s, const char *base, size_t base_len,
+    size_t *out_len);
 
 #endif
