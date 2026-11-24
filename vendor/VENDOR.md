@@ -46,9 +46,39 @@ statement in `docs/spec-coverage.md`.
 
 ## Local modifications
 
-Two behavior patches and two embedding hooks are carried in `md4c/md4c.c`
-and `md4c/md4c.h`. Every change site is marked with an `mdparser local patch`
-or `mdparser local integration hook` comment.
+Two behavior patches, two embedding hooks, and a set of portable hot-path
+performance patches are carried in `md4c/md4c.c` and `md4c/md4c.h`. Every
+change site is marked with an `mdparser local patch` or
+`mdparser local integration hook` comment.
+
+### Performance (upstreamable to `mity/md4c`)
+
+Six portable C hot-path patches sit in `md4c/md4c.c` without changing parser
+semantics or allocation lifecycles (all validated by `tests/oom/run.sh`):
+
+- **128-bit `MD_MARK_MASK` in `md_analyze_marks()`** (mity/md4c#484): Replaces
+  `strchr()` palette lookups with precomputed `{ uint64_t lo, hi; }` masks built
+  once in `md_build_mark_char_map()`, and replaces small fixed-palette
+  `ISANYOF()` sites (`"-_*"`, `"-+*"`, `"xX "`, `"@:."`, `"({["`, `"/?#"`,
+  `"-+*.)"`) with inline `ISANYOF3`/`ISANYOF2` checks.
+- **Mark-free paragraph fast exit in `md_analyze_inlines()`** (mity/md4c#485):
+  Returns early when `ctx->n_marks <= 1` (only the trailing `ch == 127` dummy
+  sentinel), skipping the mark passes, bracket resolver, and 20-stack reset
+  loop.
+- **Prose-line fast path in `md_analyze_line()`** (mity/md4c#486): Lines
+  starting with an ASCII letter or non-ASCII byte (outside `MD_LINE_TABLE` and
+  below `code_indent_offset`) skip all punctuation-initiated block checks
+  directly to `MD_LINE_TEXT`.
+- **`md_memchr()` NUL scan in `md_text_with_null_replacement()`**: Replaces the
+  byte-by-byte `'\0'` loop on verbatim code/HTML lines with `md_memchr()`.
+- **`md_build_attribute()` & `md_enter_leave_span_*()`** (mity/md4c#487): Adds
+  a `raw_size == 0` fast path, uses an 8-byte SWAR scan for `'\\'`, `'&'`, and
+  `'\0'` on 8-bit builds, and avoids redundant zero-initialization of
+  `MD_ATTRIBUTE_BUILD` while preserving `md_free_attribute()` safety on abort.
+- **Table-driven 4-wide skip in `md_is_link_destination_B()`** (mity/md4c#488):
+  Reduces branch density across ordinary URL runs on 8-bit builds.
+
+Drop any of these once equivalent optimizations land upstream in `mity/md4c`.
 
 ### Table column-count guard
 
