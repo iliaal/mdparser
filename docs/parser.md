@@ -68,8 +68,18 @@ echo $parser->toHtml("a *b* c");
 
 echo $parser->toHtml("| a | b |\n|---|---|\n| 1 | 2 |\n");
 // <table>
-// <thead><tr><th>a</th><th>b</th></tr></thead>
-// <tbody><tr><td>1</td><td>2</td></tr></tbody>
+// <thead>
+// <tr>
+// <th>a</th>
+// <th>b</th>
+// </tr>
+// </thead>
+// <tbody>
+// <tr>
+// <td>1</td>
+// <td>2</td>
+// </tr>
+// </tbody>
 // </table>
 ```
 

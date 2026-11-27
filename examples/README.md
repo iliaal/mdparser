@@ -17,7 +17,7 @@ php -d extension=./modules/mdparser.so examples/01-basic.php
 | File | Shows |
 |---|---|
 | [`01-basic.php`](01-basic.php) | Simplest usage: `new Parser()` + `toHtml` |
-| [`02-options.php`](02-options.php) | Customizing the parser via `Options` (smart punctuation, hard breaks, sourcepos) |
+| [`02-options.php`](02-options.php) | Customizing the parser via `Options` (smart punctuation, hard breaks, nobreaks) |
 | [`03-ast-toc.php`](03-ast-toc.php) | Walk `toAst()` output to extract a table of contents from headings |
 | [`04-gfm-features.php`](04-gfm-features.php) | GFM tables, strikethrough, task lists, autolinks |
 | [`05-footnotes.php`](05-footnotes.php) | Enabling footnotes, rendering references and definitions |

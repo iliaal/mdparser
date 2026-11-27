@@ -105,14 +105,14 @@ Smart punctuation. Converts:
 - `--` → en-dash (`–`)
 - `---` → em-dash (`—`)
 - `...` → ellipsis (`…`)
-- `"quoted"` → curly double quotes (`"quoted"`)
-- `'quoted'` → curly single quotes (`'quoted'`)
-- Apostrophes (`it's`) → curly right quote (`it's`)
+- `"quoted"` → curly double quotes (`“quoted”`)
+- `'quoted'` → curly single quotes (`‘quoted’`)
+- Apostrophes (`it's`) → curly right quote (`it’s`)
 
 ```php
 echo (new Parser(new Options(smart: true)))
     ->toHtml("--dashes-- and \"quoted\"");
-// <p>–dashes– and "quoted"</p>
+// <p>–dashes– and “quoted”</p>
 ```
 
 ### `unsafe: bool = false`
@@ -162,7 +162,7 @@ echo (new Parser(new Options(footnotes: true)))->toHtml($md);
 // <section class="footnotes">
 // <ol>
 // <li id="fn-1">
-// See source.<a href="#fnref-1-1" class="footnote-backref">↩</a>
+// See source.<a href="#fnref-1-1" class="footnote-backref">&#8617;</a>
 // </li>
 // </ol>
 // </section>
