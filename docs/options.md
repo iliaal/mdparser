@@ -56,9 +56,10 @@ new Options(
 );
 ```
 
-The defaults suit rendering untrusted input as GitHub-style markdown: safe URL filtering, tag filter, UTF-8 validation, GFM
-extensions enabled, GitHub-style code block class attribute, no heading
-anchors or nofollow.
+The defaults suit rendering untrusted input as GitHub-style markdown: safe
+URL filtering, tag filter, UTF-8 validation, GFM extensions enabled, no
+heading anchors or nofollow. Fenced code with a language renders as
+`<pre><code class="language-X">` whatever `githubPreLang` is set to.
 
 ## Core parser options
 
